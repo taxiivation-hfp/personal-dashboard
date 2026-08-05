@@ -1,0 +1,29 @@
+{
+  "name": "personal-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "node scripts/preflight.mjs && next start",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:reset": "node scripts/migrate.mjs --reset",
+    "db:copy": "node scripts/db-copy.mjs",
+    "db:verify": "node scripts/verify-turso.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
+    "@libsql/client": "^0.17.4",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.1",
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.3.1",
+    "typescript": "^6.0.3"
+  }
+}

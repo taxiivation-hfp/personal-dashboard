@@ -1,0 +1,20 @@
+/node_modules
+/.next
+/out
+/build
+*.tsbuildinfo
+next-env.d.ts
+
+# local libSQL database (Phase 1 lives here; never commit personal data)
+/data
+
+# secrets
+.env
+.env.local
+.env*.local
+
+# local tool state, not project config
+.claude/settings.local.json
+.impeccable/
+
+.DS_Store

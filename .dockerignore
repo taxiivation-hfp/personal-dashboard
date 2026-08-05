@@ -1,0 +1,22 @@
+# node_modules MUST NOT be copied in: it contains a Windows-specific libsql native
+# binding that would shadow the linux one npm installs inside the image.
+node_modules
+.next
+out
+build
+
+# Never ship secrets or personal data into an image layer.
+.env
+.env.local
+.env*.local
+/data
+
+.git
+.gitignore
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+README.md
+docs
+.impeccable
+.claude

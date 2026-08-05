@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+/* Light beige. Premium, quiet, restrained.
+ *
+ * ONE accent (amber) and nothing else competing. Pillar hues survive only as small
+ * ring strokes off to the side — they are categorisation, not status, so they are
+ * desaturated far below where they sat on the old dark theme.
+ *
+ * The three block states deliberately avoid red. Marking "drifted" must never feel
+ * punishing: a person who feels judged logs inaccurately, and inaccurate logs make
+ * the whole app worthless. Drift reads as neutral information, not failure. */
+@theme {
+  /* surfaces */
+  --color-bg: #f2ede4; /* warm beige page */
+  --color-panel: #fbf9f5; /* off-white card */
+  --color-panel-2: #efe9de; /* recessed / inset */
+  --color-line: #e2dbcd; /* hairline */
+  --color-line-strong: #cfc5b2;
+
+  /* ink */
+  --color-ink: #23201b; /* 13.9:1 on bg */
+  --color-muted: #6e675d; /* 4.8:1 on bg — passes body text */
+
+  /* the single accent */
+  --color-accent: #9a6a2e; /* 4.7:1 with white on top */
+  --color-accent-soft: #f0e4d0; /* accent tint for fills behind ink */
+
+  /* Block states — no red anywhere, and distinguished by FORM not by a severity ramp:
+   *   adhered = filled accent        drifted = filled grey        skipped = outlined
+   * Three shades of "worse" would encode judgement in the palette itself. Using fill
+   * vs outline keeps them instantly distinguishable while staying tonally equal, and
+   * it sidesteps a contrast failure — a third grey pale enough to read as "least"
+   * came out at 2.1:1, below the 3:1 floor for a meaningful swatch. */
+  --color-adhered: #9a6a2e; /* the accent — the only coloured state */
+  --color-drifted: #8a8378; /* 3.6:1 warm grey. Information, not alarm. */
+  --color-skipped: #8f8676; /* 3.4:1, used as an outline + label, never as a fill */
+
+  /* pillars: categorisation only, desaturated for a light ground */
+  --color-social: #8c7434;
+  --color-physical: #4a8271;
+  --color-portfolio: #67609b;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04";
+  overflow-x: hidden;
+}
+
+/* TWO WEIGHTS ONLY: 400 for everything, 600 where hierarchy genuinely needs it.
+ * No 500, no 700 — the restraint is the design. */
+body,
+button,
+input,
+select,
+textarea {
+  font-weight: 400;
+}
+h1,
+h2,
+h3,
+strong,
+b,
+.font-semibold {
+  font-weight: 600;
+}
+
+/* The hero number. Tabular figures so the percentage doesn't jitter as it changes,
+ * and tight tracking because large numerals default to looking loose. */
+.stat-hero {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 0.92;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 8px;
+  border: 3px solid var(--color-bg);
+}

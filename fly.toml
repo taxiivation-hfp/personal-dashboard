@@ -1,0 +1,45 @@
+# Fly.io config for a single-user private app.
+#
+# Rename `app` to whatever `fly launch` gives you (it must be globally unique).
+# syd = Sydney, the closest region to Melbourne — keep the Turso database in the same
+# region or every query pays a round trip across the country.
+
+app = "personal-dashboard"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Non-secret config only. Everything sensitive goes in `fly secrets set` — see
+  # docs/deploy.md. Update this to the real hostname after the first deploy.
+  NODE_ENV = "production"
+  GOOGLE_REDIRECT_URI = "https://personal-dashboard.fly.dev/api/google/callback"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+
+  # One user, used a few times a day. Letting the machine sleep when idle is the
+  # difference between a few dollars a month and a few tens of dollars. The cost is a
+  # cold start (~2-5s) on the first request after idling.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # NOTE: exactly one machine. This app keeps brute-force lockout state and the libSQL
+  # client in process memory, and the coach's manual tool loop is not designed to be
+  # load-balanced mid-turn. Do not scale this out without revisiting both.
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 25
+    soft_limit = 20
+
+[[vm]]
+  # The coach turn is I/O-bound (waiting on Anthropic), not CPU-bound. 512MB is
+  # comfortable for Next 16 + the libsql native module; 256MB is not.
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# No [mounts]. The database lives on Turso — a volume here would tempt a file: URL
+# back into production, which is exactly the failure the guard in client.ts prevents.
