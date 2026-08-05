@@ -58,7 +58,11 @@ export default function Ring({
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="var(--color-panel-2)"
+          // --color-line-strong, not --color-panel-2: the recessed surface token is
+          // #efe9de against a #f2ede4 page, which is so close that an EMPTY ring reads as
+          // nothing at all rather than as "a ring that isn't filled". An unfilled ring
+          // must still be legible — that is the whole "neglected, not failed" signal.
+          stroke="var(--color-line-strong)"
           strokeWidth={stroke}
           strokeDasharray={ghost ? `${Math.max(2, stroke)} ${Math.max(3, stroke * 1.6)}` : undefined}
         />

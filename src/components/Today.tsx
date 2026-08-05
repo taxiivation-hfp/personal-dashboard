@@ -125,7 +125,7 @@ export default function Today({
               )}
             </div>
           </Ring>
-          <p className="max-w-[16rem] text-[15px] leading-relaxed text-[var(--color-muted)]">
+          <p className="max-w-[22rem] text-[15px] leading-relaxed text-[var(--color-muted)]">
             {a.pct == null
               ? "Nothing due yet today."
               : `adhered · ${a.adhered} of ${a.due} block${a.due === 1 ? "" : "s"} so far`}
