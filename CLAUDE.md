@@ -52,6 +52,44 @@ Separate from blocks and deliberately simpler: a small plain checklist. **Binary
 states, no reasons.** The user writes and edits them, and they can be day-of-week
 dependent (e.g. laundry on Sundays).
 
+Gym is deliberately **not** one of these. The owner trains "any 4 of 5 weekdays" — a
+frequency, which `days_mask` cannot express. On the checklist it would be engineered to
+sit unticked once a week, and an item you are designed to fail teaches distrust of the
+whole list. It is a ring metric with its own toggle instead.
+
+## Pillar rings — sufficiency, never score
+
+Three rings (Social / Physical / Portfolio) over a **rolling 14-day window**, defined in
+`src/lib/rings.ts`. Adherence remains the hero; rings are secondary context.
+
+**The core rule: a ring fills toward a threshold and CAPS.** It cannot be improved by
+doing more — 8 gym days and 20 render identically, and 15k steps fills the steps ring
+exactly as much as 7k. Because you cannot win by overdoing one pillar, the only board
+that looks good is a well-rounded one. That cap *is* the mechanism.
+
+- Thresholds are the owner's **minimums, not stretch goals**, and are configurable in the
+  registry so retuning is a one-line change.
+- **The real number is always printed beneath the ring** (`11 of 8 days`). The arc caps;
+  the text never does. A cap must never hide the truth.
+- **`null` is not `0`.** A metric with no source is a dashed ghost and is excluded from
+  its pillar's average. A genuine zero shows a solid empty ring with `0 of 2 days`. While
+  the window is still filling, the fact line says `· day 3 of 14`, so a first day cannot
+  read as a fortnight of neglect.
+- **A thin ring means neglected, never failed.** The coach may note neglect neutrally and
+  must never rate, rank, congratulate, or compare fortnights — same prohibition it runs
+  under for adherence.
+- No XP, no levels, no points, no ring streaks, no fortnight-over-fortnight comparison.
+
+## Goals — the one sanctioned accomplishment measure, quarantined
+
+Goal progress is the sum of completed subgoal weights (`src/lib/goals.ts`), derived on
+read and never stored. `weight = 0` means AUTO: an equal share of what the explicit
+overrides leave behind.
+
+**It feeds nothing else** — not adherence, not the streak, not the rings, not the coach.
+That isolation is what stops "did I do what I said I'd do" becoming "how much did I
+finish". Goals are never auto-completed at 100%; marking one done is the owner's call.
+
 ## The coach
 
 Its job is **pattern-spotting on drift**, using the stored reasons. For example:
@@ -77,10 +115,18 @@ Light beige, premium, clean.
 - Calories: a **single manual daily total**. No food database, no barcode, no API.
 - Render the calendar view (Google OAuth is already connected).
 
+## Planned, source pending
+
+- **Steps.** The `steps` metric exists in `src/lib/rings.ts` with `sourceReady: false`, so
+  it renders as a dashed ghost ring and is EXCLUDED from the Physical pillar's average —
+  never counted as a zero, which would read as failure no behaviour could fix. Threshold
+  is 7k/day, 12 qualifying days of 14. Wiring a source (an iOS Shortcut POSTing one
+  number to `/api/health`) is separate work and is not started.
+- **Sleep is not planned.** It has no source and no ring. Do not add one.
+
 ## Explicitly cut — do not build, do not half-build
 
 - Daily digest
-- Step tracking / iOS Shortcut
 - Twilio escalation calls
 - Telegram (deferred; decide later)
 
@@ -94,3 +140,11 @@ Light beige, premium, clean.
 - Stack: Next.js 16 (Turbopack) + React 19 + Tailwind v4 + libSQL. Local file DB;
   a Turso/Fly deploy is deferred until the local MVP is complete.
 - SQLite `GLOB` uses `?`/`*` wildcards, not `_` — date CHECKs use `GLOB '????-??-??'`.
+- **Tests: `npm test`.** `node --test` on Node 24, which strips TypeScript natively — zero
+  dependencies. `src/lib/rings.ts`, `goals.ts` and `dates.ts` are import-free on purpose so
+  they run under it; keep them that way. `PillarKey` lives in `rings.ts` and is re-exported
+  from `queries.ts` for the same reason.
+- **libSQL returns aggregates as BigInt.** `bigint / number` throws. Every aggregate goes
+  through `num()` at the query boundary.
+- The rolling window is `addDays(anchor, -13)` .. anchor, `BETWEEN` both ends. The anchor
+  comes from the date being VIEWED, never a server-side `todayISO()`.
