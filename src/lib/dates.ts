@@ -32,6 +32,21 @@ export function addDays(iso: string, n: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+/**
+ * Whole days from `a` to `b` (i.e. b − a). Negative when `b` is earlier.
+ *
+ * UTC math on the date parts, exactly as addDays does — a millisecond subtraction on
+ * parsed LOCAL dates would be off by one across a DST transition, and Melbourne has two
+ * a year.
+ */
+export function daysBetween(a: string, b: string): number {
+  const utc = (iso: string): number => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((utc(b) - utc(a)) / 86_400_000);
+}
+
 /** The app-tz UTC offset for a given date, e.g. "+11:00" (DST-aware). */
 export function tzOffset(date: string, tz: string = APP_TZ): string {
   const dt = new Date(`${date}T12:00:00Z`);
