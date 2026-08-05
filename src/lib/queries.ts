@@ -56,8 +56,14 @@ export type SkillView = {
   name: string;
   pillar: PillarKey | null;
   state: "always_on" | "active" | "parked";
-  /** Total minutes logged. A measurement of time spent — not a score, not a level. */
+  /** Lifetime minutes logged. A measurement of time spent — not a score, not a level.
+   *  Only ever accumulates, so this is the continuity number. */
   minutes: number;
+  /** Minutes in the rolling 14-day window — the LIVE number. Answers "what am I on
+   *  now", which the lifetime total cannot. */
+  minutes14: number;
+  /** Distinct days this skill was touched in the window. */
+  sessions14: number;
   staleDays: number | null;
 };
 

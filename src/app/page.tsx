@@ -13,7 +13,8 @@ export default async function Page() {
   const [data, goals, skills] = await Promise.all([
     getDayView(db, date, cal.events, cal.connected),
     listGoals(db),
-    listSkills(db),
+    // Anchored to the date being viewed — the 14-day skill window is relative to it.
+    listSkills(db, date),
   ]);
   // Goals and skills now live in the right column — there is no separate route.
   return <Today initial={data} goals={goals} skills={skills} />;

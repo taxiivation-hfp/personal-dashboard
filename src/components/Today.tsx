@@ -7,9 +7,11 @@ import CalorieInput from "./CalorieInput";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
-import GoalsSkills from "./GoalsSkills";
+import PillarSections from "./PillarSections";
+import Ring from "./PillarRing";
 import { prettyDate } from "@/lib/dates";
 import type { DayView, GoalView, SkillView } from "@/lib/queries";
+import type { PillarRingView } from "@/lib/rings";
 
 type StripDay = { date: string; pct: number | null; isToday: boolean; isFuture: boolean };
 
@@ -21,8 +23,8 @@ const colScroll =
 
 export default function Today({
   initial,
-  goals,
-  skills,
+  goals: initialGoals,
+  skills: initialSkills,
 }: {
   initial: DayView;
   goals: GoalView[];
@@ -30,6 +32,14 @@ export default function Today({
 }) {
   const [data, setData] = useState<DayView>(initial);
   const [strip, setStrip] = useState<StripDay[]>([]);
+  // Goals, skills and rings are OWNED here rather than left as server props. page.tsx
+  // renders once per request, so every new control (subgoal tick, +15/+30/+60, gym
+  // toggle) would otherwise mutate data the screen could not re-read without a full
+  // navigation.
+  const [goals, setGoals] = useState<GoalView[]>(initialGoals);
+  const [skills, setSkills] = useState<SkillView[]>(initialSkills);
+  const [rings, setRings] = useState<PillarRingView[] | null>(null);
+  const [gymToday, setGymToday] = useState(false);
 
   // Centred on today: past days to the left, upcoming to the right.
   const loadStrip = useCallback(() => {
@@ -39,13 +49,26 @@ export default function Today({
       .catch(() => {});
   }, [data.date]);
 
+  const loadRings = useCallback(() => {
+    fetch(`/api/rings?date=${data.date}`)
+      .then((r) => r.json())
+      .then((s) => {
+        if (s.error) return;
+        setRings(s.pillars ?? []);
+        setGymToday(Boolean(s.gymToday));
+      })
+      .catch(() => {});
+  }, [data.date]);
+
   const refresh = useCallback(async () => {
     const d = await fetch(`/api/today?date=${data.date}`).then((r) => r.json());
     if (!d.error) setData(d);
     loadStrip();
-  }, [data.date, loadStrip]);
+    loadRings();
+  }, [data.date, loadStrip, loadRings]);
 
   useEffect(loadStrip, [loadStrip]);
+  useEffect(loadRings, [loadRings]);
 
   async function toggleHabit(id: number, done: boolean) {
     await fetch("/api/habits/log", {
@@ -56,21 +79,59 @@ export default function Today({
     refresh();
   }
 
+  // Mutating routes return the refreshed collection, so one round trip does both jobs.
+  // Deliberately await-then-set rather than optimistic: there are no optimistic updates
+  // anywhere in this codebase, and adding the first one beside a toggle that isn't would
+  // need rollback semantics nothing else has.
+  async function mutateGoals(url: string, init: RequestInit) {
+    const r = await fetch(url, { headers: { "content-type": "application/json" }, ...init })
+      .then((x) => x.json())
+      .catch(() => ({ error: true }));
+    if (!r.error && r.goals) setGoals(r.goals);
+  }
+
+  async function mutateSkills(url: string, init: RequestInit) {
+    const r = await fetch(url, { headers: { "content-type": "application/json" }, ...init })
+      .then((x) => x.json())
+      .catch(() => ({ error: true }));
+    if (!r.error && r.skills) setSkills(r.skills);
+    loadRings(); // a skill session feeds the Portfolio ring
+  }
+
+  async function toggleGym(on: boolean) {
+    await fetch("/api/gym", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ date: data.date, on }),
+    }).catch(() => {});
+    loadRings();
+  }
+
   const a = data.adherence;
 
   const middle = (
     <div className="flex flex-col gap-12">
       <section>
-        <div className="flex items-end gap-3">
-          <span className="stat-hero text-[5rem] sm:text-[6rem]">{a.pct == null ? "—" : a.pct}</span>
-          {a.pct != null && <span className="stat-hero pb-2.5 text-[1.75rem] text-[var(--color-muted)]">%</span>}
+        {/* Large, amber, thick stroke, number INSIDE — deliberately unlike the small,
+            hued, thin pillar rings. Adherence is the hero, not one more quota to fill.
+            `a.pct == null` is passed straight through: Ring guards before any arithmetic,
+            so a morning with nothing due draws a neutral track and "—", never a 0% ring. */}
+        <div className="flex flex-wrap items-center gap-x-7 gap-y-4">
+          <Ring fill={a.pct == null ? null : a.pct / 100} size={168} stroke={10} tone="accent">
+            <div className="flex items-end">
+              <span className="stat-hero text-[3.25rem]">{a.pct == null ? "—" : a.pct}</span>
+              {a.pct != null && (
+                <span className="stat-hero pb-1.5 text-[1.05rem] text-[var(--color-muted)]">%</span>
+              )}
+            </div>
+          </Ring>
+          <p className="max-w-[16rem] text-[15px] leading-relaxed text-[var(--color-muted)]">
+            {a.pct == null
+              ? "Nothing due yet today."
+              : `adhered · ${a.adhered} of ${a.due} block${a.due === 1 ? "" : "s"} so far`}
+            {a.unmarked > 0 && <span className="text-[var(--color-ink)]"> · {a.unmarked} to mark</span>}
+          </p>
         </div>
-        <p className="mt-1 text-[15px] text-[var(--color-muted)]">
-          {a.pct == null
-            ? "Nothing due yet today."
-            : `adhered · ${a.adhered} of ${a.due} block${a.due === 1 ? "" : "s"} so far`}
-          {a.unmarked > 0 && <span className="text-[var(--color-ink)]"> · {a.unmarked} to mark</span>}
-        </p>
 
         <div className="mt-6 flex items-end gap-1.5">
           {strip.map((d) => (
@@ -193,14 +254,13 @@ export default function Today({
         <p className="text-[13px] uppercase tracking-[0.16em] text-[var(--color-muted)]">
           {prettyDate(data.date)}
         </p>
-        <div className="flex flex-wrap gap-x-6 gap-y-1">
-          {data.pillarAdherence.map((p) => (
-            <span key={p.pillar} className="text-[13px] text-[var(--color-muted)]">
-              {p.name.split(" ")[0]}{" "}
-              <span className="tabular-nums text-[var(--color-ink)]">
-                {p.adhered}/{p.due}
-              </span>
-            </span>
+        {/* Phone only. The grid stacks middle → left → right, so the right column sits
+            below the day's work AND the 9-day calendar — pillar rings there alone would
+            be buried. On desktop the full sections are visible, so this is hidden and the
+            old text chips are gone entirely. */}
+        <div className="flex gap-2.5 lg:hidden">
+          {(rings ?? []).map((r) => (
+            <Ring key={r.pillar} fill={r.fill} size={18} stroke={2.5} tone={r.pillar} />
           ))}
         </div>
       </header>
@@ -218,7 +278,25 @@ export default function Today({
           <CalendarColumn date={data.date} />
         </div>
         <div className={`lg:order-3 ${colScroll}`}>
-          <GoalsSkills goals={goals} skills={skills} />
+          <PillarSections
+            goals={goals}
+            skills={skills}
+            rings={rings}
+            gymOn={gymToday}
+            onSubgoal={(id, done) =>
+              mutateGoals(`/api/subgoals/${id}`, { method: "PATCH", body: JSON.stringify({ done }) })
+            }
+            onLogTime={(skillId, minutes) =>
+              mutateSkills(`/api/skills/${skillId}/time`, {
+                method: "POST",
+                body: JSON.stringify({ minutes, date: data.date }),
+              })
+            }
+            onUndoTime={(skillId) =>
+              mutateSkills(`/api/skills/${skillId}/time?date=${data.date}`, { method: "DELETE" })
+            }
+            onToggleGym={toggleGym}
+          />
         </div>
       </div>
     </div>
