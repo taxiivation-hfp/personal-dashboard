@@ -6,15 +6,13 @@
 
 import type { Client } from "../db/client";
 import { todayISO, isISODate, addDays } from "../dates";
-import { setHabit, setSkillState, TooManyActiveSkills } from "../engine";
+import { createGoal, setHabit, setSkillState, updateGoal, TooManyActiveSkills } from "../engine";
 import {
-  createGoal,
   getDayView,
   listGoals,
   listSkills,
   habitsForDate,
   pillarMaps,
-  updateGoal,
   type PillarKey,
 } from "../queries";
 import { getCalendarForDate, insertEvent } from "../google";
@@ -92,7 +90,7 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "list_goals",
-    description: "The user's goals. Categorised by pillar; progress is set by hand, not derived from activity.",
+    description: "The user's goals. Categorised by pillar; progress is DERIVED from completed subgoal weights and is read-only here.",
     input_schema: { type: "object", additionalProperties: false, properties: {}, required: [] },
   },
   {
@@ -111,7 +109,7 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "update_goal",
-    description: "Update a goal's title, target, progress (0-1) or status.",
+    description: "Update a goal's title, target or status. Progress is NOT settable — it is derived from subgoals, and the coach must never move it.",
     input_schema: {
       type: "object",
       additionalProperties: false,
@@ -119,7 +117,6 @@ export const TOOL_DEFS: ToolDef[] = [
         id: { type: "integer" },
         title: { type: "string" },
         target: { type: "string" },
-        progress: { type: "number" },
         status: { type: "string", enum: ["active", "done", "paused", "dropped"] },
       },
       required: ["id"],
@@ -222,14 +219,13 @@ export async function executeTool(db: Client, name: string, input: Record<string
       await updateGoal(db, Number(input.id), {
         title: input.title as string | undefined,
         target: input.target as string | undefined,
-        progress: input.progress != null ? Number(input.progress) : undefined,
         status: input.status as string | undefined,
       });
       return { ok: true };
     }
 
     case "list_skills":
-      return { skills: await listSkills(db) };
+      return { skills: await listSkills(db, todayISO()) };
 
     case "set_skill_state": {
       try {

@@ -4,8 +4,14 @@ import type { Client } from "./db/client";
 import { getStreak, weekdayBit } from "./engine";
 import { adherenceFor, buildBlocks, type Adherence, type Block, type BlockState } from "./adherence";
 import type { CalEvent } from "./google";
+import { addDays, daysBetween } from "./dates";
+import { deriveWeights } from "./goals";
+import { METRICS, WINDOW_DAYS, type RawCount, type PillarKey } from "./rings";
 
-export type PillarKey = "social_capital" | "physical" | "portfolio";
+// PillarKey now lives in rings.ts, which must stay import-free to be testable under
+// `node --test`. Re-exported here so every existing `import { PillarKey } from
+// "@/lib/queries"` keeps working.
+export type { PillarKey };
 
 const num = (v: unknown) => (v == null ? 0 : Number(v));
 const str = (v: unknown) => (v == null ? null : String(v));
@@ -21,19 +27,28 @@ export type HabitView = {
   system_key: string | null;
 };
 
-export type SubgoalView = { id: number; title: string; weight: number; done: boolean };
+export type SubgoalView = {
+  id: number;
+  title: string;
+  /** The raw column. 0 means AUTO — do not render this. */
+  weight: number;
+  /** What it is actually worth right now. Render THIS. */
+  effectiveWeight: number;
+  done: boolean;
+};
 
 export type GoalView = {
   id: number;
   pillar: PillarKey;
   title: string;
   target: string | null;
-  /** Derived: the sum of completed subgoal weights. Never inferred from activity. */
+  /** Derived: the sum of completed subgoal weights. Never inferred from activity, and
+   *  deliberately never read from the stale goals.progress column. */
   progress: number;
   status: string;
   subgoals: SubgoalView[];
-  /** Surfaced so a mis-weighted goal is visible rather than silently wrong. */
-  weightSum: number;
+  /** True ONLY when explicit overrides exceed 100%. An all-auto goal is well-formed. */
+  overAllocated: boolean;
 };
 
 export type SkillView = {
@@ -58,8 +73,6 @@ export type DayView = {
   journal: JournalView[];
   calories: number | null;
   pillars: PillarView[];
-  /** Categorisation only — a well-roundedness reminder, never the hero. */
-  pillarAdherence: { pillar: PillarKey; name: string; adhered: number; due: number }[];
 };
 
 export async function pillarMaps(db: Client) {
@@ -144,13 +157,6 @@ export async function getDayView(
   const cal = await db.execute({ sql: "SELECT calories FROM health_logs WHERE date=?", args: [date] });
   const { count } = await getStreak(db, date);
 
-  // Pillar adherence is derived from the non-negotiables' pillars only — blocks come
-  // from Google and carry no pillar. It is a balance hint, nothing more.
-  const pillarAdherence = pillars.map((p) => {
-    const mine = habits.filter((h) => h.pillar === p.key);
-    return { pillar: p.key, name: p.name, adhered: mine.filter((h) => h.done).length, due: mine.length };
-  });
-
   return {
     date,
     calendarConnected,
@@ -161,7 +167,6 @@ export async function getDayView(
     journal: journalRes.rows.map((j) => ({ id: num(j.id) })),
     calories: cal.rows[0]?.calories == null ? null : num(cal.rows[0].calories),
     pillars,
-    pillarAdherence,
   };
 }
 
@@ -171,62 +176,32 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
   );
   const subs = await db.execute("SELECT id,goal_id,title,weight,done FROM subgoals ORDER BY goal_id, sort_order, id");
 
-  const byGoal = new Map<number, SubgoalView[]>();
+  type RawSub = Omit<SubgoalView, "effectiveWeight">;
+  const byGoal = new Map<number, RawSub[]>();
   for (const s of subs.rows) {
     const gid = num(s.goal_id);
-    const list = byGoal.get(gid) ?? [];
+    const list: RawSub[] = byGoal.get(gid) ?? [];
     list.push({ id: num(s.id), title: String(s.title), weight: num(s.weight), done: num(s.done) === 1 });
     byGoal.set(gid, list);
   }
 
   return r.rows.map((g) => {
-    const subgoals = byGoal.get(num(g.id)) ?? [];
+    const raw = byGoal.get(num(g.id)) ?? [];
     // Progress is DERIVED here rather than read from goals.progress, so the stored
-    // column can never drift out of step with the subgoals that define it.
-    const progress = subgoals.reduce((sum, s) => sum + (s.done ? s.weight : 0), 0);
+    // column can never drift out of step with the subgoals that define it. (It already
+    // had: row 1 stored 0.0833 while deriving 0.)
+    const w = deriveWeights(raw);
     return {
       id: num(g.id),
       pillar: String(g.pk) as PillarKey,
       title: String(g.title),
       target: str(g.target),
-      progress: Math.min(1, progress),
+      progress: w.progress,
       status: String(g.status),
-      subgoals,
-      weightSum: subgoals.reduce((sum, s) => sum + s.weight, 0),
+      subgoals: raw.map((s, i) => ({ ...s, effectiveWeight: w.effective[i] })),
+      overAllocated: w.overAllocated,
     };
   });
-}
-
-export async function createGoal(
-  db: Client,
-  g: { pillar_id: number; title: string; target?: string | null }
-): Promise<number> {
-  const r = await db.execute({
-    sql: "INSERT INTO goals (pillar_id,title,target) VALUES (?,?,?)",
-    args: [g.pillar_id, g.title.trim(), g.target ?? null],
-  });
-  return Number(r.lastInsertRowid);
-}
-
-/**
- * Goal progress is now set BY HAND. It used to be derived from completed-task counts,
- * which was an output measure — the exact thing this app stopped scoring.
- */
-export async function updateGoal(
-  db: Client,
-  id: number,
-  patch: { title?: string; target?: string | null; progress?: number; status?: string }
-): Promise<void> {
-  const sets: string[] = [];
-  const args: (string | number | null)[] = [];
-  if (patch.title !== undefined) (sets.push("title=?"), args.push(patch.title));
-  if (patch.target !== undefined) (sets.push("target=?"), args.push(patch.target));
-  if (patch.progress !== undefined) (sets.push("progress=?"), args.push(Math.max(0, Math.min(1, patch.progress))));
-  if (patch.status !== undefined) (sets.push("status=?"), args.push(patch.status));
-  if (!sets.length) return;
-  sets.push("updated_at=?");
-  args.push(new Date().toISOString(), id);
-  await db.execute({ sql: `UPDATE goals SET ${sets.join(", ")} WHERE id=?`, args });
 }
 
 /**
@@ -235,14 +210,20 @@ export async function updateGoal(
  * Parked skills are never filtered out — the point of the board is seeing everything
  * you have put time into, including what you're not working on right now.
  */
-export async function listSkills(db: Client): Promise<SkillView[]> {
+export async function listSkills(db: Client, anchor: string): Promise<SkillView[]> {
   const { byId } = await pillarMaps(db);
-  const r = await db.execute(
-    `SELECT s.id, s.name, s.pillar_id, s.state, s.last_touched,
-            COALESCE((SELECT SUM(minutes) FROM skill_time t WHERE t.skill_id = s.id), 0) AS minutes
+  const from = addDays(anchor, -(WINDOW_DAYS - 1));
+  const r = await db.execute({
+    sql: `SELECT s.id, s.name, s.pillar_id, s.state, s.last_touched,
+            COALESCE((SELECT SUM(minutes) FROM skill_time t WHERE t.skill_id = s.id), 0) AS minutes,
+            COALESCE((SELECT SUM(minutes) FROM skill_time t
+                       WHERE t.skill_id = s.id AND t.date BETWEEN ? AND ?), 0) AS minutes14,
+            COALESCE((SELECT COUNT(DISTINCT date) FROM skill_time t
+                       WHERE t.skill_id = s.id AND t.date BETWEEN ? AND ?), 0) AS sessions14
      FROM skills s
-     ORDER BY CASE s.state WHEN 'active' THEN 0 WHEN 'always_on' THEN 1 ELSE 2 END, s.sort_order, s.id`
-  );
+     ORDER BY CASE s.state WHEN 'active' THEN 0 WHEN 'always_on' THEN 1 ELSE 2 END, s.sort_order, s.id`,
+    args: [from, anchor, from, anchor],
+  });
   const today = Date.now();
   return r.rows.map((s) => {
     const t = s.last_touched == null ? null : Date.parse(String(s.last_touched));
@@ -251,26 +232,89 @@ export async function listSkills(db: Client): Promise<SkillView[]> {
       name: String(s.name),
       pillar: s.pillar_id == null ? null : byId.get(num(s.pillar_id)) ?? null,
       state: String(s.state) as SkillView["state"],
+      // num() is mandatory on every aggregate: libSQL returns them as BigInt, and
+      // `bigint / number` THROWS rather than producing a wrong answer.
       minutes: num(s.minutes),
+      minutes14: num(s.minutes14),
+      sessions14: num(s.sessions14),
       staleDays: t == null || Number.isNaN(t) ? null : Math.floor((today - t) / 86400000),
     };
   });
 }
 
-export async function logSkillTime(
-  db: Client,
-  skillId: number,
-  minutes: number,
-  date: string,
-  note?: string | null
-): Promise<void> {
-  if (!Number.isFinite(minutes) || minutes <= 0) return;
-  await db.execute({
-    sql: "INSERT INTO skill_time (skill_id,date,minutes,note) VALUES (?,?,?,?)",
-    args: [skillId, date, Math.round(minutes), note ?? null],
-  });
-  await db.execute({
-    sql: "UPDATE skills SET last_touched=?, updated_at=? WHERE id=?",
-    args: [new Date().toISOString(), new Date().toISOString(), skillId],
-  });
+/**
+ * Raw counts for every ring metric over [from, to] inclusive.
+ *
+ * `resolved` says whether the SOURCE wired up — never whether it found rows. Zero rows
+ * in the window is a real, meaningful zero and must stay distinguishable from a metric
+ * that has no source at all, or a first day reads as a fortnight of neglect.
+ */
+export async function getRingCounts(db: Client, from: string, to: string): Promise<Record<string, RawCount>> {
+  const out: Record<string, RawCount> = {};
+
+  for (const m of METRICS) {
+    if (!m.sourceReady) {
+      out[m.key] = { count: 0, resolved: false };
+      continue;
+    }
+
+    if (m.source === "habit") {
+      const h = await db.execute({
+        sql: "SELECT id FROM habits WHERE system_key=? AND active=1",
+        args: [m.systemKey!],
+      });
+      if (!h.rows.length) {
+        // A metric declared ready whose wire is broken. Ghost it so the screen still
+        // works, but say so loudly — silently ghosting hides a bug behind a state that
+        // looks intentional.
+        console.error(
+          `[rings] metric "${m.key}" is sourceReady but system_key "${m.systemKey}" resolved to no active habit`
+        );
+        out[m.key] = { count: 0, resolved: false };
+        continue;
+      }
+      // value > 0: the column is a REAL defaulting to 1 and nothing constrains it to be
+      // truthy, so a 0 row would otherwise count as a tick.
+      const r = await db.execute({
+        sql: "SELECT COUNT(DISTINCT date) AS n FROM habit_entries WHERE habit_id=? AND date BETWEEN ? AND ? AND value > 0",
+        args: [num(h.rows[0].id), from, to],
+      });
+      out[m.key] = { count: num(r.rows[0].n), resolved: true };
+      continue;
+    }
+
+    if (m.source === "gym") {
+      const r = await db.execute({
+        sql: "SELECT COUNT(DISTINCT date) AS n FROM gym_sessions WHERE date BETWEEN ? AND ?",
+        args: [from, to],
+      });
+      out[m.key] = { count: num(r.rows[0].n), resolved: true };
+      continue;
+    }
+
+    if (m.source === "skill_session") {
+      // Sessions, not days: three skills on one Saturday is three. Several of these are
+      // social activities rather than crammed practice. The ring's own cap still bounds it.
+      const r = await db.execute({
+        sql: "SELECT COUNT(*) AS n FROM (SELECT DISTINCT skill_id, date FROM skill_time WHERE date BETWEEN ? AND ?)",
+        args: [from, to],
+      });
+      out[m.key] = { count: num(r.rows[0].n), resolved: true };
+      continue;
+    }
+
+    out[m.key] = { count: 0, resolved: false };
+  }
+
+  return out;
 }
+
+/** How much of the 14-day window has actually been observed. Caps at WINDOW_DAYS. */
+export async function getObservedDays(db: Client, anchor: string): Promise<number> {
+  const r = await db.execute("SELECT value FROM app_meta WHERE key='rings_since'");
+  if (!r.rows.length) return WINDOW_DAYS;
+  return Math.max(1, Math.min(WINDOW_DAYS, daysBetween(String(r.rows[0].value), anchor) + 1));
+}
+
+// logSkillTime moved to engine.ts — it is a write, and every write in this app runs
+// transactionally in the engine.

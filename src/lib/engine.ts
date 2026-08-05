@@ -265,8 +265,204 @@ export async function touchSkill(db: Client, id: number, progress?: number | nul
 
 // ---------------------------------------------------------------- goals
 
+// Goals are the ONE sanctioned accomplishment measure in this app, and they are
+// quarantined: goal progress feeds nothing else — not adherence, not the streak, not
+// the rings, not the coach. That isolation is what keeps "did I do what I said I'd do"
+// from quietly becoming "how much did I finish".
+//
+// Progress is never STORED. It is derived from completed subgoal weights on read (see
+// lib/goals.ts), so the stale goals.progress column can never drift out of step with the
+// subgoals that define it. It already had: row 1 stored 0.0833 while deriving 0.
+
 export async function recomputeGoalTx(tx: Exec, goalId: number, ts: string): Promise<void> {
   await tx.execute({ sql: "UPDATE goals SET updated_at=? WHERE id=?", args: [ts, goalId] });
+}
+
+export async function createGoal(
+  db: Client,
+  g: { pillar_id: number; title: string; target?: string | null }
+): Promise<number> {
+  const r = await db.execute({
+    sql: "INSERT INTO goals (pillar_id,title,target) VALUES (?,?,?)",
+    args: [g.pillar_id, g.title.trim(), g.target?.trim() || null],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+export async function updateGoal(
+  db: Client,
+  id: number,
+  patch: { title?: string; target?: string | null; status?: string }
+): Promise<void> {
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+  if (patch.title !== undefined) (sets.push("title=?"), args.push(patch.title.trim()));
+  if (patch.target !== undefined) (sets.push("target=?"), args.push(patch.target?.trim() || null));
+  if (patch.status !== undefined) (sets.push("status=?"), args.push(patch.status));
+  if (!sets.length) return;
+  sets.push("updated_at=?");
+  args.push(now(), id);
+  await db.execute({ sql: `UPDATE goals SET ${sets.join(", ")} WHERE id=?`, args });
+}
+
+/**
+ * Soft, matching deleteHabit. Subgoals reference goal_id, and listGoals already filters
+ * status != 'dropped', so this hides the goal without orphaning its history.
+ */
+export async function deleteGoal(db: Client, id: number): Promise<void> {
+  await db.execute({ sql: "UPDATE goals SET status='dropped', updated_at=? WHERE id=?", args: [now(), id] });
+}
+
+// ---------------------------------------------------------------- subgoals
+//
+// weight = 0 means AUTO — an equal share of whatever the explicit overrides leave.
+// See src/lib/goals.ts for the derivation.
+
+/** The column's CHECK is 0..1; clamp rather than throw so a stray value can never 500. */
+function clampWeight(w: number | null | undefined): number {
+  if (w == null || !Number.isFinite(w) || w <= 0) return 0;
+  return Math.min(1, w);
+}
+
+export async function createSubgoal(
+  db: Client,
+  s: { goal_id: number; title: string; weight?: number }
+): Promise<number> {
+  const r = await db.execute({
+    sql: `INSERT INTO subgoals (goal_id,title,weight,sort_order)
+          VALUES (?,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM subgoals WHERE goal_id=?))`,
+    args: [s.goal_id, s.title.trim(), clampWeight(s.weight), s.goal_id],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+export async function updateSubgoal(
+  db: Client,
+  id: number,
+  patch: { title?: string; weight?: number | null }
+): Promise<void> {
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+  if (patch.title !== undefined) (sets.push("title=?"), args.push(patch.title.trim()));
+  if (patch.weight !== undefined) (sets.push("weight=?"), args.push(clampWeight(patch.weight)));
+  if (!sets.length) return;
+  args.push(id);
+  await db.execute({ sql: `UPDATE subgoals SET ${sets.join(", ")} WHERE id=?`, args });
+}
+
+/**
+ * Tick or untick a subgoal. The goal is NEVER auto-completed when this reaches 100% —
+ * marking a goal done is the owner's decision, and auto-completion is a progression
+ * mechanic.
+ */
+export async function setSubgoalDone(db: Client, id: number, done: boolean): Promise<void> {
+  await db.execute({ sql: "UPDATE subgoals SET done=? WHERE id=?", args: [done ? 1 : 0, id] });
+}
+
+/** Hard. subgoals has no `active` column and nothing references a subgoal id, so there
+ *  is no history to orphan. The UI's confirm is the safeguard. */
+export async function deleteSubgoal(db: Client, id: number): Promise<void> {
+  await db.execute({ sql: "DELETE FROM subgoals WHERE id=?", args: [id] });
+}
+
+export async function reorderSubgoals(db: Client, goalId: number, ids: number[]): Promise<void> {
+  const tx = await db.transaction("write");
+  try {
+    for (let i = 0; i < ids.length; i++) {
+      await tx.execute({
+        sql: "UPDATE subgoals SET sort_order=? WHERE id=? AND goal_id=?",
+        args: [i + 1, ids[i], goalId],
+      });
+    }
+    await tx.commit();
+  } catch (e) {
+    await tx.rollback();
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------- skill time
+//
+// The total of these minutes is a MEASUREMENT of time invested, never a reward. No
+// levels, no thresholds, no milestones — the number only ever says how long you spent,
+// which is a fact rather than a score.
+//
+// Kept as a log rather than a running total so a mistaken entry can be removed, which is
+// exactly what undoSkillTime does.
+
+export async function logSkillTime(
+  db: Client,
+  skillId: number,
+  minutes: number,
+  date: string,
+  note?: string | null
+): Promise<void> {
+  if (!Number.isFinite(minutes) || minutes <= 0) return;
+  const ts = now();
+  const tx = await db.transaction("write");
+  try {
+    await tx.execute({
+      sql: "INSERT INTO skill_time (skill_id,date,minutes,note) VALUES (?,?,?,?)",
+      args: [skillId, date, Math.round(minutes), note ?? null],
+    });
+    await tx.execute({
+      sql: "UPDATE skills SET last_touched=?, updated_at=? WHERE id=?",
+      args: [ts, ts, skillId],
+    });
+    await tx.commit();
+  } catch (e) {
+    await tx.rollback();
+    throw e;
+  }
+}
+
+/**
+ * Remove the most recent entry for (skill, date). Returns false when there was nothing
+ * to undo, so the caller can hide the control rather than pretending it did something.
+ *
+ * last_touched is RECOMPUTED from the rows that remain rather than left as it was —
+ * otherwise undoing the only session for a skill leaves it looking recently worked, and
+ * the stalled-rotation prompt reads a lie.
+ */
+export async function undoSkillTime(db: Client, skillId: number, date: string): Promise<boolean> {
+  const tx = await db.transaction("write");
+  try {
+    const last = await tx.execute({
+      sql: "SELECT id FROM skill_time WHERE skill_id=? AND date=? ORDER BY id DESC LIMIT 1",
+      args: [skillId, date],
+    });
+    if (!last.rows.length) {
+      await tx.rollback();
+      return false;
+    }
+    await tx.execute({ sql: "DELETE FROM skill_time WHERE id=?", args: [num(last.rows[0].id)] });
+    const rest = await tx.execute({ sql: "SELECT MAX(date) AS d FROM skill_time WHERE skill_id=?", args: [skillId] });
+    const d = rest.rows[0]?.d;
+    await tx.execute({
+      sql: "UPDATE skills SET last_touched=?, updated_at=? WHERE id=?",
+      args: [d == null ? null : `${String(d)}T00:00:00.000Z`, now(), skillId],
+    });
+    await tx.commit();
+    return true;
+  } catch (e) {
+    await tx.rollback();
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------- gym
+//
+// One row per gym DAY. The unique index on date carries the per-day cap: two visits in a
+// day is the same event, exactly as 15k steps is the same as 7k.
+
+export async function setGymSession(db: Client, date: string, on: boolean): Promise<void> {
+  if (on) {
+    await db.execute({ sql: "INSERT INTO gym_sessions (date) VALUES (?) ON CONFLICT(date) DO NOTHING", args: [date] });
+  } else {
+    // Only removes a manually-toggled day. Imported rows carry a title; deleting one of
+    // those would destroy rescued history, so they are left alone.
+    await db.execute({ sql: "DELETE FROM gym_sessions WHERE date=? AND title IS NULL", args: [date] });
+  }
 }
 
 // ---------------------------------------------------------------- streak
