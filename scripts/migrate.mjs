@@ -250,6 +250,51 @@ async function main() {
     console.log("seeded skill time");
   }
 
+  // ---------------------------------------------------------------- rings v1
+  // Wires the three pillar sufficiency rings to real sources.
+  const rv = await client.execute("SELECT value FROM app_meta WHERE key='rings_v1'");
+  if (!rv.rows.length) {
+    // 1. The Social ring reads the outreach habit by SYSTEM_KEY, never by name — the
+    //    owner can rename their non-negotiables, and a name lookup would break silently
+    //    the moment they did. Habit 9 currently has system_key NULL.
+    //    Matched by id AND name so a reordered database cannot mislabel the wrong row.
+    await client.execute({
+      sql: "UPDATE habits SET system_key='outreach', updated_at=? WHERE id=9 AND name='One outreach message' AND system_key IS NULL",
+      args: [new Date().toISOString()],
+    });
+    // Partial index: two habits can never claim the same key, while the many NULLs stay
+    // unconstrained. Same approach as the escalate flag (schema.sql).
+    await client.execute(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_habits_system_key ON habits(system_key) WHERE system_key IS NOT NULL"
+    );
+
+    // 2. Rescue the gym log from `tasks`, which nothing reads (HANDOFF §3). Copied, not
+    //    moved — the tasks rows stay put. INSERT OR IGNORE because the unique index on
+    //    date would otherwise abort the whole migration on two sessions in one day.
+    await client.execute(
+      `INSERT OR IGNORE INTO gym_sessions (date,title,done_at,note)
+       SELECT date, title, done_at, notes FROM tasks WHERE kind='gym'`
+    );
+
+    // 3. Gym leaves the non-negotiables. SOFT (active=0), matching deleteHabit — it
+    //    preserves any entries and the owner can turn it back on from /habits.
+    await client.execute({
+      sql: "UPDATE habits SET active=0, updated_at=? WHERE id=10 AND name='Gym'",
+      args: [new Date().toISOString()],
+    });
+
+    // 4. When the rings started observing. Without this, day one is indistinguishable
+    //    from fourteen days of neglect.
+    await client.execute({
+      sql: "INSERT INTO app_meta (key,value) VALUES ('rings_since',?)",
+      args: [new Date().toISOString().slice(0, 10)],
+    });
+
+    await client.execute("INSERT INTO app_meta (key,value) VALUES ('rings_v1','1')");
+    const g = await client.execute("SELECT COUNT(*) AS n FROM gym_sessions");
+    console.log(`rings v1: outreach keyed, gym unhooked, ${Number(g.rows[0].n)} gym sessions rescued`);
+  }
+
   console.log("migration complete:", url);
   client.close();
 }

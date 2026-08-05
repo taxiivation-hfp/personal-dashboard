@@ -74,9 +74,14 @@ if (!toUrl.startsWith("file:") && !toToken) {
 // tables it had chosen to copy. A missing table here is silent, permanent data loss.
 // The assertion below now makes that impossible: if the database contains a table this
 // list doesn't mention, the copy refuses to run.
+// Order matters: parent before child, because foreign keys are enforced.
+// `subgoals` and `skill_time` were missing here before the rings work — this script
+// would have REFUSED TO RUN on the current database, which is only unnoticed because
+// nothing has been deployed yet.
 const TABLES = [
   "pillars",
   "goals",
+  "subgoals",
   "tasks",
   "habits",
   "habit_entries",
@@ -87,6 +92,8 @@ const TABLES = [
   "journal_entries",
   "block_marks",
   "skills",
+  "skill_time",
+  "gym_sessions",
   "app_meta",
   "google_oauth_tokens",
 ];

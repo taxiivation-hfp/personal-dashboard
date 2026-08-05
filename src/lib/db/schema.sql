@@ -291,3 +291,26 @@ CREATE TABLE IF NOT EXISTS google_oauth_tokens (
   expiry        INTEGER NOT NULL,   -- epoch ms
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+
+-- Gym days. Deliberately NOT a non-negotiable: the owner trains "any 4 of 5 weekdays",
+-- which is a FREQUENCY, and habits.days_mask can only express a fixed schedule. Putting
+-- it on the checklist Mon-Fri against an intent of four would guarantee one unticked
+-- non-negotiable every week BY DESIGN, and an item engineered to fail teaches distrust
+-- of the whole list.
+--
+-- The unique index on date encodes the per-day cap: one gym DAY, not one gym session.
+-- Two visits in a day is the same event here, exactly as 15k steps is the same as 7k.
+--
+-- title/done_at are carried over from the Discord gym import (tasks.kind='gym') rather
+-- than dropped — that history is real and irreplaceable. done_at stays NAIVE LOCAL,
+-- copied verbatim; re-interpreting it as UTC would shift every session by the Melbourne
+-- offset.
+CREATE TABLE IF NOT EXISTS gym_sessions (
+  id         INTEGER PRIMARY KEY,
+  date       TEXT NOT NULL CHECK (date GLOB '????-??-??'),
+  title      TEXT,
+  done_at    TEXT,
+  note       TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_sessions_date ON gym_sessions(date);
