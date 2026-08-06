@@ -4,6 +4,7 @@ import { adherenceFor, buildBlocks, type BlockState } from "@/lib/adherence";
 import { getAdherenceConfig, habitTallyFor } from "@/lib/queries";
 import { weekdayBit } from "@/lib/engine";
 import { addDays, isISODate, todayISO } from "@/lib/dates";
+import { scoreDay } from "@/lib/productivity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,8 @@ export async function GET(req: Request) {
     }
 
     const db = await getDb();
-    const { byDate } = await getCalendarRange(start, end);
+    // `connected` is load-bearing for the productivity score below — do not discard it.
+    const { byDate, connected } = await getCalendarRange(start, end);
 
     const markRows = await db.execute({
       sql: "SELECT date,event_id,state,reason FROM block_marks WHERE date BETWEEN ? AND ?",
@@ -73,6 +75,17 @@ export async function GET(req: Request) {
       ticksByDate.get(d)!.add(Number(r.habit_id));
     }
 
+    // Gym sessions per day, for the productivity score. One range query rather than one
+    // per day — the strip asks for 7 and the calendar column for 9.
+    const gymRows = await db.execute({
+      sql: "SELECT date, COUNT(*) AS n FROM gym_sessions WHERE date BETWEEN ? AND ? GROUP BY date",
+      args: [start, end],
+    });
+    // Number(), not the raw value: libSQL returns aggregates as BigInt and `bigint /
+    // number` throws. A GROUP BY COUNT is never null, so no null-guard is needed.
+    const gymByDate = new Map<string, number>();
+    for (const r of gymRows.rows) gymByDate.set(String(r.date), Number(r.n));
+
     const today = todayISO();
     const nowMs = Date.now();
     const out = [];
@@ -83,20 +96,39 @@ export async function GET(req: Request) {
       const bit = weekdayBit(d);
       const scheduled = activeHabits.filter((h) => (h.mask & bit) !== 0);
       const ticked = ticksByDate.get(d) ?? new Set<number>();
-      const tally = habitTallyFor(
-        d,
-        scheduled.length,
-        scheduled.filter((h) => ticked.has(h.id)).length,
-        cfg,
-        nowMs,
-        today
-      );
+      const habitsDone = scheduled.filter((h) => ticked.has(h.id)).length;
+      const tally = habitTallyFor(d, scheduled.length, habitsDone, cfg, nowMs, today);
+
+      /**
+       * The productivity score — hours SPENT, never results produced. See CLAUDE.md's
+       * Productivity section; it is a deliberate, quarantined exception.
+       *
+       * Assembled HERE and deliberately never added to DayView. The coach reads
+       * getDayView and block_marks, so keeping the score off DayView makes it
+       * structurally invisible to the coach rather than merely discouraged by a prompt.
+       *
+       * null when the calendar is unreachable, and that gate matters: without it a day
+       * would still report a number built from habits and workouts while every scheduled
+       * hour silently counted as zero — a wrong number rather than an absent one.
+       */
+      const productivity = connected
+        ? scoreDay({
+            blocks: blocks.map((b) => ({
+              minutes: b.minutes ?? 0,
+              colorId: b.colorId,
+              state: b.state,
+            })),
+            habitsDone,
+            workouts: gymByDate.get(d) ?? 0,
+          })
+        : null;
 
       out.push({
         date: d,
         isToday: d === today,
         isFuture: d > today,
         ...adherenceFor(blocks, tally),
+        productivity,
         // A compact summary so the calendar column can show what the day actually
         // held, not just a percentage — enough to read the pattern at a glance.
         //
