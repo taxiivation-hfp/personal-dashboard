@@ -48,7 +48,9 @@ export const CALENDAR_RATES: {
   rate: number;
 }[] = [
   { id: "11", google: "Tomato", label: "Work", rate: 1 },
-  { id: "7", google: "Peacock", label: "Uni", rate: 0.5 },
+  // Uni is the calendar's DEFAULT colour — an event you scheduled without thinking about
+  // its colour. Peacock briefly sat here too, but that was a stray on a couple of real
+  // events rather than a rule; a colour has to be chosen deliberately to mean something.
   { id: null, google: "default", label: "Uni", rate: 0.5 },
 ];
 

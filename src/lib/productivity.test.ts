@@ -17,7 +17,8 @@ const red = (minutes: number, state: BlockState | null = "adhered"): ProductiveB
   colorId: "11",
   state,
 });
-const peacock = (minutes: number): ProductiveBlock => ({ minutes, colorId: "7", state: "adhered" });
+/** The calendar default — Uni. Google omits colorId entirely for these. */
+const uni = (minutes: number): ProductiveBlock => ({ minutes, colorId: null, state: "adhered" });
 const day = (o: Partial<ProductivityInput> = {}) =>
   scoreDay({ blocks: [], habitsDone: 0, workouts: 0, ...o });
 
@@ -25,9 +26,14 @@ test("red is Work at the full rate", () => {
   assert.equal(rateFor("11"), 1);
 });
 
-test("peacock and the calendar default are the same Uni tier", () => {
-  assert.equal(rateFor("7"), 0.5);
+test("the calendar default is the Uni tier", () => {
   assert.equal(rateFor(null), 0.5);
+});
+
+// Peacock was briefly mapped to Uni. It was a stray on a couple of real events rather
+// than a rule, and a colour has to be chosen deliberately to mean anything here.
+test("peacock is not a tier", () => {
+  assert.equal(rateFor("7"), UNLISTED_RATE);
 });
 
 test("an unlisted colour scores zero, not a fallback rate", () => {
@@ -42,8 +48,8 @@ test("60 minutes of Work is 100 points", () => {
 });
 
 test("Uni runs at half rate", () => {
-  assert.equal(day({ blocks: [peacock(60)] }).points, 50);
-  assert.equal(day({ blocks: [peacock(120)] }).points, 100);
+  assert.equal(day({ blocks: [uni(60)] }).points, 50);
+  assert.equal(day({ blocks: [uni(120)] }).points, 100);
 });
 
 test("time scores linearly", () => {
@@ -73,7 +79,7 @@ test("each workout is 100 regardless of duration", () => {
 // well-rounded fortnight the only good-looking board. This does not cap, because its job
 // is the opposite — a raw comparative reading of hours actually spent.
 test("the score is UNCAPPED", () => {
-  const s = day({ blocks: [red(360), peacock(120)], habitsDone: 5, workouts: 3 });
+  const s = day({ blocks: [red(360), uni(120)], habitsDone: 5, workouts: 3 });
   assert.equal(s.points, 1125);
   assert.ok(s.points > 100);
 });
@@ -94,18 +100,18 @@ test("a mixed day counts only the adhered minutes", () => {
 });
 
 test("the parts always sum to the total", () => {
-  const s = day({ blocks: [red(45), peacock(25)], habitsDone: 3, workouts: 1 });
+  const s = day({ blocks: [red(45), uni(25)], habitsDone: 3, workouts: 1 });
   assert.equal(s.timePoints + s.habitPoints + s.workoutPoints, s.points);
 });
 
 test("points are whole numbers", () => {
   assert.equal(day({ blocks: [red(45)] }).points, 75);
-  assert.equal(day({ blocks: [peacock(25)] }).points, 21); // 20.83 rounds
-  assert.ok(Number.isInteger(day({ blocks: [peacock(25)] }).points));
+  assert.equal(day({ blocks: [uni(25)] }).points, 21); // 20.83 rounds
+  assert.ok(Number.isInteger(day({ blocks: [uni(25)] }).points));
 });
 
 test("weighted minutes are reported alongside raw", () => {
-  const s = day({ blocks: [red(60), peacock(60)] });
+  const s = day({ blocks: [red(60), uni(60)] });
   assert.equal(s.minutes, 120);
   assert.equal(s.weightedMinutes, 90);
   assert.equal(s.timePoints, 150);
