@@ -1,6 +1,6 @@
 ---
 name: Personal Dashboard
-description: A private daily adherence guide — warm, quiet, and built to be read a dozen times a day without ever being noticed.
+description: A private daily adherence guide — a warm ruled page you mark and close, read a dozen times a day without ever being noticed.
 colors:
   accent-amber: "#9a6a2e"
   accent-tint: "#f0e4d0"
@@ -13,54 +13,39 @@ colors:
   muted: "#6e675d"
   placeholder: "#6e675d"
   state-adhered: "#9a6a2e"
-  state-drifted: "#8a8378"
-  state-skipped: "#8f8676"
+  state-drifted: "#7b746a"
+  state-skipped: "#72695a"
   pillar-social: "#8c7434"
   pillar-physical: "#467c6c"
   pillar-portfolio: "#67609b"
 typography:
-  display:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: "52px"
+  hero:
+    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
+    fontSize: "3.25rem"
     fontWeight: 600
     lineHeight: 0.92
-    letterSpacing: "-0.03em"
+    letterSpacing: "-0.02em"
     fontFeature: "tabular-nums"
-  headline:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: "28px"
+  heading:
+    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
+    fontSize: "1.75rem"
     fontWeight: 600
     lineHeight: 1.2
-  title:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: "16px"
-    fontWeight: 600
-    lineHeight: 1.4
   body:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: "15px"
+    fontFamily: "Source Sans 3, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1rem"
     fontWeight: 400
-    lineHeight: 1.625
-  control:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: "14px"
+    lineHeight: 1.6
+  small:
+    fontFamily: "Source Sans 3, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.875rem"
     fontWeight: 400
-    lineHeight: 1.4
-  label:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: "13px"
-    fontWeight: 400
-    lineHeight: 1.4
-  caption:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: "12px"
+    lineHeight: 1.45
+  micro:
+    fontFamily: "Source Sans 3, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.35
-  micro:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: "11px"
-    fontWeight: 400
-    lineHeight: 1.3
 rounded:
   sm: "4px"
   md: "6px"
@@ -75,71 +60,67 @@ spacing:
   lg: "16px"
   xl: "24px"
   2xl: "32px"
-  section: "48px"
-  section-lg: "56px"
+  section: "44px"
+  page-margin: "68px"
 components:
+  section-head:
+    typography: "{typography.small}"
+    textColor: "{colors.ink}"
+    padding: "0 0 8px"
+  row:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink}"
+    typography: "{typography.body}"
+    padding: "12px 0"
+  row-hover:
+    backgroundColor: "{colors.off-white}"
+    rounded: "{rounded.lg}"
   button-primary:
     backgroundColor: "{colors.accent-amber}"
     textColor: "#ffffff"
-    typography: "{typography.control}"
-    rounded: "{rounded.xl}"
+    typography: "{typography.small}"
+    rounded: "{rounded.lg}"
     padding: "8px 16px"
   button-ghost:
     backgroundColor: "transparent"
     textColor: "{colors.ink}"
-    typography: "{typography.label}"
+    typography: "{typography.small}"
     rounded: "{rounded.full}"
     padding: "6px 14px"
   button-quiet:
     backgroundColor: "transparent"
     textColor: "{colors.muted}"
-    typography: "{typography.caption}"
-    rounded: "{rounded.xl}"
-    padding: "6px 12px"
+    typography: "{typography.micro}"
+    padding: "0"
   chip-adhered:
     backgroundColor: "{colors.state-adhered}"
     textColor: "#ffffff"
-    typography: "{typography.label}"
+    typography: "{typography.small}"
     rounded: "{rounded.full}"
     padding: "4px 12px"
   chip-drifted:
     backgroundColor: "{colors.state-drifted}"
     textColor: "#ffffff"
-    typography: "{typography.label}"
+    typography: "{typography.small}"
     rounded: "{rounded.full}"
     padding: "4px 12px"
   chip-skipped:
     backgroundColor: "transparent"
     textColor: "{colors.state-skipped}"
-    typography: "{typography.label}"
+    typography: "{typography.small}"
     rounded: "{rounded.full}"
     padding: "4px 12px"
-  card:
+  input-line:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink}"
+    typography: "{typography.body}"
+    padding: "0 0 2px"
+  panel:
     backgroundColor: "{colors.off-white}"
     textColor: "{colors.ink}"
     typography: "{typography.body}"
     rounded: "{rounded.2xl}"
     padding: "16px 20px"
-  input-text:
-    backgroundColor: "{colors.warm-beige}"
-    textColor: "{colors.ink}"
-    typography: "{typography.control}"
-    rounded: "{rounded.xl}"
-    padding: "8px 12px"
-  input-numeric:
-    backgroundColor: "{colors.recessed}"
-    textColor: "{colors.ink}"
-    typography: "{typography.control}"
-    rounded: "{rounded.lg}"
-    padding: "4px 10px"
-    width: "72px"
-  tab-item:
-    backgroundColor: "transparent"
-    textColor: "{colors.muted}"
-    typography: "{typography.caption}"
-    padding: "10px 8px 12px"
-  tab-item-active:
-    textColor: "{colors.ink}"
 ---
 
 # Design System: Personal Dashboard
@@ -148,33 +129,37 @@ components:
 
 **Creative North Star: "The Unwitnessed Page"**
 
-Nobody is watching. That is the whole system in three words, and every visual decision
-here descends from it. There is no audience to perform for, so nothing celebrates. There
-is no one to be ashamed in front of, so nothing scolds. What's left is a warm, plain page
-you mark and close — closer to a bedside notebook than to a dashboard, and deliberately so.
+Nobody is watching. That is the whole system in three words, and every visual decision here
+descends from it. There is no audience to perform for, so nothing celebrates. There is no
+one to be ashamed in front of, so nothing scolds. What is left is a warm, plain page you
+mark and close — closer to a bedside notebook than to a dashboard, and deliberately so.
 
-The surface is a light warm beige with off-white panels floating on it, one muted amber
-accent, and three desaturated hues that categorise but never rank. It is dense where the
-day's work is and generous everywhere else. It reads at 8am at a desk and at 11pm in the
-dark, and it is opened a dozen times a day for months — which is the governing constraint.
-Anything that rewards a first look at the cost of the hundredth is wrong here. A surface
-seen this often must never be interesting.
+The furniture is **rules and margins, not cards**. An earlier version of this app wrapped
+every section in a rounded off-white panel, which made eleven identical rectangles out of
+eleven different kinds of thing and turned a notebook into a dashboard. Content now sits
+directly on the warm beige page, separated by hairlines, with meta hanging in a fixed left
+margin the way times hang beside entries in a diary. A panel has to earn itself; exactly
+one thing in the app does.
+
+It reads at 8am at a desk and at 11pm in the dark, and it is opened a dozen times a day for
+months — which is the governing constraint. Anything that rewards a first look at the cost
+of the hundredth is wrong here. A surface seen this often must never be interesting.
 
 What this system explicitly rejects: **the Duolingo / Habitica register** — streaks as a
-mechanic, badges, celebration, mascots, loss-aversion. It rejects red, shame copy, and
-"you failed" states. It rejects severity ramps, where three shades of worsening encode a
-verdict in the palette itself. And it rejects any surface where output could be measured
-or compared. Marking a block as drifted must cost exactly what marking it adhered costs;
-the moment the palette makes one of them heavier, honest logging stops.
+mechanic, badges, celebration, mascots, loss-aversion. It rejects red, shame copy, and "you
+failed" states. It rejects severity ramps, where three shades of worsening encode a verdict
+in the palette itself. And it rejects any surface where output could be measured or
+compared. Marking a block as drifted must cost exactly what marking it adhered costs; the
+moment the palette makes one of them heavier, honest logging stops.
 
 **Key Characteristics:**
 
-- Warm beige ground, off-white panels, one accent. Restrained by doctrine, not by timidity.
-- Flat. Depth is tonal layering, never cast shadow.
-- Eight type steps, two weights, tabular figures on anything that changes in place.
-- Motion is state, feedback and reveal only. Nothing choreographed, everything under 280ms.
-- The three block states are distinguished by **form** — filled, filled, outlined — never
-  by a severity gradient.
+- Warm beige ground, one accent, hairline rules. Restrained by doctrine, not by timidity.
+- No cards by default and no shadows at all. Depth is tonal; separation is a 1px rule.
+- Two families from one superfamily, split by authorship: serif for what you wrote.
+- Five type steps, two weights, tabular figures on anything that changes in place.
+- Motion is state, feedback and reveal only. Transform and opacity, nothing over 280ms.
+- The three block states differ by **form** — filled, filled, outlined — never by severity.
 - Every colour is measured against its real background before it ships.
 
 ## 2. Colors
@@ -185,23 +170,20 @@ as paper with one metal on it rather than as a coloured interface.
 ### Primary
 
 - **Muted Amber** (`#9a6a2e`): the single accent, and the only coloured block state. It
-  carries the adherence ring, primary buttons, the active tab indicator, the 7-day strip
-  bars, checked non-negotiables, and link text. Despite the name it sits closer to aged
-  brass than to signal-amber — dark enough to hold white text at 4.69:1, which is exactly
-  why it can be a filled chip. Used on well under 10% of any screen; its rarity is the
-  point.
+  carries the adherence ring, primary buttons, the active tab indicator, the strip bars,
+  checked non-negotiables, and focus rings. Despite the name it sits closer to aged brass
+  than to signal-amber. Used on well under 10% of any screen; its rarity is the point.
 - **Amber Tint** (`#f0e4d0`): the accent diluted to a background. Marks today's column in
-  the 7-day strip. Never carries text.
+  the strip and backs the one or two chips that need the accent's presence without its ink.
 
 ### Secondary — the three block states
 
 Not a ramp. Three tonally equal treatments distinguished by fill and outline.
 
-- **Adhered** (`#9a6a2e`): the accent, filled, white text. The only state with colour.
-- **Drifted** (`#8a8378`): a warm grey, filled, white text. Information, not alarm.
-- **Skipped** (`#8f8676`): a warm grey used as a 1px outline plus label text, never as a
-  fill. Outline rather than a third fill because a grey pale enough to read as "least"
-  measured 2.1:1 — below the floor for a meaningful swatch.
+- **Adhered** (`#9a6a2e`): the accent, filled, white text at 4.69:1.
+- **Drifted** (`#7b746a`): a warm grey, filled, white text at 4.62:1. Information, not alarm.
+- **Skipped** (`#72695a`): a warm grey as a 1px outline plus label text, never a fill —
+  4.64:1 on the page, 5.14:1 on a panel.
 
 ### Tertiary — the three pillar hues
 
@@ -209,289 +191,276 @@ Categorisation only. These name a domain; they never indicate status, quality, o
 All three are owner-editable from a curated palette; nothing else in this document is.
 
 - **Dry Ochre** (`#8c7434`): Social.
-- **Deep Sage-Teal** (`#467c6c`): Physical. Was `#4a8271` until it measured 4.45:1 with
-  white on top and was darkened — the exact failure the chip test exists to catch.
+- **Deep Sage-Teal** (`#467c6c`): Physical.
 - **Muted Iris** (`#67609b`): Portfolio.
 
 ### Neutral
 
-- **Warm Beige** (`#f2ede4`): the page. Every measurement in this document is taken
-  against it unless stated otherwise.
-- **Off-White** (`#fbf9f5`): panels and cards. The primary raised surface.
-- **Recessed Warm** (`#efe9de`): inset surfaces — numeric inputs, empty strip tracks.
-- **Hairline** (`#e2dbcd`) and **Hairline Strong** (`#cfc5b2`): borders and ring tracks.
-  Strokes only. Hairline Strong measures 1.47:1 and must never carry text.
+- **Warm Beige** (`#f2ede4`): the page, and now the background of nearly everything.
+- **Off-White** (`#fbf9f5`): the one earned panel, and row hover.
+- **Recessed Warm** (`#efe9de`): inset surfaces. Use sparingly — it measures 1.04:1 against
+  the page and disappears entirely on anything that must stay visible when empty.
+- **Hairline** (`#e2dbcd`) and **Hairline Strong** (`#cfc5b2`): rules, borders and empty
+  tracks. Strokes only — Hairline Strong measures 1.47:1 and must never carry text.
 - **Near-Black Ink** (`#23201b`): body and heading text, 13.9:1.
-- **Warm Grey** (`#6e675d`): secondary text and placeholders, 4.79:1 on the page and
-  5.31:1 on panels. Placeholder text is text and gets this, not a hairline colour.
+- **Warm Grey** (`#6e675d`): secondary text and placeholders, 4.79:1 on the page, 5.31:1 on
+  a panel. Placeholder text is text and gets this, not a hairline colour.
 
 ### Named Rules
 
-**The One Voice Rule.** Amber is the only accent in the system. A second accent is not a
-design decision, it is a bug. The three pillar hues are categorisation and are forbidden
-from carrying status, error, warning, or success meaning.
+**The One Voice Rule.** Amber is the only accent. A second accent is not a design decision,
+it is a bug. The three pillar hues are categorisation and are forbidden from carrying
+status, error, warning, or success meaning.
 
-**The No-Red Rule.** There is no red in this palette and none may be added. The block
-states avoid a severity ramp entirely — they differ by form, not by degree of badness.
-Encoding judgement in the palette is how honest logging dies.
+**The No-Red Rule.** There is no red in this palette and none may be added. The block states
+avoid a severity ramp entirely — they differ by form, not by degree of badness. Encoding
+judgement in the palette is how honest logging dies.
 
-**The Chip Test.** Any hue used as a filled chip must clear **4.5:1 with white on top**,
-not merely 3:1 against the page. Two colours currently fail it and must be corrected
-rather than propagated: white on **Drifted** measures **3.75:1**, and **Skipped** used as
-13px label text measures **3.08:1** on the page (3.42:1 on a panel). Skipped is compliant
-as a 1px outline; it is the text use that fails. Darkening Drifted toward ~4.6:1 makes it
-*more* tonally equal to Adhered, not less, so the fix does not create a severity ramp.
+**The Fill-Is-Not-Ink Rule.** A colour certified as a *fill* is not certified as *text*.
+Muted Amber clears 4.69:1 with white on top and is safe as a background; as text on the
+page it measures **4.02:1** and fails. This has caught two real bugs. Before using any hue
+as type, measure that hue against that background — not the reverse pairing it was signed
+off on.
+
+**The Chip Test.** Any hue used as a filled chip must clear 4.5:1 with white on top, not
+merely 3:1 against the page. It caught `--color-physical` at 4.45, then both block-state
+greys at 3.75 and 3.08. All now pass.
 
 ## 3. Typography
 
-**Display Font:** none declared.
-**Body Font:** none declared.
+**Display / authored text:** Source Serif 4 (variable, with the `opsz` axis)
+**Interface:** Source Sans 3 (variable)
 
-**This is the system's largest gap, and it is not a stylistic choice.** No `next/font`, no
-`@font-face`, no `font-family` declaration, and no `--font-sans` in the `@theme` block
-exist anywhere in the project. Every surface falls through to Tailwind's preflight default,
-`ui-sans-serif, system-ui, sans-serif` — which resolves to **Segoe UI on the laptop and SF
-Pro on the iPhone**. The two devices this app was built for render it in two different
-typefaces. `globals.css` also sets `font-feature-settings: "cv02", "cv03", "cv04"`, which
-are Inter's character-variant features; with no Inter loaded they are silent no-ops on both
-devices. Any work on this system should resolve the family first.
+Both are self-hosted through `next/font` — no runtime request — so the laptop and the phone
+render identical type. They load with `display: optional` rather than `swap`: this Next
+version emits no metric-matched fallback face, so `swap` would reflow the page the moment
+the font landed, and the app is opened from the home screen often enough that it is always
+cached after the first visit.
 
-**Character:** what the scale *intends* is a single neutral sans doing every job — headings,
-buttons, labels, body, data — with hierarchy carried entirely by size, weight and space.
-That is the correct instinct for this register. It is currently unrealised.
+**Character:** two faces from one superfamily, so they share a skeleton and pair without
+arguing. The contrast between them is structural — serif against sans — which is a real
+axis, unlike two sans-serifs differing only in mood.
+
+### The Author Rule
+
+The split is not decorative and it is not about widgets. **The serif renders what the owner
+wrote; the sans renders what the app says.**
+
+Serif: journal pages, workout logs, habit names, block and event titles, goal and subgoal
+text, skill names — *including inside the inputs that hold them*, because a goal title is
+the owner's either way. Plus the two things that are about the day rather than about
+operating the app: the adherence numeral and page headings.
+
+Sans: labels, chips, buttons, units, counts, times, percentages, captions, the tab bar, and
+number and weight fields.
+
+The one deliberate edge case is the coach's daily note, which takes the **serif**. Read
+strictly by authorship it should not — the coach is the app talking. But the line the eye
+needs is prose against chrome: it is a sentence you read, not a control you operate, and
+setting the only paragraph on the screen in the label face would make it look like a system
+message. Prose is the test; authorship is how prose usually gets decided.
 
 ### Hierarchy
 
-Eight steps, fixed in px. Not fluid: this is product UI at consistent DPI, and a clamped
-heading that shrinks inside a column looks worse, not better.
+Five steps, in rem. Not fluid: this is product UI at consistent DPI.
 
-- **Display** (600, 52px, line-height 0.92, letter-spacing −0.03em, tabular figures): the
-  adherence numeral, and nothing else in the entire app. Tight tracking because large
-  numerals default to looking loose; tabular figures so the percentage does not jitter as
-  it changes through the day.
-- **Headline** (600, 28px): deeper-screen page headings — Goals, Habits, Colours.
-- **Title** (600, 16px): dialog titles.
-- **Body** (400, 15px, line-height 1.625): the default. Prose capped at 62ch.
-- **Control** (400, 14px): input values and control labels. Numeric inputs use tabular
-  figures.
-- **Label** (400, 13px): dense list rows, secondary actions, block-state chips.
-- **Caption** (400, 12px): tab bar, inline links, metadata.
-- **Micro** (400, 11px): ring captions, fact lines, weekday initials.
+- **Hero** (serif, 600, 3.25rem/52px, line-height 0.92, tracking −0.02em, tabular): the
+  adherence numeral and the `%` sharing its baseline. Nothing else, ever. Tracking is
+  gentler than a sans numeral would want — a serif's own brackets already bridge the gaps.
+- **Heading** (serif, 600, 1.75rem/28px): deeper-screen page headings only.
+- **Body** (sans, 400, 1rem/16px, line-height 1.6): the default. Prose capped at 62ch.
+- **Small** (sans, 400, 0.875rem/14px): dense rows, chips, controls, section headings.
+- **Micro** (sans, 400, 0.75rem/12px): margin meta, times, units, fact lines, the tab bar.
 
 ### Named Rules
 
-**The Two Weight Rule.** 400 and 600. **No 500.** `font-medium` is banned outright — a
-third weight is a bug, not a choice. One violation exists today at
-`src/app/login/page.tsx:62`.
+**The Two Weight Rule.** 400 and 600. **No 500.** `font-medium` is banned outright — a third
+weight is a bug, not a choice.
 
-**The Eight Step Rule.** 11 / 12 / 13 / 14 / 15 / 16 / 28 / 52. A ninth size is a bug. If
-something needs to stand out, use weight or space, never a new size. Sizes are written as
-explicit `text-[Npx]`, never as Tailwind's default scale — `text-3xl` is 30px and is not a
-step in this system. Three files currently bypass the spine: `login/page.tsx` (including a
-genuine ninth step at 30px), `JournalCanvas.tsx`, and `JournalText.tsx`. A deliberate
-exception exists at `JournalPanel.tsx:74`, where 9px renders a scale-model thumbnail of a
-journal page rather than UI text.
+**The Five Step Rule.** 12 / 14 / 16 / 28 / 52, written as the semantic utilities
+`text-micro` / `text-small` / `text-body` / `text-heading` / `text-hero`. Never
+`text-[15px]`, never Tailwind's default scale — `text-3xl` is 30px and is not a step here.
+This replaced an eight-step scale whose middle was a lie: 12/13/14/15 carried 98 of 110
+usages at ratios of 1.07–1.08, four ways of saying the same thing, while the documented 11
+and 16 steps were used six times between them.
 
-**The Tabular Rule.** Any number that changes in place gets `font-variant-numeric:
-tabular-nums`. A percentage that reflows as it counts is a percentage nobody trusts.
+**The Tabular Rule.** Any number that changes in place gets `tabular-nums`. A percentage
+that reflows as it counts is a percentage nobody trusts.
 
 ## 4. Elevation
 
-**This system is flat.** Depth is communicated entirely through tonal layering, and the
-whole ramp is three steps: the page (`#f2ede4`), raised panels (`#fbf9f5`), and recessed
-insets (`#efe9de`). Borders are hairlines, not shadows. A card is a card because it is
-lighter than the page, not because it casts anything.
+**This system is flat, and now literally so: there are zero shadows in the application.**
+Depth is communicated entirely through tonal layering and hairlines. The ramp is three
+steps — page (`#f2ede4`), the earned panel (`#fbf9f5`), recessed inset (`#efe9de`) — and a
+1px rule does most of the separating that a card used to do.
 
-The layering is deliberately shallow. The values sit within ~0.05 OKLCH lightness of each
-other, so surfaces separate without any of them announcing itself — which is what lets the
-adherence numeral be the only thing on the screen with real presence. One consequence is
-documented in the ring component: an empty ring track uses **Hairline Strong**
-(`#cfc5b2`), not the recessed surface token, because `#efe9de` on `#f2ede4` is so close
-that an unfilled ring reads as nothing at all rather than as a ring that isn't filled.
-
-### Shadow Vocabulary
-
-Two uses exist in the entire application, both `shadow-sm`, both on elements that
-genuinely leave the plane:
-
-- **Floating affordance** (`box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05)`): the
-  hover-revealed delete control on a journal thumbnail.
-- **Popover** (same value): the journal's new-page menu.
+The last `box-shadow` was removed from the journal's delete popover. It genuinely floats,
+which is the one case that would justify a lift, but it had become the only shadow in the
+codebase and a single unexplained exception reads as an oversight rather than a system. The
+panel surface, the hairline and the z-index already say "above".
 
 ### Named Rules
 
-**The Flat-By-Default Rule.** Surfaces are flat at rest and stay flat on hover. Reach for
-tonal separation or a hairline first; a shadow is only correct when the element has
-actually left the page plane. Two shadows in the whole app is the budget, not the starting
-point.
+**The No-Shadow Rule.** Zero, not few. If an element needs to read as lifted, give it the
+panel surface and a hairline. If that is not enough separation, the problem is the layout.
 
-**The Legible-Empty Rule.** An empty state must still be visible. An unfilled ring, an
-unmarked block, an untouched day in the strip — each draws a real track at ≥3:1. "Thin
-means neglected, never failed" only works if the thin thing can be seen.
+**The Legible-Empty Rule.** An empty state must still be visible, and this is where the
+tonal palette is most dangerous. `--color-panel-2` measures **1.04:1** against the page:
+used as an empty strip track it vanished completely, and a day with no data read as no day
+at all. Empty things are **outlined**, not filled — the same answer the Skipped state uses.
+An unfilled ring keeps a solid `--color-line-strong` track at 1.47:1 for the same reason.
+"Thin means neglected, never failed" only works if the thin thing can be seen.
 
 ## 5. Components
 
-Quiet and tappable. Generous hit areas, hairline borders, no fills except where state
+Quiet and tappable. Generous hit areas, hairline separation, no fills except where state
 demands one. Everything is sized for a thumb at 11pm.
+
+### The ruled page
+
+Two shared classes carry the structure so ten components cannot each invent a near-miss
+version of the same thing:
+
+- **`.section-head`** — a heading sitting on its rule: flex, baseline-aligned,
+  space-between, 8px bottom padding, 1px bottom hairline. The heading is Small at 600; an
+  optional right-aligned action is a quiet Micro link.
+- **`.page-margin`** — a two-column grid, `var(--page-margin)` (4.25rem) plus 1fr, 14px
+  gap. Meta sits left, right-aligned, Micro, tabular, muted. The owner's words sit right in
+  serif. Use it wherever real marginalia exists — a time, a count, a quantity — and never as
+  decoration.
+
+Rows are `divide-y` hairlines with 12px vertical padding. Interactive rows bleed their
+hover with `-mx-2 px-2 rounded-lg` onto the Off-White surface. (Tailwind v4 gates `hover:`
+behind `@media (hover: hover)`, so this is touch-safe by default.)
 
 ### Buttons
 
-- **Shape:** softly rounded (12px, `rounded-xl`) for solid and bordered actions; fully
-  rounded (`rounded-full`) for the three-way state selector, where a pill reads as a
-  choice rather than a command.
-- **Primary:** Muted Amber fill, white text, 12px radius, 16px × 8–10px padding, at
-  Control (14px) or Body (15px). Hover drops opacity to 0.9. Disabled drops to 0.4.
-- **Ghost:** transparent, 1px Hairline Strong border, ink text, fully rounded, 14px × 6px.
-  This is the unmarked block-state selector — three equal-weight options, no default, no
-  recommended choice.
-- **Quiet:** transparent, no border, Warm Grey text at Caption (12px), darkening to ink on
-  hover. Used for `edit`, `colours`, and other one-tap-deeper navigation.
-- **Focus:** a 2px Muted Amber outline at 2px offset with a 6px radius, applied globally
-  via `:focus-visible`. Never removed, never restyled per component.
+- **Primary:** Muted Amber fill, white text, 8px radius, 16×8px, Small. Hover drops opacity
+  to 0.9, disabled to 0.4.
+- **Ghost:** transparent, 1px Hairline Strong border, ink text, fully rounded, 14×6px. This
+  is the three-way block-state selector — three equal options, no default, no recommended
+  choice, one shared class string so none of them can drift heavier than the others.
+- **Quiet:** bare, Micro, Warm Grey, darkening to ink with an underline on hover.
+- **Focus:** a 2px amber outline at 2px offset, applied globally via `:focus-visible`. Never
+  removed, never restyled per component.
+
+### Inputs
+
+**Lines, not boxes.** Transparent background, 1px Hairline Strong bottom border, darkening
+to the accent on focus. Numeric fields are right-aligned with tabular figures. A value
+written on a line rather than typed into a chip.
+
+The exception is a **writing surface** — the journal sheet and the workout log — which keeps
+its bordered page. Those are pages, not fields.
 
 ### Chips
 
-- **Style:** fully rounded, 12px × 4px, Label (13px). Marked block states only.
-- **State:** Adhered and Drifted are filled with white text; Skipped is a 1px outline with
-  the label in its own colour. Fill-versus-outline is the entire distinction — see The
-  No-Red Rule. (Both filled variants currently fail The Chip Test; see Colors.)
-
-### Cards / Containers
-
-- **Corner Style:** 16px (`rounded-2xl`) for content panels; 12px (`rounded-xl`) for
-  interactive rows and inputs.
-- **Background:** Off-White on the Warm Beige page. Recessed Warm for insets.
-- **Shadow Strategy:** none. See Elevation.
-- **Border:** most panels carry no border and rely on tonal separation alone. Where a
-  border is needed it is 1px Hairline; 1px Hairline Strong when the element is interactive.
-- **Internal Padding:** 16–20px on content panels, 8–12px on list rows. Nested cards are
-  forbidden.
-
-### Inputs / Fields
-
-- **Style:** 12px radius, 1px Hairline Strong border, page-coloured or Off-White fill,
-  12px × 8px padding, Control (14px). Numeric fields drop to 8px radius, sit on Recessed
-  Warm, are right-aligned with tabular figures, and are ~72px wide.
-- **Focus:** the global amber `:focus-visible` ring. `outline: none` appears on inputs
-  only because the global rule supplies the ring.
-- **Placeholder:** Warm Grey (`#6e675d`) at the full 4.5:1. Placeholder text is text.
-- **Commit behaviour:** numeric fields commit on blur and on Enter. Clearing the field
-  clears the day — there is no separate delete affordance.
+Fully rounded, 12×4px, Small. Marked block states only. Adhered and Drifted are filled with
+white text; Skipped is a 1px outline with its label in its own colour. Fill-versus-outline
+is the entire distinction.
 
 ### Navigation
 
-- **Desktop:** no chrome at all. A three-column grid with a single date line as the header
-  and one quiet link. There is no sidebar, no top bar, no logo, no account menu.
-- **Mobile:** a fixed bottom tab bar below `lg` — Calendar / Today / Pillars. Translucent
-  (`color-mix(in srgb, var(--color-bg) 88%, transparent)`) over a 12px backdrop blur, so
-  the page reads as continuing underneath. 1px Hairline top border. Bottom padding is
-  `max(0.5rem, env(safe-area-inset-bottom))`.
-- **States:** inactive labels are Warm Grey at Caption (12px); the active label is ink.
-  A single 2px × 24px amber indicator **slides** between tabs over 180ms rather than three
-  indicators blinking — the movement is what says "you moved sideways".
-- **Gesture:** horizontal swipe changes tab, requiring ≥56px of travel and a 1.6:1
-  horizontal-to-vertical ratio so a diagonal scroll cannot flip the tab. Canvases, inputs,
-  and open dialogs are excluded from the gesture.
+- **Desktop:** no chrome. Three columns separated by 1px rules — a notebook spread, not
+  three floating panels — under a single date line and one quiet link.
+- **Mobile:** a fixed bottom tab bar below `lg`. Translucent over a 12px backdrop blur so
+  the page reads as continuing underneath, 1px top hairline, bottom padding of
+  `max(0.5rem, env(safe-area-inset-bottom))`. Inactive labels are Warm Grey, active is ink —
+  never a weight change, which would re-measure the text and nudge the other tabs sideways.
+- A single 2px × 24px amber indicator **slides** between tabs by translating whole multiples
+  of its own width. Horizontal swipe changes tab, requiring ≥56px of travel and a 1.6:1
+  horizontal-to-vertical ratio so a diagonal scroll cannot flip the tab.
 
 ### Rings (signature component)
 
-The one genuinely custom component, and two species share it. They must stay visually
-distinct or today's adherence reads as one more quota to fill:
+Two species share one component and must stay obviously different, or today's adherence
+reads as one more quota to fill:
 
-- **Adherence ring:** 168px, 10px stroke, amber, the numeral **inside**.
-- **Pillar ring:** small, pillar-hued, thin stroke, a fact line **below** — never a
-  percentage.
+- **Adherence:** 176px, 8px stroke, amber, the numeral **inside**. A fine line drawn around
+  a number reads as a mark on a page; a thick arc reads as a gauge.
+- **Pillar:** small, pillar-hued, thin stroke, a fact line **below** — never a percentage.
 
-Three states, and the third is what stops a first load reading as total failure:
-**filled** (a hued arc), **empty but live** (a faint solid track, no arc — "0 of 2 days"),
-and **ghost** (a *dashed* track for a metric with no data source yet). Null never enters
-the arc arithmetic; it is guarded before any maths, because coercing null to 0 would draw
-a 0% ring for a day that hasn't happened.
+Three states: **filled** (a hued arc), **empty but live** (a solid track, no arc — "0 of 2
+days"), and **ghost** (a *dashed* track for a metric with no data source yet). Null never
+enters the arc arithmetic; it is guarded before any maths, because coercing null to 0 would
+draw a 0% ring for a day that hasn't happened.
 
 Arcs use `stroke-linecap: butt`, never round: round caps add half a stroke width at each
-end, which makes the smallest non-zero fills read as roughly half again their true value.
-The ring would overstate exactly where honesty matters most. Overdrive past the threshold
-draws a second translucent lap at 0.45 opacity and 42% stroke width, capped at 2×.
+end, making the smallest non-zero fills read as roughly half again their true value. The
+ring would overstate exactly where honesty matters most. Overdrive past the threshold draws
+a second translucent lap at 0.45 opacity and 42% stroke width, capped at 2×.
 
 ### Motion
 
 - **Easings:** `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)` for anything entering or
-  responding; `--ease-in-out: cubic-bezier(0.77, 0, 0.175, 1)` for something moving across
-  the screen. **There is deliberately no ease-in token** — it delays the first moment,
-  which is exactly when the eye is watching.
+  responding; `--ease-in-out: cubic-bezier(0.77, 0, 0.175, 1)` for something crossing the
+  screen. **There is deliberately no ease-in token** — it delays the first moment, which is
+  exactly when the eye is watching.
 - **Durations:** `--dur-press` 140ms, `--dur-fast` 180ms, `--dur-modal` 240ms, `--dur-data`
   280ms. Nothing exceeds 280ms.
-- **Press feedback:** every enabled button scales to 0.97 on `:active`. Small enough to be
-  felt rather than watched, and load-bearing: an app whose value depends on marking things
-  quickly must confirm the tap landed.
+- **Three travel classes, and nothing animates outside them:** `.motion-data` (280ms
+  transform — bars, progress), `.motion-slide` (180ms transform — the tab indicator),
+  `.motion-arc` (280ms stroke-dasharray — ring arcs). All three are nulled under
+  `prefers-reduced-motion`. The arc lives in a class rather than an inline style precisely
+  so reduced motion can reach it: an inline style would need `!important`, and the blanket
+  reduced-motion rule only nulls `animation-*`, never `transition`.
+- **Press feedback:** every enabled button scales to 0.97 on `:active`. Felt, not watched,
+  and load-bearing: an app whose value depends on marking things quickly must confirm the
+  tap landed.
 - **Dialogs:** enter from `scale(0.97)` and opacity 0 over 240ms, exit at 180ms. Never from
-  `scale(0)` — nothing in the real world appears out of nothing, and a zero-scale entrance
-  reads as a pop rather than an arrival. Exit is faster than entry because the system
-  responding should always outpace the system presenting. Backdrop is
-  `rgb(35 32 27 / 0.28)`.
-- **Data:** rings animate `stroke-dasharray` over 280ms.
-- **Reduced motion:** gentler, not none. Movement is removed; colour and opacity still
-  carry meaning. A blanket `0.01ms` on everything would also kill the dialog's
-  `allow-discrete` transitions and make them pop.
+  `scale(0)` — nothing in the real world appears out of nothing. Exit is faster than entry
+  because the system responding should outpace the system presenting.
+- **Reduced motion:** gentler, not none. Movement goes; colour and opacity stay. A blanket
+  `0.01ms` on everything would also flatten the dialog's `allow-discrete` transitions and
+  make modals pop.
 
 ### Named Rules
 
+**The Transform-Only Rule.** Animate `transform` and `opacity`. Bars translate or scale,
+never `width`/`height`. No element in the app transitions height, width, margin, padding,
+top, left, bottom or right — verified in the browser, not assumed.
+
 **The Pressable Rule.** Every interactive element confirms the tap. A control that does not
-move on press leaves you unsure it registered, and this app is marked dozens of times a day.
-
-**The Hover-Is-Not-Touch Rule.** Hover states must not stick after a finger lifts. A touch
-device fires `:hover` on tap, so an ungated hover leaves a row looking selected when it
-isn't.
-
-**The Transform-Only Rule.** Animate `transform` and `opacity`. Bars scale with `scaleX`,
-never `width`. One violation exists today: the 7-day strip at `Today.tsx:185` transitions
-`height` while also changing `marginTop` — and `marginTop` is not in the transition list,
-so the bar's top edge teleports while its height eases.
+move on press leaves you unsure it registered.
 
 ## 6. Do's and Don'ts
 
 ### Do:
 
-- **Do** treat the adherence numeral as the only element on the screen with real presence.
-  52px, weight 600, tabular figures, tight tracking. Nothing else may compete.
-- **Do** measure every colour against its actual background before shipping it. Body text
-  ≥4.5:1, strokes and large text ≥3:1, and any filled chip ≥4.5:1 with white on top. This
-  discipline caught Physical at 4.45:1, a real failure that looked fine.
-- **Do** keep meaning off hue alone. Every pillar-coloured element needs a label, shape, or
-  position doing the same job.
+- **Do** treat the adherence numeral as the only element with real presence. Serif, 52px,
+  600, tabular, tracking −0.02em. Nothing else may compete.
+- **Do** measure every colour against its actual background, in the direction you are using
+  it. A fill certification is not a text certification.
+- **Do** reach for a rule before a card, and a hairline before a shadow.
+- **Do** put meta in the margin with `.page-margin`, and use `.section-head` for headings.
+- **Do** keep meaning off hue alone — a label, shape or position must carry it too.
 - **Do** print the real number beneath any capped ring (`11 of 8 days`). The arc caps; the
   text never does.
 - **Do** distinguish the three block states by **form** — filled, filled, outlined.
-- **Do** write type sizes as explicit `text-[Npx]` from the eight-step spine.
-- **Do** use tonal layering for depth: page → panel → inset.
-- **Do** give every animation a `prefers-reduced-motion` alternative that removes movement
-  while keeping colour and opacity.
+- **Do** make empty states outlined and visible. An unfilled thing must still read.
+- **Do** give every animation a `prefers-reduced-motion` path by using one of the three
+  travel classes.
 
 ### Don't:
 
-- **Don't** build anything in the **Duolingo / Habitica** register. No XP, no levels, no
-  points, no badges, no mascots, no confetti, no celebration state, no loss-aversion
-  nudge. The streak is a plain count of days logged and must never be dramatised.
-- **Don't** use red. Anywhere. Not for errors, not for drift, not for delete.
-- **Don't** build a severity ramp. Three shades of worsening grey encode a verdict in the
-  palette, and a person who feels judged logs inaccurately.
-- **Don't** write shame copy or "you failed" states. Marking drifted must cost exactly what
-  marking adhered costs.
+- **Don't** build anything in the **Duolingo / Habitica** register. No XP, levels, points,
+  badges, mascots, confetti, celebration, or loss-aversion. The streak is a plain count of
+  days logged and must never be dramatised.
+- **Don't** use red. Anywhere. Not for errors, not for drift, not for delete. An error
+  stands out by weight — ink at 600 — because there is no alarm colour in this system.
+- **Don't** build a severity ramp. Three shades of worsening grey encode a verdict, and a
+  person who feels judged logs inaccurately.
 - **Don't** measure, score, rank, or compare output — not between days, not between
   fortnights, not between pillars.
-- **Don't** use a pillar hue as a status colour. One violation exists at
-  `login/page.tsx:68`, where Dry Ochre carries an error message at 3.86:1.
-- **Don't** use `font-medium` or any weight other than 400 and 600.
-- **Don't** use Tailwind's default type scale (`text-sm`, `text-3xl`). `text-3xl` is 30px
-  and is a ninth step.
-- **Don't** add a second accent, and don't add a free hex colour picker. Pillar hues are
-  editable only from the curated palette; the accent, ink, surfaces and block states are
-  fixed.
-- **Don't** animate layout properties. No `height`, no `width`, no `margin`. Bars use
-  `scaleX`.
-- **Don't** add shadows for decoration, nest cards, or reach for a modal before exhausting
+- **Don't** use a pillar hue as a status colour, or the accent as text.
+- **Don't** wrap a section in a panel because it needs separating. Use a rule. A panel must
+  earn itself, and exactly one thing in the app currently does.
+- **Don't** add a shadow. The count is zero and should stay zero.
+- **Don't** use `font-medium`, or any weight other than 400 and 600.
+- **Don't** use Tailwind's default type scale or an arbitrary `text-[Npx]`.
+- **Don't** add a second accent or a free hex colour picker. Pillar hues are editable only
+  from the curated palette; the accent, ink, surfaces and block states are fixed.
+- **Don't** animate a layout property, or write a transition inline where reduced motion
+  cannot override it.
+- **Don't** set a filled input where a line will do, or reach for a modal before exhausting
   inline and progressive alternatives.
-- **Don't** add a ninth type step or a third font weight. If something needs to stand out,
-  use weight or space.
-- **Don't** let an empty state render as invisible. An unfilled ring must still read as a
-  ring.
