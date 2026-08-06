@@ -78,7 +78,9 @@ add them later without asking.
 
 1. **Adherence, never accomplishment.** If a change would create a surface where output
    could be measured, compared, or rewarded, the change is wrong regardless of how good it
-   looks.
+   looks. One sanctioned exception exists — the productivity score, which measures hours
+   *spent* rather than results produced and is quarantined from everything else. See
+   `CLAUDE.md`. It is not a precedent; it is a fence with one gate in it.
 2. **Honest logging outranks everything.** Marking "drifted" must be exactly as cheap, as
    visually equal and as unpunished as marking "adhered". Every other design goal loses to
    this one, because inaccurate data makes the whole app worthless.
@@ -105,6 +107,18 @@ states — is fixed.
 This is a product rule, not a visual preference: one accent is what keeps the page quiet,
 the block states must not acquire a severity ramp, and no choice may make the app
 unreadable. Do not add a free hex picker. Mechanics live in `DESIGN.md` and `engine.ts`.
+
+## Second pass — 2026-08-07
+
+Two things changed that this document previously ruled out, both by explicit decision:
+
+- **A productivity score**, drawn on the week strip. Hours spent, never results produced.
+  Constitution amended; see `CLAUDE.md`.
+- **Three windows under a masthead.** The 2026-08-06 pass removed every card for a ruled
+  page. The columns now return as three tonal surfaces titled *Look Into My Life by Nero* —
+  but the ruled vocabulary survives *inside* each one. The no-cards rule was aimed at
+  eleven identical rectangles within a column, which is a different claim from three
+  windows onto three time horizons.
 
 ## Redesign scope — `redesign` branch, opened 2026-08-06
 

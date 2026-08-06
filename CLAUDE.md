@@ -8,10 +8,14 @@ The question it answers is **"did I do what I said I'd do?"** — never "how muc
 get done?" The problem being solved is **drift and self-justification**, not
 productivity.
 
-**Output and results are deliberately NOT tracked or scored.** If you find yourself
-adding something that measures how much was produced, how good it was, or how it
-compares to another day, you have misunderstood the product. Working a block badly and
-working it brilliantly are the same event here: the block was adhered to.
+**Output and results are deliberately NOT tracked or scored, with one quarantined
+exception.** If you find yourself adding something that measures how much was produced or
+how good it was, you have misunderstood the product. Working a block badly and working it
+brilliantly are the same event here: the block was adhered to.
+
+The exception is the **productivity score** — see its own section below. It measures hours
+SPENT, never results produced, and it is fenced off from everything else. Do not read it as
+permission to score anything else.
 
 ## The rules that follow from that
 
@@ -70,7 +74,7 @@ Gym is deliberately **not** one of these. The owner trains "any 4 of 5 weekdays"
 frequency, which `days_mask` cannot express. On the checklist it would be engineered to
 sit unticked once a week, and an item you are designed to fail teaches distrust of the
 whole list. Workouts are logged separately, by kind: **Strength / Cardio / Misc**, one
-row per (date, kind), so a day can hold a lift and a run.
+row per SESSION — a day can hold two lifts and a run, and each is its own document.
 
 Each kind opens **its own free-text document** — three separate notes per day, not one
 shared field. Saving IS logging; there is no second "did it" toggle to forget. The text is
@@ -88,9 +92,15 @@ Three rings (Social / Physical / Portfolio) over a **rolling 14-day window**, de
 `src/lib/rings.ts`. Adherence remains the hero; rings are secondary context.
 
 **The core rule: a ring fills toward a threshold and CAPS.** Its *value* cannot be
-improved by doing more — 8 gym days and 20 both count as a full ring, and 15k steps fills
-the steps ring exactly as much as 7k. Because you cannot win by overdoing one pillar, the
-only board that looks good is a well-rounded one. That cap *is* the mechanism.
+improved by doing more — 8 strength sessions and 20 both count as a full ring, and 15k
+steps fills the steps ring exactly as much as 7k. Because you cannot win by overdoing one
+pillar, the only board that looks good is a well-rounded one. That cap *is* the mechanism.
+
+Strength and Cardio count **sessions**, not days — two lifts on a Tuesday are two things
+that happened. That is the owner's ruling and it makes the Physical ring easier to fill
+than the days rule it replaced; the threshold was deliberately left at 8 anyway. Outreach
+and Steps remain per-day capped, which `Metric.perDayCapped` is what actually encodes —
+`unit` is only the noun printed in the fact line.
 
 Overdrive (below) draws past the threshold, so 20 days and 8 do not look identical — but
 they are worth identically much. The distinction is the whole design: what you see is the
@@ -132,6 +142,35 @@ overrides leave behind.
 That isolation is what stops "did I do what I said I'd do" becoming "how much did I
 finish". Goals are never auto-completed at 100%; marking one done is the owner's call.
 
+## Productivity — the second sanctioned measure, and the narrower one
+
+A per-day points total, drawn on the 7-day strip. A DELIBERATE EXCEPTION to "output is
+never scored", and the exception is narrow.
+
+**It scores hours SPENT, never results produced.** A block worked badly and a block worked
+brilliantly score identically, because the only inputs are duration and the event's
+calendar colour. Nothing about quality, or what was finished, or how much was produced
+enters it. The rule it bends is "no comparison between days"; the rule it keeps is the one
+that matters — that the app never judges the quality of your work.
+
+Why it exists, in the owner's words: high adherence doesn't mean a productive day if you
+didn't schedule a productive day. Both numbers matter.
+
+- **UNCAPPED, and comparative within the visible week** — the exact inverse of the ring
+  rule. 1,125 is a valid reading. It must therefore NEVER be drawn as a ring, or as
+  anything else that implies a target.
+- **It feeds nothing** — not adherence, not the rings, not the streak, not the coach. The
+  quarantine is enforced by data flow, not by discipline: the score exists only on
+  `/api/adherence` and never on `DayView`, which is what the coach reads.
+- **Adherence remains the hero.** Productivity is secondary context, drawn smaller and in a
+  different channel — ink, never the accent, so the two can never be read as one quantity.
+- **No week-over-week comparison, no best-week marker, no target line, no delta.** It is
+  graphite on paper: a record, not a scoreboard.
+- **It does not reopen gamification.** No levels, no thresholds, no milestones, no streaks
+  on it. If it ever acquires one, this exception has been misread.
+- `src/lib/productivity.ts` holds the one tuning knob — the colour→rate table — following
+  the `rings.ts` METRICS precedent. Anything unlisted scores zero.
+
 ## The coach
 
 Its job is **pattern-spotting on drift**, using the stored reasons. For example:
@@ -163,8 +202,8 @@ Light beige, premium, clean.
   `--dur-data`, all capped at 280ms. **There is deliberately no ease-in token** — it
   delays the first moment, which is exactly when the eye is watching.
 - Animate `transform` and `opacity` only. Bars use `scaleX`, never `width`.
-- `themeColor` in `layout.tsx` must track `--color-bg`, or the iPhone status bar contradicts
-  the app.
+- `themeColor` in `layout.tsx` must track **the topmost painted surface** — now
+  `--color-bar`, the masthead band — or the iPhone status bar contradicts the app.
 
 ## In scope
 
@@ -173,7 +212,9 @@ Light beige, premium, clean.
   everywhere — a text entry stores `image = ''`, so never test emptiness to tell them
   apart. No transcription in either direction, no theme extraction, no vision. Deleting a
   page asks first.
-- Calories: a **single manual daily total**. No food database, no barcode, no API.
+- Calories: a **running total for the day, entered as you go** — 400 in the morning and 800
+  later reads 1200. Stored as a log so a mistyped entry is removed rather than retyped, and
+  the total is derived on read. Still no food database, no barcode, no API.
 - Render the calendar view (Google OAuth is already connected).
 
 ## Planned, source pending

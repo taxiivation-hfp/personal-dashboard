@@ -226,6 +226,21 @@ off on.
 merely 3:1 against the page. It caught `--color-physical` at 4.45, then both block-state
 greys at 3.75 and 3.08. All now pass.
 
+**The Foreign Hue Rule.** A colour arriving from outside the app — currently only a Google
+Calendar `colorId` — is never used as it arrives. Google's palette runs chroma 0.105–0.226,
+up to 2.3× this app's accent, and `colorId` 11 is literal signal red. It is **projected**:
+hue kept, lightness and chroma replaced with fixed values (`oklch(0.56 0.045 h)`), and a
+source below 0.02 chroma projects to a true grey so a grey stays grey. `L = 0.56` is not
+arbitrary — at 0.58 the worst case is 4.18:1 with white and fails The Chip Test.
+
+The result is a **stroke on the left edge of an event row and nothing else** — never a
+fill, never text, never a dot. The block state keeps its own dot, so form carries status
+and position carries category, and the two can never be confused. Projected hues are not
+accents: they are the owner's own filing system, arriving pre-labelled by the event title
+beside them. Hue rotation was tried and rejected — rotating Flamingo, Tomato and Tangerine
+out of the red band collapsed all three into one identical stroke, destroying the very
+categorisation the feature exists to provide.
+
 ## 3. Typography
 
 **Display / authored text:** Source Serif 4 (variable, with the `opsz` axis)
@@ -303,6 +318,23 @@ panel surface, the hairline and the z-index already say "above".
 
 **The No-Shadow Rule.** Zero, not few. If an element needs to read as lifted, give it the
 panel surface and a hairline. If that is not enough separation, the problem is the layout.
+
+**The One Gradient Rule.** There is exactly one gradient in the interface: the border
+around today in the calendar column, which fades downward toward tomorrow. It replaces
+nothing — no shadow was added — and it encodes *direction*, which no flat stroke can. The
+journal's ruled lines are paper texture, not a UI effect, and do not count. A second
+gradient is a bug. Fills are flat, borders are flat, bars are flat.
+
+**The Window Exception.** The furniture *inside* a column is rules and margins, not cards —
+that rule was aimed at the eleven identical rectangles an earlier pass made of eleven
+different kinds of thing. The three **columns themselves** are the exception, and the only
+one: they are windows onto three time horizons, and a window is allowed to have an edge.
+Each takes a rounded surface, a 1px hairline and a page-ground gutter. Nothing *inside* a
+column may take a second surface.
+
+Their tones differ by 1.03–1.07:1 — at or below the 1.04:1 this very section documents as
+invisible. **That is intended.** The hairline and the gutter separate the windows; the tone
+only tells you which one you are in, and is meant to be felt rather than seen.
 
 **The Legible-Empty Rule.** An empty state must still be visible, and this is where the
 tonal palette is most dangerous. `--color-panel-2` measures **1.04:1** against the page:
@@ -453,9 +485,15 @@ move on press leaves you unsure it registered.
 - **Don't** measure, score, rank, or compare output — not between days, not between
   fortnights, not between pillars.
 - **Don't** use a pillar hue as a status colour, or the accent as text.
-- **Don't** wrap a section in a panel because it needs separating. Use a rule. A panel must
-  earn itself, and exactly one thing in the app currently does.
+- **Don't** wrap a section *inside* a column in a panel because it needs separating. Use a
+  rule. Within a column a panel must earn itself, and exactly one thing does. The three
+  columns themselves are the one sanctioned exception — see The Window Exception.
 - **Don't** add a shadow. The count is zero and should stay zero.
+- **Don't** add a second gradient. The count is one — today's border — and should stay one.
+- **Don't** use a Google `colorId` as it arrives, or let a projected hue become a fill, a
+  text colour or a status mark. See The Foreign Hue Rule.
+- **Don't** let the productivity figure acquire a colour, a target line, a best-week
+  marker, or a week-over-week delta. It is graphite on paper — a record, not a scoreboard.
 - **Don't** use `font-medium`, or any weight other than 400 and 600.
 - **Don't** use Tailwind's default type scale or an arbitrary `text-[Npx]`.
 - **Don't** add a second accent or a free hex colour picker. Pillar hues are editable only
