@@ -100,12 +100,22 @@ export async function disconnect(db: Client): Promise<void> {
   await db.execute("DELETE FROM google_oauth_tokens WHERE id=1");
 }
 
-async function validAccessToken(db: Client): Promise<string> {
+/**
+ * A usable access token, refreshing when the stored one has expired.
+ *
+ * `force` skips the expiry check and refreshes regardless. It exists because the expiry
+ * timestamp is a PREDICTION, not a fact: Google can invalidate a token well before it runs
+ * out — re-consenting, a revoked grant, or a superseded session all do it. Trusting the
+ * timestamp alone meant a token that Google had already rejected was handed out again on
+ * every request, forever, and since each reconnect wrote a fresh one-hour expiry,
+ * reconnecting could not clear it either. See the 401 retry in api().
+ */
+async function validAccessToken(db: Client, force = false): Promise<string> {
   const r = await db.execute("SELECT access_token, refresh_token, expiry FROM google_oauth_tokens WHERE id=1");
   if (!r.rows.length) throw new Error("not_connected");
   const row = r.rows[0] as Record<string, unknown>;
   const expiry = Number(row.expiry);
-  if (Date.now() < expiry - 60_000) return String(row.access_token);
+  if (!force && Date.now() < expiry - 60_000) return String(row.access_token);
 
   const refresh = row.refresh_token == null ? null : String(row.refresh_token);
   if (!refresh) throw new Error("not_connected"); // expired, no refresh token → reconnect
@@ -136,11 +146,28 @@ async function validAccessToken(db: Client): Promise<string> {
 }
 
 async function api(db: Client, path: string, init?: RequestInit) {
-  const token = await validAccessToken(db);
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init?.headers || {}) },
-  });
+  const call = async (token: string) =>
+    fetch(`${API}${path}`, {
+      ...init,
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init?.headers || {}) },
+    });
+
+  let res = await call(await validAccessToken(db));
+
+  // ONE retry on 401, with a forced refresh.
+  //
+  // The stored expiry is a prediction, not a fact — Google invalidates tokens early when a
+  // grant is re-consented or superseded, and the app has no way to be told. Without this
+  // retry a single dead-but-unexpired token bricks the integration permanently: every
+  // request presents it, every request 401s, and reconnecting only writes a fresh expiry
+  // for an equally dead token. That is exactly what happened on 2026-08-06.
+  //
+  // Only once, and only on 401: a 403 is a scope or quota problem that refreshing cannot
+  // fix, and retrying it would just double the failed calls.
+  if (res.status === 401) {
+    res = await call(await validAccessToken(db, true));
+  }
+
   if (!res.ok) {
     const body = await res.text();
     const err = new Error(`calendar api ${res.status}: ${body.slice(0, 200)}`) as Error & { status?: number };
