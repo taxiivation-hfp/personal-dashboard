@@ -198,16 +198,21 @@ export default function JournalCanvas({
         </div>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={up}
-        // touch-none stops the browser scrolling the page instead of drawing on a tablet.
-        className="min-h-0 w-full flex-1 touch-none rounded-2xl border border-[var(--color-line)]"
-        style={{ background: "#fdfbf6", cursor: "crosshair" }}
-      />
+      {/* A4 PORTRAIT, 1:1.414. The page used to be whatever shape the dialog happened to
+          be, which meant a saved page had no consistent proportions. Letterboxed inside
+          the dialog so the shape is the paper's, not the window's. */}
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <canvas
+          ref={canvasRef}
+          onPointerDown={down}
+          onPointerMove={move}
+          onPointerUp={up}
+          onPointerCancel={up}
+          // touch-none stops the browser scrolling the page instead of drawing on a tablet.
+          className="max-h-full max-w-full touch-none rounded-2xl border border-[var(--color-line)]"
+          style={{ aspectRatio: "1 / 1.4142", height: "100%", background: "#fdfbf6", cursor: "crosshair" }}
+        />
+      </div>
 
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-[var(--color-muted)]">

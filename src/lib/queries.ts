@@ -76,7 +76,13 @@ export type SkillView = {
   staleDays: number | null;
 };
 
-export type JournalView = { id: number };
+export type JournalView = {
+  id: number;
+  /** 'drawing' | 'text'. The discriminator everywhere — never test image for emptiness. */
+  kind: string;
+  /** First line of a text page, for the thumbnail. null for a drawing. */
+  preview: string | null;
+};
 
 export type DayView = {
   date: string;
@@ -211,7 +217,10 @@ export async function getDayView(
     habitTallyFor(date, habits.length, habits.filter((h) => h.done).length, cfg)
   );
 
-  const journalRes = await db.execute({ sql: "SELECT id FROM journal_entries WHERE date=? ORDER BY id", args: [date] });
+  const journalRes = await db.execute({
+    sql: "SELECT id, kind, substr(COALESCE(body,''),1,140) AS preview FROM journal_entries WHERE date=? ORDER BY id",
+    args: [date],
+  });
   const cal = await db.execute({ sql: "SELECT calories FROM health_logs WHERE date=?", args: [date] });
   const { count } = await getStreak(db, date);
 
@@ -222,7 +231,11 @@ export async function getDayView(
     adherence,
     streak: count,
     habits,
-    journal: journalRes.rows.map((j) => ({ id: num(j.id) })),
+    journal: journalRes.rows.map((j) => ({
+      id: num(j.id),
+      kind: String(j.kind ?? "drawing"),
+      preview: j.kind === "text" ? String(j.preview ?? "") : null,
+    })),
     calories: cal.rows[0]?.calories == null ? null : num(cal.rows[0].calories),
     pillars,
   };

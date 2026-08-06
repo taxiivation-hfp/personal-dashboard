@@ -8,8 +8,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const id = Number((await ctx.params).id);
     if (!Number.isInteger(id) || id <= 0) return new Response("bad id", { status: 400 });
     const db = await getDb();
-    const r = await db.execute({ sql: "SELECT image FROM journal_entries WHERE id=?", args: [id] });
+    const r = await db.execute({ sql: "SELECT kind, image FROM journal_entries WHERE id=?", args: [id] });
     if (!r.rows.length) return new Response("not found", { status: 404 });
+    // A text page has no image. 404 rather than an empty data URL, so a stray <img>
+    // fails visibly instead of rendering a broken graphic.
+    if (String(r.rows[0].kind) === "text") return new Response("not an image", { status: 404 });
 
     const dataUrl = String(r.rows[0].image);
     const m = /^data:(image\/[a-z]+);base64,(.+)$/.exec(dataUrl);

@@ -149,13 +149,29 @@ export async function deleteHabit(db: Client, id: number): Promise<void> {
 /** Save a handwritten page and tick the Journal non-negotiable, atomically. */
 export async function saveJournalEntry(
   db: Client,
-  entry: { date: string; image: string; width?: number | null; height?: number | null }
+  entry: {
+    date: string;
+    /** 'drawing' stores an image; 'text' stores words and image=''. Never test emptiness
+     *  to tell them apart — `kind` is the discriminator. */
+    kind?: "drawing" | "text";
+    image: string;
+    body?: string | null;
+    width?: number | null;
+    height?: number | null;
+  }
 ): Promise<number> {
   const tx = await db.transaction("write");
   try {
     const r = await tx.execute({
-      sql: "INSERT INTO journal_entries (date,image,width,height) VALUES (?,?,?,?)",
-      args: [entry.date, entry.image, entry.width ?? null, entry.height ?? null],
+      sql: "INSERT INTO journal_entries (date,kind,image,body,width,height) VALUES (?,?,?,?,?,?)",
+      args: [
+        entry.date,
+        entry.kind ?? "drawing",
+        entry.image,
+        entry.body ?? null,
+        entry.width ?? null,
+        entry.height ?? null,
+      ],
     });
     // Looked up by system_key, not by name — the owner can rename their habits.
     const h = await tx.execute("SELECT id FROM habits WHERE system_key='journal' AND active=1");
