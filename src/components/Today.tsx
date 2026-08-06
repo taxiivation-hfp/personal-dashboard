@@ -9,6 +9,7 @@ import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
 import PillarSections from "./PillarSections";
 import Ring from "./PillarRing";
+import { PhoneTabBar, PhoneSwipe, type PhoneTab } from "./PhoneTabs";
 import { prettyDate } from "@/lib/dates";
 import type { DayView, GoalView, SkillView } from "@/lib/queries";
 import type { PillarRingView, WorkoutKind } from "@/lib/rings";
@@ -40,6 +41,9 @@ export default function Today({
   const [skills, setSkills] = useState<SkillView[]>(initialSkills);
   const [rings, setRings] = useState<PillarRingView[] | null>(null);
   const [workoutsToday, setWorkoutsToday] = useState<WorkoutKind[]>([]);
+  // Phone only: which of the three panes is showing. Opens on the day's work, and a
+  // reload returns there rather than wherever you last wandered.
+  const [tab, setTab] = useState<PhoneTab>("today");
 
   // Centred on today: past days to the left, upcoming to the right.
   const loadStrip = useCallback(() => {
@@ -255,57 +259,59 @@ export default function Today({
     </div>
   );
 
-  return (
-    <div className="mx-auto w-full max-w-[92rem] px-6 pb-24 pt-10 sm:px-8">
-      <header className="flex items-baseline justify-between gap-4">
-        <p className="text-[13px] uppercase tracking-[0.16em] text-[var(--color-muted)]">
-          {prettyDate(data.date)}
-        </p>
-        {/* Phone only. The grid stacks middle → left → right, so the right column sits
-            below the day's work AND the 9-day calendar — pillar rings there alone would
-            be buried. On desktop the full sections are visible, so this is hidden and the
-            old text chips are gone entirely. */}
-        <div className="flex gap-2.5 lg:hidden">
-          {(rings ?? []).map((r) => (
-            <Ring key={r.pillar} fill={r.fill} size={18} stroke={2.5} tone={r.pillar} />
-          ))}
-        </div>
-      </header>
+  const pillarPane = (
+    <PillarSections
+      goals={goals}
+      skills={skills}
+      rings={rings}
+      workoutsToday={workoutsToday}
+      onSubgoal={(id, done) =>
+        mutateGoals(`/api/subgoals/${id}`, { method: "PATCH", body: JSON.stringify({ done }) })
+      }
+      onLogTime={(skillId, minutes) =>
+        mutateSkills(`/api/skills/${skillId}/time`, {
+          method: "POST",
+          body: JSON.stringify({ minutes, date: data.date }),
+        })
+      }
+      onUndoTime={(skillId) =>
+        mutateSkills(`/api/skills/${skillId}/time?date=${data.date}`, { method: "DELETE" })
+      }
+      onToggleWorkout={toggleWorkout}
+    />
+  );
 
-      {/* Source order is middle → left → right, which IS the stacked mobile order, so
-          the phone needs no reordering and the day's work leads the document. Desktop
-          only moves the columns spatially. */}
-      {/* Per-column scrolling turned out to be two utility classes rather than a
-          layout rewrite, so it's in: each column bounds its own height below the
-          header and scrolls independently. Trivially removable — delete `colScroll`
-          from the three wrappers and the columns go back to one page scroll. */}
-      <div className="mt-8 flex flex-col gap-14 lg:grid lg:grid-cols-[minmax(15rem,1fr)_minmax(26rem,1.9fr)_minmax(16rem,1.15fr)] lg:items-start lg:gap-10">
-        <div className={`lg:order-2 ${colScroll}`}>{middle}</div>
-        <div className={`lg:order-1 ${colScroll}`}>
-          <CalendarColumn date={data.date} />
-        </div>
-        <div className={`lg:order-3 ${colScroll}`}>
-          <PillarSections
-            goals={goals}
-            skills={skills}
-            rings={rings}
-            workoutsToday={workoutsToday}
-            onSubgoal={(id, done) =>
-              mutateGoals(`/api/subgoals/${id}`, { method: "PATCH", body: JSON.stringify({ done }) })
-            }
-            onLogTime={(skillId, minutes) =>
-              mutateSkills(`/api/skills/${skillId}/time`, {
-                method: "POST",
-                body: JSON.stringify({ minutes, date: data.date }),
-              })
-            }
-            onUndoTime={(skillId) =>
-              mutateSkills(`/api/skills/${skillId}/time?date=${data.date}`, { method: "DELETE" })
-            }
-            onToggleWorkout={toggleWorkout}
-          />
+  // Below `lg` only ONE pane is mounted, so the phone never pays to render the other two.
+  // Above it every pane is shown and the tab is ignored entirely.
+  const pane = (t: PhoneTab, node: React.ReactNode) =>
+    tab === t ? node : <div className="hidden lg:block">{node}</div>;
+
+  return (
+    <PhoneSwipe tab={tab} onTab={setTab}>
+      <div className="mx-auto w-full max-w-[92rem] px-6 pb-28 pt-10 sm:px-8 lg:pb-24">
+        <header className="flex items-baseline justify-between gap-4">
+          <p className="text-[13px] uppercase tracking-[0.16em] text-[var(--color-muted)]">
+            {prettyDate(data.date)}
+          </p>
+        </header>
+
+        {/* Source order is middle → left → right, which IS the stacked mobile order, so
+            the phone needs no reordering and the day's work leads the document. Desktop
+            only moves the columns spatially. */}
+        {/* Per-column scrolling turned out to be two utility classes rather than a
+            layout rewrite, so it's in: each column bounds its own height below the
+            header and scrolls independently. Trivially removable — delete `colScroll`
+            from the three wrappers and the columns go back to one page scroll. */}
+        <div className="mt-8 flex flex-col gap-14 lg:grid lg:grid-cols-[minmax(15rem,1fr)_minmax(26rem,1.9fr)_minmax(16rem,1.15fr)] lg:items-start lg:gap-10">
+          <div className={`lg:order-2 ${colScroll}`}>{pane("today", middle)}</div>
+          <div className={`lg:order-1 ${colScroll}`}>
+            {pane("calendar", <CalendarColumn date={data.date} />)}
+          </div>
+          <div className={`lg:order-3 ${colScroll}`}>{pane("pillars", pillarPane)}</div>
         </div>
       </div>
-    </div>
+
+      <PhoneTabBar tab={tab} onTab={setTab} />
+    </PhoneSwipe>
   );
 }
