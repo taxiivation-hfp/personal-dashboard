@@ -182,6 +182,22 @@ b,
   line-height: 0.92;
 }
 
+/* DATA MOTION — a value travelling to a new position: a strip bar, a progress bar, a ring
+ * arc. Always `transform` (or stroke-dasharray on the rings), never a layout property.
+ *
+ * Under reduced motion the value still changes, it just arrives rather than travels. This
+ * is a class rather than a blanket `* { transition-duration: 0.01ms }` because that would
+ * also flatten the dialog's `allow-discrete` transitions and make modals pop. */
+.motion-data {
+  transition: transform var(--dur-data) var(--ease-out);
+}
+
+/* The same contract at UI speed: something moving across the screen in response to a tap,
+ * rather than a datum settling on a new value. */
+.motion-slide {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }
@@ -297,6 +313,13 @@ dialog[open]::backdrop {
   dialog,
   dialog[open] {
     transform: none;
+  }
+
+  /* The bar, arc or indicator lands on its new position immediately. The value is the
+   * information; the travel was only ever a nicety. */
+  .motion-data,
+  .motion-slide {
+    transition: none;
   }
 }
 

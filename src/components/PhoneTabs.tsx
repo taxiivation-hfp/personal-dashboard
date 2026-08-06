@@ -65,16 +65,22 @@ export function PhoneTabBar({
         })}
         {/* One indicator that SLIDES between tabs rather than three that blink. The
             movement is the thing that says "you moved sideways", which is exactly what
-            the swipe did. */}
+            the swipe did.
+            This used to animate `left`, a layout property, which forces a style+layout
+            pass on every frame of the one gesture that has to feel instant. The outer
+            span is one tab wide and carries the transform; translateX by whole multiples
+            of its own width lands it exactly on each tab with no arithmetic. The inner
+            span is the 24px rule, centred by flex. */}
         <span
           aria-hidden
-          className="absolute bottom-1.5 h-[2px] w-6 rounded-full"
+          className="motion-slide pointer-events-none absolute bottom-1.5 left-0 flex justify-center"
           style={{
-            background: "var(--color-accent)",
-            left: `calc(${(ORDER.indexOf(tab) + 0.5) * (100 / ORDER.length)}% - 0.75rem)`,
-            transition: "left var(--dur-fast) var(--ease-out)",
+            width: `${100 / ORDER.length}%`,
+            transform: `translateX(${ORDER.indexOf(tab) * 100}%)`,
           }}
-        />
+        >
+          <span className="h-[2px] w-6 rounded-full" style={{ background: "var(--color-accent)" }} />
+        </span>
       </div>
     </nav>
   );

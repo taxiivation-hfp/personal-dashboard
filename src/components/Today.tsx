@@ -180,11 +180,22 @@ export default function Today({
               >
                 {d.pct != null && (
                   <div
-                    className="w-full rounded-md"
+                    className="motion-data h-full w-full rounded-md"
                     style={{
-                      transition: "height var(--dur-data) var(--ease-out)",
-                      height: `${Math.max(d.pct, 3)}%`,
-                      marginTop: `${100 - Math.max(d.pct, 3)}%`,
+                      // SLID, not grown. The bar is always full height and translates down
+                      // so the track clips all but the top `pct`. translateY is composited
+                      // and skips layout entirely.
+                      //
+                      // It replaced `height` + `marginTop`, which was wrong twice over:
+                      // both are layout properties, and only `height` was in the transition
+                      // list — so marginTop snapped while height eased, and the bar's top
+                      // edge teleported on every change. On the element beside the hero
+                      // number, several times a day.
+                      //
+                      // translateY over scaleY because scaling squashes the corner radius
+                      // vertically; sliding keeps the top corners perfectly round at every
+                      // value, which is the only part of the bar the track doesn't clip.
+                      transform: `translateY(${100 - Math.max(d.pct, 3)}%)`,
                       // Translucent, so a bar sits IN its track rather than on top of it
                       // and the day's shape reads as depth. Today stays fully opaque.
                       background: "var(--color-accent)",
