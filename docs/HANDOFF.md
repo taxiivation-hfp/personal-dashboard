@@ -1,6 +1,6 @@
 # Handoff — Personal Dashboard
 
-**Date:** 2026-08-05 · **Status:** MVP built locally, **visually verified in the browser**, not yet deployed. Goals/skills/rings work complete; the app is now a git repository.
+**Date:** 2026-08-06 · **Status:** MVP built locally, **visually verified in the browser**, not yet deployed. Goals/skills/rings complete, plus a second round: adherence v2, workout types, journal text, phone tabs and editable pillar colours. The app is a git repository.
 
 Read `CLAUDE.md` first — it is the constitution. This document is the *state of the build*, not the product philosophy. The one-line version: the app measures **adherence, not accomplishment**; output is deliberately never scored; honest logging outranks every other design goal.
 
@@ -28,6 +28,12 @@ Verified: `tsc --noEmit` exit 0, `next build` exit 0. Behavioural claims about t
 | **Calories** | Built. One manual daily total. No food database, no barcode, no API. |
 | **Coach note** | Built. One short observation a day on Haiku, prompted hard against praise *and* scolding — praise for good numbers is what makes bad numbers feel shameful. |
 | **Auth** | Built. HMAC session cookie, Edge-safe, escalating lockout (1m → 2m → 4m, capped at 1h) plus a 400ms per-failure delay. |
+| **Adherence v2** | Built. Non-negotiables count toward the rate, weighted equally with blocks, due at an evening cutoff (`app_meta['habit_cutoff']`, default 21:00). `adherence_habits_since` keeps history blocks-only so past days are not rewritten. |
+| **Workout types** | Built. Strength 8/14 · Cardio 2/14 · Misc **tracked but not scored**. `gym_sessions` is unique on (date, kind). Physical is a weighted mean, 0.8/0.2. |
+| **Overdrive** | Built, **visual only** — a second translucent lap past the threshold that never enters the pillar mean. A test asserts no amount of strength fills Physical alone. |
+| **Journal text** | Built. `kind` + `body`; a text page stores `image=''`. Both kinds share one ruled A4 (1:1.414) sheet. Deleting asks first. |
+| **Phone tabs** | Built. Three tabs below `lg` with a bottom bar and swipe, opening on the day's work. Only the active pane mounts. |
+| **Pillar colours** | Built. `/colours`, curated palette only; the engine refuses anything outside it. Applies to rings, goals, skills, workout chips and non-negotiables. |
 | **Pillar rings** | Built. Three sufficiency rings over a rolling 14 days, capped — see CLAUDE.md. Adherence is drawn as a large amber ring with the number inside; pillar rings are small, hued and thin, with the real count printed below. Physical carries gym (live) and steps (dashed ghost, no source). |
 | **Data migration** | Done and verified twice. Goals, habit history, gym sessions and Google tokens all preserved; row counts matched after each. Backups at `data/backups/dashboard.db.20260803-140723.bak` and `…20260805-133149.bak`. |
 | **Tests** | `npm test` — `node --test` on Node 24, zero dependencies. 30 tests over `rings.ts`, `goals.ts`, `dates.ts`. |
@@ -45,6 +51,7 @@ src/app/page.tsx              Today — the only real screen. Server-fetches day
 src/app/layout.tsx            Root shell, fonts.
 src/app/habits/page.tsx       /habits — edit non-negotiables.
 src/app/goals/page.tsx        /goals — edit goals, subgoals and weight overrides.
+src/app/colours/page.tsx      /colours — pick pillar hues from the curated palette.
 src/app/login/page.tsx        Passcode gate.
 src/app/globals.css           The whole theme. Light beige tokens, two font weights, contrast verified.
 src/proxy.ts                  Session check on every route (Next 16's renamed middleware).
@@ -58,7 +65,11 @@ src/components/Today.tsx            The three-column shell + middle column. Hero
 src/components/CalendarColumn.tsx   LEFT column. 9 days centred on today, per-day adherence, block spans.
 src/components/PillarSections.tsx   RIGHT column. Three pillar sections, each ring-led, with that
                                     pillar's goals and skills beneath. Replaced GoalsSkills.tsx.
-src/components/PillarRing.tsx       One SVG ring, both species. Guards fill===null before any arc maths.
+src/components/PillarRing.tsx      One SVG ring, both species. Guards fill===null before any arc
+                                    maths. Draws overdrive as a second translucent lap.
+src/components/PhoneTabs.tsx       Bottom tab bar + swipe. Renders nothing above `lg`.
+src/components/JournalText.tsx     Typed page, sharing the canvas's ruled geometry.
+src/components/ColourEditor.tsx    Used by /colours only.
 src/components/GoalEditor.tsx       Used by /goals only.
 src/components/BlockList.tsx        The three-state marker. The most important component in the app.
 src/components/CoachNote.tsx        The one daily observation.
@@ -72,8 +83,11 @@ src/components/HabitEditor.tsx      Used by /habits only.
 
 ```
 src/lib/adherence.ts     The committed maths. buildBlocks + adherenceFor. Pure, testable, no DB.
-src/lib/rings.ts         Ring registry + capped fill maths. ZERO IMPORTS so `node --test` runs it.
-                         Owns PillarKey; queries.ts re-exports it. 15 tests.
+src/lib/rings.ts         Ring registry, weighted pillar means, capped fill + overdrive, and
+                         the curated pillar palette. ZERO IMPORTS so `node --test` runs it.
+                         Owns PillarKey and WorkoutKind; queries.ts re-exports PillarKey.
+src/lib/adherence.ts     Also owns habitsDueOn + the habit tally. Imports ./dates.ts with an
+                         EXPLICIT extension so node --test can resolve it — keep it that way.
 src/lib/goals.ts         Subgoal weight derivation. Zero imports. 8 tests.
 src/lib/engine.ts        All writes. markBlock, setHabit, habit CRUD, journal, calories, skill time, streak.
 src/lib/queries.ts       All reads. getDayView, habitsForDate, listGoals, listSkills.
@@ -95,7 +109,8 @@ src/lib/db/schema.sql    Schema. (Still declares some dead tables — see §3.)
 /api/goals, /api/goals/[id]        Goal CRUD.        LIVE — no longer dead.
 /api/subgoals, /api/subgoals/[id]  Subgoal CRUD.
 /api/skills/[id]/time    Log time (POST) / undo (DELETE).
-/api/gym                 Toggle today's gym day.
+/api/gym                 Toggle a workout kind for a date.
+/api/pillars             Read pillars / set a pillar colour.
 /api/journal             List + create.    /api/journal/[id], /api/journal/[id]/image
 /api/calories            Set daily total.
 /api/coach/note          Generate the daily observation.
@@ -176,6 +191,8 @@ Physical ring.
 
 ## 5. Known gaps
 
-- **Not verified on the phone.** Verified in a desktop browser and structurally at 390px width, but never on the actual iPhone.
+- **Not verified on the phone.** Verified in a desktop browser and structurally at 390px width, but never on the actual iPhone. The tab bar, swipe and safe-area padding in particular have only been reasoned about, not felt.
+- **Google Calendar is currently rejecting the token** (401 despite a present refresh token and an unexpired access token — most likely revoked, or a Testing-mode consent screen expiring it). Reconnect at `/api/google/connect`. The app now degrades instead of dying: a calendar auth failure renders the day without blocks rather than blanking the screen.
+- **Habit schedule is not versioned.** `active` and `days_mask` are read as they are now, so editing a habit reshapes adherence for days after `adherence_habits_since`. Accepted: the start stamp bounds it, and a history table for one user is not worth it.
 - **`cloudflared` is not installed** — needed for phone access over the tunnel. It's an executable download, so it needs your go-ahead.
 - **The coach is unproven.** The prompt is written correctly against the honest-logging rule, but it has never had enough drift data to produce a real pattern observation.

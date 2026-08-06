@@ -44,7 +44,21 @@ A calendar block is not done/not-done. It is exactly one of:
 - Reasons are stored so the coach can spot patterns over time.
 
 **Adherence rate is the hero stat**: today's adherence % is the single largest number
-on the screen, with a 7-day strip beneath it.
+on the screen, drawn as a large amber ring with a 7-day strip beneath it.
+
+**Non-negotiables count toward it too, weighted equally with blocks** — one item is one
+item. A habit has no end time, so it becomes due at an evening cutoff
+(`app_meta['habit_cutoff']`, default 21:00) rather than at midnight. Before the cutoff an
+UNTICKED habit is in neither numerator nor denominator; a TICKED one counts immediately,
+because ticking must visibly do something or tap-as-you-go is pointless until 9pm.
+
+The rate is therefore optimistic before the cutoff and settles — usually downward — when
+the rest join the denominator. The screen says how many are not yet due, so the movement
+is never a surprise.
+
+`app_meta['adherence_habits_since']` bounds this: days before it are computed blocks-only.
+Counting habits retroactively would have held untouched non-negotiables against days
+already lived under the old rule, which is a lie about the past.
 
 ## Non-negotiables
 
@@ -55,20 +69,38 @@ dependent (e.g. laundry on Sundays).
 Gym is deliberately **not** one of these. The owner trains "any 4 of 5 weekdays" — a
 frequency, which `days_mask` cannot express. On the checklist it would be engineered to
 sit unticked once a week, and an item you are designed to fail teaches distrust of the
-whole list. It is a ring metric with its own toggle instead.
+whole list. Workouts are logged separately, by kind: **Strength / Cardio / Misc**, one
+row per (date, kind), so a day can hold a lift and a run.
 
 ## Pillar rings — sufficiency, never score
 
 Three rings (Social / Physical / Portfolio) over a **rolling 14-day window**, defined in
 `src/lib/rings.ts`. Adherence remains the hero; rings are secondary context.
 
-**The core rule: a ring fills toward a threshold and CAPS.** It cannot be improved by
-doing more — 8 gym days and 20 render identically, and 15k steps fills the steps ring
-exactly as much as 7k. Because you cannot win by overdoing one pillar, the only board
-that looks good is a well-rounded one. That cap *is* the mechanism.
+**The core rule: a ring fills toward a threshold and CAPS.** Its *value* cannot be
+improved by doing more — 8 gym days and 20 both count as a full ring, and 15k steps fills
+the steps ring exactly as much as 7k. Because you cannot win by overdoing one pillar, the
+only board that looks good is a well-rounded one. That cap *is* the mechanism.
+
+Overdrive (below) draws past the threshold, so 20 days and 8 do not look identical — but
+they are worth identically much. The distinction is the whole design: what you see is the
+truth, what counts is the cap.
 
 - Thresholds are the owner's **minimums, not stretch goals**, and are configurable in the
   registry so retuning is a one-line change.
+- **A pillar may weight its metrics.** Physical is 0.8 Strength / 0.2 Cardio, so eight
+  strength days and no cardio reads 80% rather than 50% — the bulk of the intent was met,
+  and the empty cardio ring still shows what was skipped.
+- **Overdrive is VISUAL ONLY.** Past its threshold a metric ring draws a second
+  translucent lap, capped at 2x. It never enters the pillar mean, and that is
+  load-bearing rather than fussy: with Strength at 0.8, an uncapped fill of 1.25 would
+  give `0.8 x 1.25 + 0.2 x 0 = 100%`, so overdoing strength would exactly cancel skipping
+  cardio. The cap stays in the maths; the acknowledgement lives in the pixels. A test
+  asserts no amount of strength can fill Physical alone.
+- **Some things are tracked but NOT scored.** A metric with a live source and no
+  threshold (Misc — bouldering, calisthenic skills) shows a count, draws no ring, and is
+  excluded from the pillar mean. It is the "output is not scored" rule made literal: a
+  thing you log that is never a target. Do not give it a threshold.
 - **The real number is always printed beneath the ring** (`11 of 8 days`). The arc caps;
   the text never does. A cap must never hide the truth.
 - **`null` is not `0`.** A metric with no source is a dashed ghost and is excluded from
@@ -103,6 +135,11 @@ Its job is **pattern-spotting on drift**, using the stored reasons. For example:
 Light beige, premium, clean.
 
 - Warm beige page background, off-white cards, **muted amber as the single accent**.
+- **Pillar hues are owner-editable at `/colours`, from a CURATED palette only.** Every
+  value is checked against the beige page, so no choice can make the app unreadable, and
+  `engine.setPillarColor` refuses anything outside it. The accent, the ink, the surfaces
+  and the three block states are NOT editable — one accent is what keeps the page quiet,
+  and the block states deliberately avoid a severity ramp. Do not add a free hex picker.
 - Generous whitespace. One clear visual hierarchy. Restrained colour.
 - Big, clean number treatment for the adherence stat.
 - **Two font weights only.**
@@ -110,8 +147,11 @@ Light beige, premium, clean.
 
 ## In scope
 
-- Journal: stylus drawing saved as an **image only**, on a **lined page** template.
-  No transcription, no theme extraction, no vision.
+- Journal: a page is either a **stylus drawing saved as an image** or **typed text**, both
+  on the same ruled **A4 portrait (1:1.414)** sheet. `kind` is the discriminator
+  everywhere — a text entry stores `image = ''`, so never test emptiness to tell them
+  apart. No transcription in either direction, no theme extraction, no vision. Deleting a
+  page asks first.
 - Calories: a **single manual daily total**. No food database, no barcode, no API.
 - Render the calendar view (Google OAuth is already connected).
 
