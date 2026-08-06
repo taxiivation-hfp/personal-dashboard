@@ -21,7 +21,7 @@ type StripDay = { date: string; pct: number | null; isToday: boolean; isFuture: 
 // `scrollbar-gutter: stable` keeps a column from reflowing when its content grows past
 // the fold. On mobile these are inert — the page scrolls as one, as it should.
 const colScroll =
-  "lg:max-h-[calc(100dvh-9rem)] lg:overflow-y-auto lg:pr-2 lg:[scrollbar-gutter:stable]";
+  "lg:max-h-[calc(100dvh-8.5rem)] lg:overflow-y-auto lg:[scrollbar-gutter:stable]";
 
 export default function Today({
   initial,
@@ -135,52 +135,66 @@ export default function Today({
     Record<PillarKey, string | null>
   >;
 
+  /** The tick / fill for a non-negotiable, in its pillar's hue. Unassigned habits stay
+   *  amber. Extracted to a local so the two habit shapes below can't drift apart. */
+  const habitTone = (pillar: PillarKey | null | undefined) =>
+    pillar ? toneColor(pillar, colors[pillar]) : "var(--color-accent)";
+
   const middle = (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-11">
       <section>
-        {/* Large, amber, thick stroke, number INSIDE — deliberately unlike the small,
-            hued, thin pillar rings. Adherence is the hero, not one more quota to fill.
+        {/* THE HERO. A large amber ring with the figure inside, and the seven-day strip
+            beneath it — both fixed by CLAUDE.md, so the redesign works within them rather
+            than around them. The stroke is finer and the circle wider than before: a line
+            drawn around a number reads as a mark on a page, where a thick arc reads as a
+            gauge on a dashboard, and this app is emphatically not the latter.
             `a.pct == null` is passed straight through: Ring guards before any arithmetic,
             so a morning with nothing due draws a neutral track and "—", never a 0% ring. */}
-        <div className="flex flex-wrap items-center gap-x-7 gap-y-4">
-          <Ring fill={a.pct == null ? null : a.pct / 100} size={168} stroke={10} tone="accent">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
+          <Ring fill={a.pct == null ? null : a.pct / 100} size={176} stroke={8} tone="accent">
             <div className="flex items-end">
               <span className="stat-hero text-hero">{a.pct == null ? "—" : a.pct}</span>
               {a.pct != null && (
-                <span className="stat-hero pb-1.5 text-body text-[var(--color-muted)]">%</span>
+                <span className="stat-hero pb-2 text-body text-[var(--color-muted)]">%</span>
               )}
             </div>
           </Ring>
-          <p className="max-w-[22rem] text-body leading-relaxed text-[var(--color-muted)]">
+          <p className="max-w-[20rem] text-body text-[var(--color-muted)]">
             {a.pct == null
               ? "Nothing due yet today."
               : `adhered · ${a.adhered} of ${a.due} so far`}
-            {a.unmarked > 0 && <span className="text-[var(--color-ink)]"> · {a.unmarked} to mark</span>}
+            {a.unmarked > 0 && (
+              <span className="text-[var(--color-ink)]"> · {a.unmarked} to mark</span>
+            )}
             {/* Say what is NOT yet in the denominator. The rate moves at the cutoff when
                 these join it, and an unexplained drop at 9pm reads as a bug. */}
             {a.habitsPending > 0 && (
-              <span className="block text-small">
+              <span className="mt-1 block text-small">
                 {a.habitsPending} non-negotiable{a.habitsPending === 1 ? "" : "s"} not due yet
               </span>
             )}
           </p>
         </div>
 
-        <div className="mt-6 flex items-end gap-1.5">
-          {strip.map((d) => (
-            <div key={d.date} className="flex flex-1 flex-col items-center gap-1.5">
+        {/* The strip sits ON a baseline rule, the way a pencil chart sits on a ruled line,
+            with the weekday letters below it as its axis. The old version floated seven
+            fat rounded slabs in mid-air with no ground to read them against. */}
+        <div className="mt-9">
+          <div className="flex items-end gap-2">
+            {strip.map((d) => (
               <div
-                className="h-16 w-full overflow-hidden rounded-md"
+                key={d.date}
+                className="h-14 flex-1 overflow-hidden rounded-t-[3px]"
                 style={{
                   background: d.isToday ? "var(--color-accent-soft)" : "var(--color-panel-2)",
                   // Upcoming days are drawn but empty — they haven't happened, and an
                   // empty bar reads as "not yet" rather than as a zero.
-                  opacity: d.isFuture ? 0.4 : 1,
+                  opacity: d.isFuture ? 0.45 : 1,
                 }}
               >
                 {d.pct != null && (
                   <div
-                    className="motion-data h-full w-full rounded-md"
+                    className="motion-data h-full w-full rounded-t-[3px]"
                     style={{
                       // SLID, not grown. The bar is always full height and translates down
                       // so the track clips all but the top `pct`. translateY is composited
@@ -189,8 +203,7 @@ export default function Today({
                       // It replaced `height` + `marginTop`, which was wrong twice over:
                       // both are layout properties, and only `height` was in the transition
                       // list — so marginTop snapped while height eased, and the bar's top
-                      // edge teleported on every change. On the element beside the hero
-                      // number, several times a day.
+                      // edge teleported on every change.
                       //
                       // translateY over scaleY because scaling squashes the corner radius
                       // vertically; sliding keeps the top corners perfectly round at every
@@ -204,17 +217,26 @@ export default function Today({
                   />
                 )}
               </div>
+            ))}
+          </div>
+          <div className="h-px w-full bg-[var(--color-line-strong)]" />
+          <div className="mt-2 flex gap-2">
+            {strip.map((d) => (
               <span
-                className="text-micro"
+                key={d.date}
+                className="flex-1 text-center text-micro tabular-nums"
                 style={{ color: d.isToday ? "var(--color-ink)" : "var(--color-muted)" }}
               >
                 {new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", { weekday: "narrow" })}
               </span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+
+        {/* A count, deliberately undramatised — no flame, no badge, no "don't break it".
+            It is a fact about the record, not a thing you can lose. */}
         {data.streak > 0 && (
-          <p className="mt-4 text-small text-[var(--color-muted)]">
+          <p className="mt-5 text-small text-[var(--color-muted)]">
             {data.streak} day{data.streak === 1 ? "" : "s"} logged in a row
           </p>
         )}
@@ -223,14 +245,19 @@ export default function Today({
       <CoachNote date={data.date} />
 
       <section>
-        <h2 className="text-body font-semibold">Today&apos;s blocks</h2>
+        <div className="section-head">
+          <h2 className="text-small font-semibold">Today&apos;s blocks</h2>
+        </div>
         <div className="mt-4">
           {data.calendarConnected ? (
             <BlockList date={data.date} blocks={data.blocks} onChanged={refresh} />
           ) : (
-            <p className="text-body leading-relaxed text-[var(--color-muted)]">
+            <p className="max-w-[42ch] text-body text-[var(--color-muted)]">
               Google Calendar isn&apos;t connected, so there are no blocks to mark.{" "}
-              <a href="/api/google/connect" className="text-[var(--color-accent)] underline underline-offset-4">
+              <a
+                href="/api/google/connect"
+                className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
+              >
                 Connect it
               </a>
               .
@@ -240,43 +267,43 @@ export default function Today({
       </section>
 
       <section>
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-body font-semibold">Non-negotiables</h2>
+        <div className="section-head">
+          <h2 className="text-small font-semibold">Non-negotiables</h2>
           <Link
             href="/habits"
-            className="text-small text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+            className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
           >
             edit
           </Link>
         </div>
-        <ul className="mt-3 flex flex-col gap-0.5">
+        {/* Hairline-separated rows, not a stack of rounded cards. Ticking one of these is
+            the single most repeated act in the app; the row is the target, and the rule
+            below it is all the separation it needs. */}
+        <ul className="divide-y divide-[var(--color-line)]">
           {data.habits.map((h) =>
             // A NUMERIC non-negotiable — weight. Typing a number is the tick: the entry
             // exists or it does not, so adherence needs no special case. Clearing the
             // field clears the day, exactly like unticking.
             h.input === "number" ? (
               <li key={h.id}>
-                <div className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5">
+                <div className="flex w-full items-center gap-3.5 py-3">
                   <span
                     aria-hidden
-                    className="h-5 w-5 shrink-0 rounded-md border transition-colors"
+                    className="h-[18px] w-[18px] shrink-0 rounded-[5px] border transition-colors"
                     style={{
-                      borderColor: h.done
-                        ? h.pillar
-                          ? toneColor(h.pillar, colors[h.pillar])
-                          : "var(--color-accent)"
-                        : "var(--color-line-strong)",
-                      background: h.done
-                        ? h.pillar
-                          ? toneColor(h.pillar, colors[h.pillar])
-                          : "var(--color-accent)"
-                        : "transparent",
+                      borderColor: h.done ? habitTone(h.pillar) : "var(--color-line-strong)",
+                      background: h.done ? habitTone(h.pillar) : "transparent",
                     }}
                   />
-                  <label htmlFor={`h${h.id}`} className={`text-body font-serif ${h.done ? "text-[var(--color-muted)]" : ""}`}>
+                  <label
+                    htmlFor={`h${h.id}`}
+                    className={`font-serif text-body ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                  >
                     {h.name}
                   </label>
-                  <span className="ml-auto flex items-center gap-1.5">
+                  {/* A value written on a line, not typed into a chip. The underline is
+                      the field; it darkens on focus rather than growing a box. */}
+                  <span className="ml-auto flex items-baseline gap-1.5">
                     <input
                       id={`h${h.id}`}
                       type="number"
@@ -287,52 +314,60 @@ export default function Today({
                       defaultValue={h.value ?? ""}
                       onBlur={(e) => setHabitNumber(h.id, e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                      className="w-[4.5rem] rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1 text-right text-small tabular-nums outline-none"
+                      className="w-[4rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-body tabular-nums outline-none transition-colors focus:border-[var(--color-accent)]"
                     />
-                    {h.unit && <span className="text-small text-[var(--color-muted)]">{h.unit}</span>}
+                    {h.unit && (
+                      <span className="text-small text-[var(--color-muted)]">{h.unit}</span>
+                    )}
                   </span>
                 </div>
               </li>
             ) : (
-            <li key={h.id}>
-              <button
-                onClick={() => toggleHabit(h.id, !h.done)}
-                aria-pressed={h.done}
-                className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-panel)]"
-              >
-                <span
-                  aria-hidden
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors"
-                  style={{
-                    // Its pillar's hue, so the checklist reads as categorised rather than
-                    // as one undifferentiated list. Unassigned habits stay amber.
-                    borderColor: h.done
-                      ? h.pillar
-                        ? toneColor(h.pillar, colors[h.pillar])
-                        : "var(--color-accent)"
-                      : "var(--color-line-strong)",
-                    background: h.done
-                      ? h.pillar
-                        ? toneColor(h.pillar, colors[h.pillar])
-                        : "var(--color-accent)"
-                      : "transparent",
-                  }}
+              <li key={h.id}>
+                <button
+                  onClick={() => toggleHabit(h.id, !h.done)}
+                  aria-pressed={h.done}
+                  className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3.5 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel)]"
                 >
-                  {h.done && (
-                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                      <path d="M2.5 6.5l2.2 2.2L9.5 3.8" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </span>
-                <span className={`text-body font-serif ${h.done ? "text-[var(--color-muted)]" : ""}`}>{h.name}</span>
-              </button>
-            </li>
+                  <span
+                    aria-hidden
+                    className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors"
+                    style={{
+                      // Its pillar's hue, so the checklist reads as categorised rather than
+                      // as one undifferentiated list. The tick and the muted label carry
+                      // done-ness too, so nothing here rides on colour alone.
+                      borderColor: h.done ? habitTone(h.pillar) : "var(--color-line-strong)",
+                      background: h.done ? habitTone(h.pillar) : "transparent",
+                    }}
+                  >
+                    {h.done && (
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                        <path
+                          d="M2.5 6.5l2.2 2.2L9.5 3.8"
+                          stroke="#fff"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+                  </span>
+                  <span
+                    className={`font-serif text-body ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                  >
+                    {h.name}
+                  </span>
+                </button>
+              </li>
             )
           )}
           {data.habits.length === 0 && (
-            <li className="px-2 py-2 text-body text-[var(--color-muted)]">
+            <li className="py-3 text-body text-[var(--color-muted)]">
               Nothing set for today.{" "}
-              <Link href="/habits" className="text-[var(--color-accent)] underline underline-offset-4">
+              <Link
+                href="/habits"
+                className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
+              >
                 Add some
               </Link>
               .
@@ -342,7 +377,9 @@ export default function Today({
       </section>
 
       <section>
-        <h2 className="text-body font-semibold">Journal</h2>
+        <div className="section-head">
+          <h2 className="text-small font-semibold">Journal</h2>
+        </div>
         <div className="mt-4">
           <JournalPanel date={data.date} entries={data.journal} onChanged={refresh} />
         </div>
@@ -386,14 +423,16 @@ export default function Today({
 
   return (
     <PhoneSwipe tab={tab} onTab={setTab}>
-      <div className="mx-auto w-full max-w-[92rem] px-6 pb-28 pt-10 sm:px-8 lg:pb-24">
-        <header className="flex items-baseline justify-between gap-4">
-          <p className="text-small uppercase tracking-[0.16em] text-[var(--color-muted)]">
-            {prettyDate(data.date)}
-          </p>
+      <div className="mx-auto w-full max-w-[92rem] px-6 pb-28 pt-9 sm:px-8 lg:pb-14">
+        {/* The masthead. The date used to be set in small tracked uppercase — the single
+            most over-used AI scaffold there is, and it made the one piece of orienting
+            information on the screen the hardest thing on it to read. It is now just the
+            date, in ink, at the size everything else is. */}
+        <header className="flex items-baseline justify-between gap-4 border-b border-[var(--color-line)] pb-4">
+          <h1 className="font-serif text-body">{prettyDate(data.date)}</h1>
           <Link
             href="/colours"
-            className="text-micro text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+            className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
           >
             colours
           </Link>
@@ -401,17 +440,21 @@ export default function Today({
 
         {/* Source order is middle → left → right, which IS the stacked mobile order, so
             the phone needs no reordering and the day's work leads the document. Desktop
-            only moves the columns spatially. */}
-        {/* Per-column scrolling turned out to be two utility classes rather than a
-            layout rewrite, so it's in: each column bounds its own height below the
-            header and scrolls independently. Trivially removable — delete `colScroll`
-            from the three wrappers and the columns go back to one page scroll. */}
-        <div className="mt-8 flex flex-col gap-14 lg:grid lg:grid-cols-[minmax(15rem,1fr)_minmax(26rem,1.9fr)_minmax(16rem,1.15fr)] lg:items-start lg:gap-10">
-          <div className={`lg:order-2 ${colScroll}`}>{pane("today", middle)}</div>
-          <div className={`lg:order-1 ${colScroll}`}>
+            only moves the columns spatially.
+            The columns are separated by rules rather than by gutters alone — the spread of
+            a notebook, not three floating panels. `border-l` goes on the two columns that
+            are visually second and third, which is order-2 and order-3 regardless of where
+            they sit in the DOM. */}
+        <div className="mt-9 flex flex-col gap-14 lg:grid lg:grid-cols-[minmax(15rem,1fr)_minmax(26rem,1.9fr)_minmax(16rem,1.15fr)] lg:items-start lg:gap-0">
+          <div className={`lg:order-2 lg:border-l lg:border-[var(--color-line)] lg:px-10 ${colScroll}`}>
+            {pane("today", middle)}
+          </div>
+          <div className={`lg:order-1 lg:pr-10 ${colScroll}`}>
             {pane("calendar", <CalendarColumn date={data.date} />)}
           </div>
-          <div className={`lg:order-3 ${colScroll}`}>{pane("pillars", pillarPane)}</div>
+          <div className={`lg:order-3 lg:border-l lg:border-[var(--color-line)] lg:pl-10 ${colScroll}`}>
+            {pane("pillars", pillarPane)}
+          </div>
         </div>
       </div>
 

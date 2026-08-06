@@ -182,6 +182,41 @@ b,
   line-height: 0.92;
 }
 
+/* THE RULED PAGE.
+ *
+ * The redesign's one structural idea, and it is the journal's own: this app is a page you
+ * mark, so the furniture is rules and margins rather than cards. The old screen put every
+ * section in a rounded off-white panel, which made a dashboard out of a notebook and made
+ * eleven identical rectangles out of eleven different kinds of thing.
+ *
+ * `.section-head` is a heading sitting ON its rule — the whole vocabulary in one class, so
+ * ten components can't each invent their own version of it. `.page-margin` is the vertical
+ * hairline that meta (times, counts) sits left of and the owner's words sit right of; it
+ * only appears where real marginalia exists, never as decoration.
+ *
+ * A panel is now the exception and has to earn itself: something genuinely raised off the
+ * page, like the coach's one utterance a day. */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
+/* The margin column width. One token so the blocks list, the calendar and the day's rows
+ * all hang off the same rule rather than three that nearly agree. */
+:root {
+  --page-margin: 4.25rem;
+}
+
+.page-margin {
+  display: grid;
+  grid-template-columns: var(--page-margin) 1fr;
+  column-gap: 0.875rem;
+}
+
 /* DATA MOTION — a value travelling to a new position: a strip bar, a progress bar, a ring
  * arc. Always `transform` (or stroke-dasharray on the rings), never a layout property.
  *
