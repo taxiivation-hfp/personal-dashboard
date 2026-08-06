@@ -1,7 +1,11 @@
 import { getDb } from "@/lib/db/client";
 import { getCalendarRange } from "@/lib/google";
 import { adherenceFor, buildBlocks, type BlockState } from "@/lib/adherence";
-import { getAdherenceConfig, habitTallyFor } from "@/lib/queries";
+import {
+  getAdherenceConfig,
+  habitTallyFor,
+  dayTitlesBetween,
+} from "@/lib/queries";
 import { weekdayBit } from "@/lib/engine";
 import { addDays, isISODate, todayISO } from "@/lib/dates";
 import { scoreDay } from "@/lib/productivity";
@@ -19,7 +23,10 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
-    const days = Math.min(Math.max(Number(url.searchParams.get("days") ?? 7), 1), 62);
+    const days = Math.min(
+      Math.max(Number(url.searchParams.get("days") ?? 7), 1),
+      62,
+    );
 
     // `center` puts a given day in the MIDDLE of the window — past to its left,
     // upcoming to its right. `to` keeps the old end-anchored behaviour for the
@@ -45,7 +52,10 @@ export async function GET(req: Request) {
       sql: "SELECT date,event_id,state,reason FROM block_marks WHERE date BETWEEN ? AND ?",
       args: [start, end],
     });
-    const marksByDate = new Map<string, Map<string, { state: BlockState; reason: string | null }>>();
+    const marksByDate = new Map<
+      string,
+      Map<string, { state: BlockState; reason: string | null }>
+    >();
     for (const r of markRows.rows) {
       const d = String(r.date);
       if (!marksByDate.has(d)) marksByDate.set(d, new Map());
@@ -59,7 +69,9 @@ export async function GET(req: Request) {
     // column need the same tally the Today screen uses. Habit config is read as it is
     // NOW — the schedule is not versioned, which the start stamp bounds the effect of.
     const cfg = await getAdherenceConfig(db);
-    const habitRows = await db.execute("SELECT id, days_mask FROM habits WHERE active=1");
+    const habitRows = await db.execute(
+      "SELECT id, days_mask FROM habits WHERE active=1",
+    );
     const activeHabits = habitRows.rows.map((r) => ({
       id: Number(r.id),
       mask: Number(r.days_mask),
@@ -86,18 +98,33 @@ export async function GET(req: Request) {
     const gymByDate = new Map<string, number>();
     for (const r of gymRows.rows) gymByDate.set(String(r.date), Number(r.n));
 
+    // What the owner intends each day to be. Carried on the strip so the days ahead can be
+    // named in advance, which is the whole point of an intention.
+    const titles = await dayTitlesBetween(db, start, end);
+
     const today = todayISO();
     const nowMs = Date.now();
     const out = [];
     for (let i = 0; i < days; i++) {
       const d = addDays(start, i);
-      const blocks = buildBlocks(d, byDate.get(d) ?? [], marksByDate.get(d) ?? new Map());
+      const blocks = buildBlocks(
+        d,
+        byDate.get(d) ?? [],
+        marksByDate.get(d) ?? new Map(),
+      );
 
       const bit = weekdayBit(d);
       const scheduled = activeHabits.filter((h) => (h.mask & bit) !== 0);
       const ticked = ticksByDate.get(d) ?? new Set<number>();
       const habitsDone = scheduled.filter((h) => ticked.has(h.id)).length;
-      const tally = habitTallyFor(d, scheduled.length, habitsDone, cfg, nowMs, today);
+      const tally = habitTallyFor(
+        d,
+        scheduled.length,
+        habitsDone,
+        cfg,
+        nowMs,
+        today,
+      );
 
       /**
        * The productivity score — hours SPENT, never results produced. See CLAUDE.md's
@@ -129,6 +156,7 @@ export async function GET(req: Request) {
         isFuture: d > today,
         ...adherenceFor(blocks, tally),
         productivity,
+        title: titles.get(d) ?? null,
         // A compact summary so the calendar column can show what the day actually
         // held, not just a percentage — enough to read the pattern at a glance.
         //
@@ -148,6 +176,9 @@ export async function GET(req: Request) {
     }
     return Response.json({ days: out });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

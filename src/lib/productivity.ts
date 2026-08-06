@@ -120,7 +120,9 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
 
   // Each part is rounded independently so the three always sum to `points` exactly. Adding
   // them first and rounding once would let the parts disagree with the total on screen.
-  const timePoints = Math.round((weightedMinutes / MINUTES_PER_HOUR) * POINTS_PER_HOUR);
+  const timePoints = Math.round(
+    (weightedMinutes / MINUTES_PER_HOUR) * POINTS_PER_HOUR,
+  );
   const habitPoints = input.habitsDone * POINTS_PER_HABIT;
   const workoutPoints = input.workouts * POINTS_PER_WORKOUT;
 

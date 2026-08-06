@@ -25,14 +25,22 @@ Write ONE sentence, maybe two. Plain and unhurried. If there is no real pattern 
 export async function GET(req: Request) {
   try {
     const date = new URL(req.url).searchParams.get("date") ?? todayISO();
-    if (!isISODate(date)) return Response.json({ error: "bad date" }, { status: 400 });
+    if (!isISODate(date))
+      return Response.json({ error: "bad date" }, { status: 400 });
 
     const db = await getDb();
 
     // Cached per day: this is a once-a-day observation, not something to regenerate on
     // every page load — which would also make it flicker and cost money each refresh.
-    const cached = await db.execute({ sql: "SELECT value FROM app_meta WHERE key=?", args: [`note:${date}`] });
-    if (cached.rows.length) return Response.json({ note: String(cached.rows[0].value), cached: true });
+    const cached = await db.execute({
+      sql: "SELECT value FROM app_meta WHERE key=?",
+      args: [`note:${date}`],
+    });
+    if (cached.rows.length)
+      return Response.json({
+        note: String(cached.rows[0].value),
+        cached: true,
+      });
 
     if (!process.env.ANTHROPIC_API_KEY) return Response.json({ note: null });
 
@@ -46,7 +54,10 @@ export async function GET(req: Request) {
     if (marks.rows.length < 4) return Response.json({ note: null });
 
     const lines = marks.rows
-      .map((m) => `${m.date} ${m.time_start ?? ""} "${m.title ?? ""}" ${m.state}${m.reason ? ` — ${m.reason}` : ""}`)
+      .map(
+        (m) =>
+          `${m.date} ${m.time_start ?? ""} "${m.title ?? ""}" ${m.state}${m.reason ? ` — ${m.reason}` : ""}`,
+      )
       .join("\n");
 
     const client = new Anthropic();
@@ -54,7 +65,9 @@ export async function GET(req: Request) {
       model: MODEL,
       max_tokens: 300,
       system: SYSTEM,
-      messages: [{ role: "user", content: `Marks from ${from} to ${date}:\n\n${lines}` }],
+      messages: [
+        { role: "user", content: `Marks from ${from} to ${date}:\n\n${lines}` },
+      ],
     } as Anthropic.MessageCreateParamsNonStreaming);
 
     const note = res.content
@@ -71,6 +84,9 @@ export async function GET(req: Request) {
     return Response.json({ note });
   } catch (e) {
     // A missing observation is not worth showing an error over.
-    return Response.json({ note: null, error: e instanceof Error ? e.message : String(e) });
+    return Response.json({
+      note: null,
+      error: e instanceof Error ? e.message : String(e),
+    });
   }
 }

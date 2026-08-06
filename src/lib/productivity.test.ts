@@ -12,13 +12,20 @@ import {
   type ProductivityInput,
 } from "./productivity.ts";
 
-const red = (minutes: number, state: BlockState | null = "adhered"): ProductiveBlock => ({
+const red = (
+  minutes: number,
+  state: BlockState | null = "adhered",
+): ProductiveBlock => ({
   minutes,
   colorId: "11",
   state,
 });
 /** The calendar default — Uni. Google omits colorId entirely for these. */
-const uni = (minutes: number): ProductiveBlock => ({ minutes, colorId: null, state: "adhered" });
+const uni = (minutes: number): ProductiveBlock => ({
+  minutes,
+  colorId: null,
+  state: "adhered",
+});
 const day = (o: Partial<ProductivityInput> = {}) =>
   scoreDay({ blocks: [], habitsDone: 0, workouts: 0, ...o });
 
@@ -37,7 +44,8 @@ test("peacock is not a tier", () => {
 });
 
 test("an unlisted colour scores zero, not a fallback rate", () => {
-  for (const id of ["5", "2", "", "nonsense"]) assert.equal(rateFor(id), UNLISTED_RATE);
+  for (const id of ["5", "2", "", "nonsense"])
+    assert.equal(rateFor(id), UNLISTED_RATE);
   assert.equal(UNLISTED_RATE, 0);
 });
 
@@ -86,7 +94,8 @@ test("the score is UNCAPPED", () => {
 
 test("only adhered blocks count as time spent", () => {
   const notWorked: (BlockState | null)[] = ["drifted", "skipped", null];
-  for (const state of notWorked) assert.equal(day({ blocks: [red(60, state)] }).points, 0);
+  for (const state of notWorked)
+    assert.equal(day({ blocks: [red(60, state)] }).points, 0);
 });
 
 test("dismissed never counts, whatever its colour", () => {
@@ -123,7 +132,11 @@ test("a negative duration cannot subtract from the day", () => {
 
 test("the rate table is well formed", () => {
   const ids = CALENDAR_RATES.map((c) => c.id);
-  assert.equal(new Set(ids).size, ids.length, "each colorId appears exactly once");
+  assert.equal(
+    new Set(ids).size,
+    ids.length,
+    "each colorId appears exactly once",
+  );
   for (const c of CALENDAR_RATES) {
     assert.ok(c.rate >= 0 && c.rate <= 1, `${c.label} rate is in range`);
   }

@@ -33,11 +33,17 @@ export function deriveWeights(subgoals: WeightedSubgoal[]): WeightBreakdown {
   // goal's progress would be the worst possible response.
   const isOverride = (w: number) => w > 0;
 
-  const overrideSum = subgoals.reduce((s, x) => s + (isOverride(x.weight) ? x.weight : 0), 0);
+  const overrideSum = subgoals.reduce(
+    (s, x) => s + (isOverride(x.weight) ? x.weight : 0),
+    0,
+  );
   const autoCount = subgoals.filter((x) => !isOverride(x.weight)).length;
-  const autoShare = autoCount > 0 ? Math.max(0, 1 - overrideSum) / autoCount : 0;
+  const autoShare =
+    autoCount > 0 ? Math.max(0, 1 - overrideSum) / autoCount : 0;
 
-  const effective = subgoals.map((x) => (isOverride(x.weight) ? x.weight : autoShare));
+  const effective = subgoals.map((x) =>
+    isOverride(x.weight) ? x.weight : autoShare,
+  );
   const done = subgoals.reduce((s, x, i) => s + (x.done ? effective[i] : 0), 0);
 
   return {

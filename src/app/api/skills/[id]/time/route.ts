@@ -12,19 +12,31 @@ export const runtime = "nodejs";
 const MIN_MINUTES = 1;
 const MAX_MINUTES = 600;
 
-async function skillId(ctx: { params: Promise<{ id: string }> }): Promise<number | null> {
+async function skillId(ctx: {
+  params: Promise<{ id: string }>;
+}): Promise<number | null> {
   const n = Number((await ctx.params).id);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
   try {
     const id = await skillId(ctx);
     if (id == null) return Response.json({ error: "bad id" }, { status: 400 });
     const b = await req.json();
     const minutes = Math.round(Number(b.minutes));
-    if (!Number.isFinite(minutes) || minutes < MIN_MINUTES || minutes > MAX_MINUTES) {
-      return Response.json({ error: `minutes must be ${MIN_MINUTES}–${MAX_MINUTES}` }, { status: 400 });
+    if (
+      !Number.isFinite(minutes) ||
+      minutes < MIN_MINUTES ||
+      minutes > MAX_MINUTES
+    ) {
+      return Response.json(
+        { error: `minutes must be ${MIN_MINUTES}–${MAX_MINUTES}` },
+        { status: 400 },
+      );
     }
     // Validated before it can reach addDays inside listSkills, which throws RangeError on
     // malformed input.
@@ -33,11 +45,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     await logSkillTime(db, id, minutes, date);
     return Response.json({ skills: await listSkills(db, date) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }
 
-export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
   try {
     const id = await skillId(ctx);
     if (id == null) return Response.json({ error: "bad id" }, { status: 400 });
@@ -47,6 +65,9 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const removed = await undoSkillTime(db, id, date);
     return Response.json({ removed, skills: await listSkills(db, date) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

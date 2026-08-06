@@ -6,7 +6,13 @@
 
 import type { Client } from "../db/client";
 import { todayISO, isISODate, addDays } from "../dates";
-import { createGoal, setHabit, setSkillState, updateGoal, TooManyActiveSkills } from "../engine";
+import {
+  createGoal,
+  setHabit,
+  setSkillState,
+  updateGoal,
+  TooManyActiveSkills,
+} from "../engine";
 import {
   getDayView,
   listGoals,
@@ -22,7 +28,12 @@ const PILLARS = ["social_capital", "physical", "portfolio"] as const;
 export type ToolDef = {
   name: string;
   description: string;
-  input_schema: { type: "object"; properties: Record<string, unknown>; required: string[]; additionalProperties: false };
+  input_schema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required: string[];
+    additionalProperties: false;
+  };
 };
 
 export const TOOL_DEFS: ToolDef[] = [
@@ -33,7 +44,13 @@ export const TOOL_DEFS: ToolDef[] = [
     input_schema: {
       type: "object",
       additionalProperties: false,
-      properties: { date: { type: "string", format: "date", description: "YYYY-MM-DD; defaults to today" } },
+      properties: {
+        date: {
+          type: "string",
+          format: "date",
+          description: "YYYY-MM-DD; defaults to today",
+        },
+      },
       required: [],
     },
   },
@@ -44,13 +61,19 @@ export const TOOL_DEFS: ToolDef[] = [
     input_schema: {
       type: "object",
       additionalProperties: false,
-      properties: { days: { type: "integer", description: "how many days back, 1-30. Defaults to 14." } },
+      properties: {
+        days: {
+          type: "integer",
+          description: "how many days back, 1-30. Defaults to 14.",
+        },
+      },
       required: [],
     },
   },
   {
     name: "get_calendar",
-    description: "The real Google Calendar events for a day. Blocks come from here — the app never invents them.",
+    description:
+      "The real Google Calendar events for a day. Blocks come from here — the app never invents them.",
     input_schema: {
       type: "object",
       additionalProperties: false,
@@ -76,12 +99,16 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "log_habit",
-    description: "Tick or untick one of the daily non-negotiables. Binary — no states, no reasons.",
+    description:
+      "Tick or untick one of the daily non-negotiables. Binary — no states, no reasons.",
     input_schema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        habit_id: { type: "integer", description: "real id from get_day — never guess" },
+        habit_id: {
+          type: "integer",
+          description: "real id from get_day — never guess",
+        },
         date: { type: "string", format: "date" },
         done: { type: "boolean" },
       },
@@ -90,8 +117,14 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "list_goals",
-    description: "The user's goals. Categorised by pillar; progress is DERIVED from completed subgoal weights and is read-only here.",
-    input_schema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+    description:
+      "The user's goals. Categorised by pillar; progress is DERIVED from completed subgoal weights and is read-only here.",
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+      required: [],
+    },
   },
   {
     name: "create_goal",
@@ -109,7 +142,8 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "update_goal",
-    description: "Update a goal's title, target or status. Progress is NOT settable — it is derived from subgoals, and the coach must never move it.",
+    description:
+      "Update a goal's title, target or status. Progress is NOT settable — it is derived from subgoals, and the coach must never move it.",
     input_schema: {
       type: "object",
       additionalProperties: false,
@@ -117,7 +151,10 @@ export const TOOL_DEFS: ToolDef[] = [
         id: { type: "integer" },
         title: { type: "string" },
         target: { type: "string" },
-        status: { type: "string", enum: ["active", "done", "paused", "dropped"] },
+        status: {
+          type: "string",
+          enum: ["active", "done", "paused", "dropped"],
+        },
       },
       required: ["id"],
     },
@@ -126,7 +163,12 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "list_skills",
     description:
       "The skill-rotation board: what is actively being levelled (max 2), what is parked, and how many days since each active one was touched.",
-    input_schema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+      required: [],
+    },
   },
   {
     name: "set_skill_state",
@@ -135,7 +177,10 @@ export const TOOL_DEFS: ToolDef[] = [
     input_schema: {
       type: "object",
       additionalProperties: false,
-      properties: { id: { type: "integer" }, state: { type: "string", enum: ["active", "parked", "always_on"] } },
+      properties: {
+        id: { type: "integer" },
+        state: { type: "string", enum: ["active", "parked", "always_on"] },
+      },
       required: ["id", "state"],
     },
   },
@@ -150,7 +195,11 @@ function asDate(v: unknown, fallback?: string): string {
   return v;
 }
 
-export async function executeTool(db: Client, name: string, input: Record<string, unknown>): Promise<unknown> {
+export async function executeTool(
+  db: Client,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<unknown> {
   switch (name) {
     case "get_day": {
       const date = asDate(input.date, todayISO());
@@ -229,10 +278,15 @@ export async function executeTool(db: Client, name: string, input: Record<string
 
     case "set_skill_state": {
       try {
-        await setSkillState(db, Number(input.id), input.state as "active" | "parked" | "always_on");
+        await setSkillState(
+          db,
+          Number(input.id),
+          input.state as "active" | "parked" | "always_on",
+        );
         return { ok: true };
       } catch (e) {
-        if (e instanceof TooManyActiveSkills) return { ok: false, refused: e.message, active: e.active };
+        if (e instanceof TooManyActiveSkills)
+          return { ok: false, refused: e.message, active: e.active };
         throw e;
       }
     }

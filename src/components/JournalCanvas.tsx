@@ -110,13 +110,18 @@ export default function JournalCanvas({
 
   function widthFor(e: React.PointerEvent): number {
     // pressure is 0 for a hovering pen and exactly 0.5 for devices that don't report it.
-    if (e.pointerType === "pen" && e.pressure > 0) return 0.6 + e.pressure * 4.4;
+    if (e.pointerType === "pen" && e.pressure > 0)
+      return 0.6 + e.pressure * 4.4;
     return 2.2;
   }
 
   function pointFrom(e: React.PointerEvent) {
     const rect = e.currentTarget.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top, w: widthFor(e) };
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      w: widthFor(e),
+    };
   }
 
   function down(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -134,14 +139,20 @@ export default function JournalCanvas({
     if (!current.current) return;
     // Coalesced events recover the full sample rate of a high-frequency stylus;
     // without this a fast stroke is drawn from far fewer points and looks angular.
-    const events = typeof e.nativeEvent.getCoalescedEvents === "function" ? e.nativeEvent.getCoalescedEvents() : [];
+    const events =
+      typeof e.nativeEvent.getCoalescedEvents === "function"
+        ? e.nativeEvent.getCoalescedEvents()
+        : [];
     if (events.length) {
       const rect = e.currentTarget.getBoundingClientRect();
       for (const ev of events) {
         current.current.push({
           x: ev.clientX - rect.left,
           y: ev.clientY - rect.top,
-          w: ev.pointerType === "pen" && ev.pressure > 0 ? 0.6 + ev.pressure * 4.4 : 2.2,
+          w:
+            ev.pointerType === "pen" && ev.pressure > 0
+              ? 0.6 + ev.pressure * 4.4
+              : 2.2,
         });
       }
     } else {
@@ -217,13 +228,22 @@ export default function JournalCanvas({
           onPointerCancel={up}
           // touch-none stops the browser scrolling the page instead of drawing on a tablet.
           className="max-h-full max-w-full touch-none rounded-2xl border border-[var(--color-line)]"
-          style={{ aspectRatio: "1 / 1.4142", height: "100%", background: "#fdfbf6", cursor: "crosshair" }}
+          style={{
+            aspectRatio: "1 / 1.4142",
+            height: "100%",
+            background: "#fdfbf6",
+            cursor: "crosshair",
+          }}
         />
       </div>
 
       <div className="flex items-center justify-between gap-3">
         <span className="text-micro text-[var(--color-muted)]">
-          {busy ? "Saving and reading it…" : hasInk ? "Ready to save." : "Empty page."}
+          {busy
+            ? "Saving and reading it…"
+            : hasInk
+              ? "Ready to save."
+              : "Empty page."}
         </span>
         <div className="flex shrink-0 items-center gap-3">
           <button

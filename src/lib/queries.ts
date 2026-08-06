@@ -25,7 +25,12 @@ export type { PillarKey };
 const num = (v: unknown) => (v == null ? 0 : Number(v));
 const str = (v: unknown) => (v == null ? null : String(v));
 
-export type PillarView = { key: PillarKey; name: string; priority: string; color: string | null };
+export type PillarView = {
+  key: PillarKey;
+  name: string;
+  priority: string;
+  color: string | null;
+};
 
 export type HabitView = {
   id: number;
@@ -103,10 +108,25 @@ export type DayView = {
   calories: number | null;
   /** The individual additions, so a mistyped one can be removed rather than retyped. */
   calorieEntries: CalorieEntry[];
+  /** What the owner intends the day to be. null when unnamed. */
+  title: string | null;
   pillars: PillarView[];
 };
 
 export type CalorieEntry = { id: number; kcal: number };
+
+/** Day titles across a range, for the strip and the day ahead. */
+export async function dayTitlesBetween(
+  db: Client,
+  from: string,
+  to: string,
+): Promise<Map<string, string>> {
+  const r = await db.execute({
+    sql: "SELECT date,title FROM day_titles WHERE date BETWEEN ? AND ?",
+    args: [from, to],
+  });
+  return new Map(r.rows.map((x) => [String(x.date), String(x.title)]));
+}
 
 /**
  * The day's calories, total and entries, from one place.
@@ -116,7 +136,7 @@ export type CalorieEntry = { id: number; kcal: number };
  */
 export async function caloriesForDate(
   db: Client,
-  date: string
+  date: string,
 ): Promise<{ total: number | null; entries: CalorieEntry[] }> {
   const r = await db.execute({
     sql: "SELECT id,kcal FROM calorie_entries WHERE date=? ORDER BY id",
@@ -142,10 +162,13 @@ export type AdherenceConfig = {
 
 export async function getAdherenceConfig(db: Client): Promise<AdherenceConfig> {
   const r = await db.execute(
-    "SELECT key,value FROM app_meta WHERE key IN ('adherence_habits_since','habit_cutoff')"
+    "SELECT key,value FROM app_meta WHERE key IN ('adherence_habits_since','habit_cutoff')",
   );
   const m = new Map(r.rows.map((x) => [String(x.key), String(x.value)]));
-  return { habitsSince: m.get("adherence_habits_since") ?? null, cutoff: m.get("habit_cutoff") ?? "21:00" };
+  return {
+    habitsSince: m.get("adherence_habits_since") ?? null,
+    cutoff: m.get("habit_cutoff") ?? "21:00",
+  };
 }
 
 /**
@@ -161,7 +184,7 @@ export function habitTallyFor(
   done: number,
   cfg: AdherenceConfig,
   nowMs: number = Date.now(),
-  today: string = todayISO()
+  today: string = todayISO(),
 ): HabitTally | null {
   if (!cfg.habitsSince || date < cfg.habitsSince) return null;
   const cutoffMs = Date.parse(rfc3339(date, cfg.cutoff));
@@ -180,7 +203,9 @@ export async function pillarMaps(db: Client) {
 }
 
 export async function getPillars(db: Client): Promise<PillarView[]> {
-  const r = await db.execute("SELECT key,name,priority,color FROM pillars ORDER BY sort_order");
+  const r = await db.execute(
+    "SELECT key,name,priority,color FROM pillars ORDER BY sort_order",
+  );
   return r.rows.map((p) => ({
     key: String(p.key) as PillarKey,
     name: String(p.name),
@@ -196,13 +221,19 @@ async function loadMarks(db: Client, date: string) {
   });
   const m = new Map<string, { state: BlockState; reason: string | null }>();
   for (const row of r.rows) {
-    m.set(String(row.event_id), { state: String(row.state) as BlockState, reason: str(row.reason) });
+    m.set(String(row.event_id), {
+      state: String(row.state) as BlockState,
+      reason: str(row.reason),
+    });
   }
   return m;
 }
 
 /** Today's non-negotiables: only those scheduled for this weekday. */
-export async function habitsForDate(db: Client, date: string): Promise<HabitView[]> {
+export async function habitsForDate(
+  db: Client,
+  date: string,
+): Promise<HabitView[]> {
   const { byId } = await pillarMaps(db);
   const bit = weekdayBit(date);
   const r = await db.execute({
@@ -215,7 +246,7 @@ export async function habitsForDate(db: Client, date: string): Promise<HabitView
   return r.rows.map((h) => ({
     id: num(h.id),
     name: String(h.name),
-    pillar: h.pillar_id == null ? null : byId.get(num(h.pillar_id)) ?? null,
+    pillar: h.pillar_id == null ? null : (byId.get(num(h.pillar_id)) ?? null),
     days_mask: num(h.days_mask),
     done: h.v != null,
     system_key: str(h.system_key),
@@ -229,12 +260,12 @@ export async function habitsForDate(db: Client, date: string): Promise<HabitView
 export async function allHabits(db: Client): Promise<HabitView[]> {
   const { byId } = await pillarMaps(db);
   const r = await db.execute(
-    "SELECT id,name,pillar_id,days_mask,system_key,input,unit FROM habits WHERE active=1 ORDER BY sort_order, id"
+    "SELECT id,name,pillar_id,days_mask,system_key,input,unit FROM habits WHERE active=1 ORDER BY sort_order, id",
   );
   return r.rows.map((h) => ({
     id: num(h.id),
     name: String(h.name),
-    pillar: h.pillar_id == null ? null : byId.get(num(h.pillar_id)) ?? null,
+    pillar: h.pillar_id == null ? null : (byId.get(num(h.pillar_id)) ?? null),
     days_mask: num(h.days_mask),
     done: false,
     system_key: str(h.system_key),
@@ -248,7 +279,7 @@ export async function getDayView(
   db: Client,
   date: string,
   events: CalEvent[],
-  calendarConnected: boolean
+  calendarConnected: boolean,
 ): Promise<DayView> {
   const marks = await loadMarks(db, date);
   const blocks = buildBlocks(date, events, marks);
@@ -260,7 +291,12 @@ export async function getDayView(
   const cfg = await getAdherenceConfig(db);
   const adherence = adherenceFor(
     blocks,
-    habitTallyFor(date, habits.length, habits.filter((h) => h.done).length, cfg)
+    habitTallyFor(
+      date,
+      habits.length,
+      habits.filter((h) => h.done).length,
+      cfg,
+    ),
   );
 
   const journalRes = await db.execute({
@@ -268,6 +304,7 @@ export async function getDayView(
     args: [date],
   });
   const cal = await caloriesForDate(db, date);
+  const titles = await dayTitlesBetween(db, date, date);
   const { count } = await getStreak(db, date);
 
   return {
@@ -284,22 +321,30 @@ export async function getDayView(
     })),
     calories: cal.total,
     calorieEntries: cal.entries,
+    title: titles.get(date) ?? null,
     pillars,
   };
 }
 
 export async function listGoals(db: Client): Promise<GoalView[]> {
   const r = await db.execute(
-    "SELECT g.id,g.title,g.target,g.status,p.key AS pk FROM goals g JOIN pillars p ON g.pillar_id=p.id WHERE g.status != 'dropped' ORDER BY p.sort_order, g.id"
+    "SELECT g.id,g.title,g.target,g.status,p.key AS pk FROM goals g JOIN pillars p ON g.pillar_id=p.id WHERE g.status != 'dropped' ORDER BY p.sort_order, g.id",
   );
-  const subs = await db.execute("SELECT id,goal_id,title,weight,done FROM subgoals ORDER BY goal_id, sort_order, id");
+  const subs = await db.execute(
+    "SELECT id,goal_id,title,weight,done FROM subgoals ORDER BY goal_id, sort_order, id",
+  );
 
   type RawSub = Omit<SubgoalView, "effectiveWeight">;
   const byGoal = new Map<number, RawSub[]>();
   for (const s of subs.rows) {
     const gid = num(s.goal_id);
     const list: RawSub[] = byGoal.get(gid) ?? [];
-    list.push({ id: num(s.id), title: String(s.title), weight: num(s.weight), done: num(s.done) === 1 });
+    list.push({
+      id: num(s.id),
+      title: String(s.title),
+      weight: num(s.weight),
+      done: num(s.done) === 1,
+    });
     byGoal.set(gid, list);
   }
 
@@ -328,7 +373,10 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
  * Parked skills are never filtered out — the point of the board is seeing everything
  * you have put time into, including what you're not working on right now.
  */
-export async function listSkills(db: Client, anchor: string): Promise<SkillView[]> {
+export async function listSkills(
+  db: Client,
+  anchor: string,
+): Promise<SkillView[]> {
   const { byId } = await pillarMaps(db);
   const from = addDays(anchor, -(WINDOW_DAYS - 1));
   const r = await db.execute({
@@ -344,18 +392,22 @@ export async function listSkills(db: Client, anchor: string): Promise<SkillView[
   });
   const today = Date.now();
   return r.rows.map((s) => {
-    const t = s.last_touched == null ? null : Date.parse(String(s.last_touched));
+    const t =
+      s.last_touched == null ? null : Date.parse(String(s.last_touched));
     return {
       id: num(s.id),
       name: String(s.name),
-      pillar: s.pillar_id == null ? null : byId.get(num(s.pillar_id)) ?? null,
+      pillar: s.pillar_id == null ? null : (byId.get(num(s.pillar_id)) ?? null),
       state: String(s.state) as SkillView["state"],
       // num() is mandatory on every aggregate: libSQL returns them as BigInt, and
       // `bigint / number` THROWS rather than producing a wrong answer.
       minutes: num(s.minutes),
       minutes14: num(s.minutes14),
       sessions14: num(s.sessions14),
-      staleDays: t == null || Number.isNaN(t) ? null : Math.floor((today - t) / 86400000),
+      staleDays:
+        t == null || Number.isNaN(t)
+          ? null
+          : Math.floor((today - t) / 86400000),
     };
   });
 }
@@ -367,7 +419,11 @@ export async function listSkills(db: Client, anchor: string): Promise<SkillView[
  * in the window is a real, meaningful zero and must stay distinguishable from a metric
  * that has no source at all, or a first day reads as a fortnight of neglect.
  */
-export async function getRingCounts(db: Client, from: string, to: string): Promise<Record<string, RawCount>> {
+export async function getRingCounts(
+  db: Client,
+  from: string,
+  to: string,
+): Promise<Record<string, RawCount>> {
   const out: Record<string, RawCount> = {};
 
   for (const m of METRICS) {
@@ -386,7 +442,7 @@ export async function getRingCounts(db: Client, from: string, to: string): Promi
         // works, but say so loudly — silently ghosting hides a bug behind a state that
         // looks intentional.
         console.error(
-          `[rings] metric "${m.key}" is sourceReady but system_key "${m.systemKey}" resolved to no active habit`
+          `[rings] metric "${m.key}" is sourceReady but system_key "${m.systemKey}" resolved to no active habit`,
         );
         out[m.key] = { count: 0, resolved: false };
         continue;
@@ -434,10 +490,18 @@ export async function getRingCounts(db: Client, from: string, to: string): Promi
 }
 
 /** How much of the 14-day window has actually been observed. Caps at WINDOW_DAYS. */
-export async function getObservedDays(db: Client, anchor: string): Promise<number> {
-  const r = await db.execute("SELECT value FROM app_meta WHERE key='rings_since'");
+export async function getObservedDays(
+  db: Client,
+  anchor: string,
+): Promise<number> {
+  const r = await db.execute(
+    "SELECT value FROM app_meta WHERE key='rings_since'",
+  );
   if (!r.rows.length) return WINDOW_DAYS;
-  return Math.max(1, Math.min(WINDOW_DAYS, daysBetween(String(r.rows[0].value), anchor) + 1));
+  return Math.max(
+    1,
+    Math.min(WINDOW_DAYS, daysBetween(String(r.rows[0].value), anchor) + 1),
+  );
 }
 
 // logSkillTime moved to engine.ts — it is a write, and every write in this app runs

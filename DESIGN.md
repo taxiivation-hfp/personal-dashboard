@@ -325,6 +325,14 @@ nothing — no shadow was added — and it encodes *direction*, which no flat st
 journal's ruled lines are paper texture, not a UI effect, and do not count. A second
 gradient is a bug. Fills are flat, borders are flat, bars are flat.
 
+**The Hue-Not-Lightness Rule.** This palette's lightness range is spent. `--color-muted`
+needs a surface at or above `oklch(0.9268)` to hold 4.5:1, which is 0.02 L below the page,
+so surfaces cannot spread downward — a `#e4dccd` page drops muted to 4.10:1 and skipped to
+3.97:1. Surfaces that must differ from each other therefore differ by **hue at near-equal
+lightness**: the three windows sit at hue 82 / 120 / 68 — a warm near-white, a cool green
+and a gold. A contrast ratio near 1.00 between two of them is expected and fine; the ratio
+measures luminance, and luminance is not what separates them.
+
 **The Window Exception.** The furniture *inside* a column is rules and margins, not cards —
 that rule was aimed at the eleven identical rectangles an earlier pass made of eleven
 different kinds of thing. The three **columns themselves** are the exception, and the only
@@ -410,12 +418,37 @@ reads as one more quota to fill:
 
 - **Adherence:** 176px, 8px stroke, amber, the numeral **inside**. A fine line drawn around
   a number reads as a mark on a page; a thick arc reads as a gauge.
-- **Pillar:** small, pillar-hued, thin stroke, a fact line **below** — never a percentage.
+- **Pillar:** one **segmented donut** per pillar, pillar-hued, fact lines revealed on
+  expand — never a percentage.
 
 Three states: **filled** (a hued arc), **empty but live** (a solid track, no arc — "0 of 2
 days"), and **ghost** (a *dashed* track for a metric with no data source yet). Null never
 enters the arc arithmetic; it is guarded before any maths, because coercing null to 0 would
 draw a 0% ring for a day that hasn't happened.
+
+**`dashed` is an explicit prop, not inferred from `fill == null`.** Those are two different
+statements and conflating them put the app's own "nothing is wired up" dashes on the hero
+element every morning: the adherence ring passes null until something is due, which is not
+a missing data source. Ghost metrics pass `dashed`; nothing else does.
+
+#### The segmented donut
+
+A pillar is ONE ring divided into slices, not a ring plus a row of little ones. The old
+shape said the same thing twice and made three pillars taller than a screen.
+
+- **Arc length is the metric's weight.** Strength owns most of Physical's circle and Cardio
+  a fifth of it, so the ring shows what each metric is *worth* as well as how full it is,
+  and the amount of colour around the whole donut IS the pillar's fill. One glance, one
+  shape, no arithmetic.
+- **Unscored and ghost metrics get a fixed small slice each**, not a weighted one. Their
+  weight is 0, so weighting would delete them from a ring meant to show everything the
+  pillar tracks. They are drawn dashed and never filled — already this system's language
+  for "recorded, but not a target".
+- **Slices are drawn as real arc paths, not dashed circles.** A slice that must *also* be
+  dashed cannot use `strokeDasharray` for both its dash pattern and its wedge offset; paths
+  sidestep it and stay exact where slices butt together.
+- Butt caps, never round: a round cap adds half a stroke width at each end, which would
+  both overstate a small fill and spill into the neighbouring slice.
 
 Arcs use `stroke-linecap: butt`, never round: round caps add half a stroke width at each
 end, making the smallest non-zero fills read as roughly half again their true value. The

@@ -142,6 +142,17 @@ overrides leave behind.
 That isolation is what stops "did I do what I said I'd do" becoming "how much did I
 finish". Goals are never auto-completed at 100%; marking one done is the owner's call.
 
+## The day's title
+
+One line naming what you INTEND the day to be, set in advance and rewriteable whenever.
+Today's sits under the date above the adherence ring; the next three days are named inline
+on the week strip, where they are read.
+
+**It is an intention, not a record, and it is connected to nothing.** It feeds no rate, no
+ring, no streak and no score. That isolation is the whole point: the moment naming a day
+"thesis push" becomes something you can succeed or fail at, it stops being a plan and turns
+into one more verdict. Rewriting one is normal, not revisionism.
+
 ## Productivity — the second sanctioned measure, and the narrower one
 
 A per-day points total, drawn on the 7-day strip. A DELIBERATE EXCEPTION to "output is

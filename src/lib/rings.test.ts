@@ -18,7 +18,11 @@ function counts(over: Record<string, RawCount> = {}): Record<string, RawCount> {
   return { ...base, ...over };
 }
 
-const find = (rings: ReturnType<typeof buildRings>, pillar: string, key: string) =>
+const find = (
+  rings: ReturnType<typeof buildRings>,
+  pillar: string,
+  key: string,
+) =>
   rings.find((p) => p.pillar === pillar)!.metrics.find((m) => m.key === key)!;
 
 // ---------------------------------------------------------------- the cap
@@ -29,7 +33,11 @@ test("fill caps at 1 — doing more than the threshold changes nothing", () => {
 });
 
 test("the true count survives the cap in the fact line", () => {
-  const r = find(buildRings(counts({ strength: ok(11) }), WINDOW_DAYS), "physical", "strength");
+  const r = find(
+    buildRings(counts({ strength: ok(11) }), WINDOW_DAYS),
+    "physical",
+    "strength",
+  );
   assert.equal(r.fill, 1);
   assert.equal(r.count, 11);
   assert.equal(r.fact, "11 of 8 sessions");
@@ -61,16 +69,20 @@ test("a sourceless metric is EXCLUDED from its pillar mean, not counted as 0", (
   // Physical = strength + cardio (live) + misc (unscored) + steps (ghost). With both
   // scored metrics met the pillar must read exactly 1 — if steps counted as a zero it
   // would be capped below full forever, which no behaviour could fix.
-  const physical = buildRings(counts({ strength: ok(8), cardio: ok(2) }), WINDOW_DAYS).find(
-    (p) => p.pillar === "physical"
-  )!;
+  const physical = buildRings(
+    counts({ strength: ok(8), cardio: ok(2) }),
+    WINDOW_DAYS,
+  ).find((p) => p.pillar === "physical")!;
   assert.equal(physical.fill, 1);
 });
 
 test("a pillar with no live metric is null, not NaN", () => {
   const c = counts();
-  for (const k of ["strength","cardio","misc"]) c[k] = { count: 0, resolved: false };
-  const physical = buildRings(c, WINDOW_DAYS).find((p) => p.pillar === "physical")!;
+  for (const k of ["strength", "cardio", "misc"])
+    c[k] = { count: 0, resolved: false };
+  const physical = buildRings(c, WINDOW_DAYS).find(
+    (p) => p.pillar === "physical",
+  )!;
   assert.equal(physical.fill, null);
 });
 
@@ -84,7 +96,11 @@ test("an unresolved habit source is a ghost, not a zero", () => {
 // ---------------------------------------------------------------- day one
 
 test("a partial window says so, so day one cannot read as a fortnight of neglect", () => {
-  const r = find(buildRings(counts({ strength: ok(2) }), 3), "physical", "strength");
+  const r = find(
+    buildRings(counts({ strength: ok(2) }), 3),
+    "physical",
+    "strength",
+  );
   assert.equal(r.fact, "2 of 8 sessions");
   // Split out of `fact` so the row can place the two around the Log button.
   assert.equal(r.window, "day 3 of 14");
@@ -92,7 +108,11 @@ test("a partial window says so, so day one cannot read as a fortnight of neglect
 });
 
 test("a fully observed window drops the day counter", () => {
-  const r = find(buildRings(counts({ strength: ok(2) }), 14), "physical", "strength");
+  const r = find(
+    buildRings(counts({ strength: ok(2) }), 14),
+    "physical",
+    "strength",
+  );
   assert.equal(r.fact, "2 of 8 sessions");
   assert.equal(r.window, null);
 });
@@ -100,7 +120,11 @@ test("a fully observed window drops the day counter", () => {
 // ---------------------------------------------------------------- units
 
 test("skill sessions are counted as sessions, not days", () => {
-  const r = find(buildRings(counts({ skills: ok(3) }), WINDOW_DAYS), "portfolio", "skills");
+  const r = find(
+    buildRings(counts({ skills: ok(3) }), WINDOW_DAYS),
+    "portfolio",
+    "skills",
+  );
   assert.equal(r.fact, "3 of 4 sessions");
 });
 
@@ -111,7 +135,10 @@ test("every day-capped metric requires no more than the window allows", () => {
     // perDayCapped, NOT unit. `unit` is only the printed noun now; keying this guard off
     // it meant renaming a noun silently dropped a metric out of the check.
     if (!m.perDayCapped || m.required == null) continue;
-    assert.ok(m.required <= WINDOW_DAYS, `${m.key} requires ${m.required} of ${WINDOW_DAYS} days`);
+    assert.ok(
+      m.required <= WINDOW_DAYS,
+      `${m.key} requires ${m.required} of ${WINDOW_DAYS} days`,
+    );
   }
 });
 
@@ -142,14 +169,15 @@ test("the printed noun and the counting rule are allowed to disagree, but not by
     steps: true,
     skills: false,
   };
-  for (const m of METRICS) assert.equal(m.perDayCapped, expected[m.key], `${m.key}`);
+  for (const m of METRICS)
+    assert.equal(m.perDayCapped, expected[m.key], `${m.key}`);
 });
 
 test("every pillar appears exactly once and metric keys are unique", () => {
   const rings = buildRings(counts(), WINDOW_DAYS);
   assert.deepEqual(
     rings.map((r) => r.pillar),
-    ["social_capital", "physical", "portfolio"]
+    ["social_capital", "physical", "portfolio"],
   );
   const keys = METRICS.map((m) => m.key);
   assert.equal(new Set(keys).size, keys.length);
@@ -158,26 +186,31 @@ test("every pillar appears exactly once and metric keys are unique", () => {
 test("thresholds match the owner's stated minimums", () => {
   const by = Object.fromEntries(METRICS.map((m) => [m.key, m.required]));
   assert.equal(by.outreach, 2); // 1 / week
-    assert.equal(by.steps, 12); // 7k / day
+  assert.equal(by.steps, 12); // 7k / day
   assert.equal(by.skills, 4); // 4 sessions / 14 days
 });
 
 // ================================================================ round two
 
 test("Physical is a WEIGHTED mean: 8 strength, no cardio reads 80 not 50", () => {
-  const p = buildRings(counts({ strength: ok(8) }), WINDOW_DAYS).find((x) => x.pillar === "physical")!;
+  const p = buildRings(counts({ strength: ok(8) }), WINDOW_DAYS).find(
+    (x) => x.pillar === "physical",
+  )!;
   assert.equal(Math.round(p.fill! * 100), 80);
 });
 
 test("both met fills Physical exactly", () => {
-  const p = buildRings(counts({ strength: ok(8), cardio: ok(2) }), WINDOW_DAYS).find(
-    (x) => x.pillar === "physical"
-  )!;
+  const p = buildRings(
+    counts({ strength: ok(8), cardio: ok(2) }),
+    WINDOW_DAYS,
+  ).find((x) => x.pillar === "physical")!;
   assert.equal(p.fill, 1);
 });
 
 test("cardio alone moves Physical only a fifth", () => {
-  const p = buildRings(counts({ cardio: ok(2) }), WINDOW_DAYS).find((x) => x.pillar === "physical")!;
+  const p = buildRings(counts({ cardio: ok(2) }), WINDOW_DAYS).find(
+    (x) => x.pillar === "physical",
+  )!;
   assert.equal(Math.round(p.fill! * 100), 20);
 });
 
@@ -201,16 +234,24 @@ test("overdrive is null without a source or a threshold", () => {
 
 // THE property this whole design turns on.
 test("overdrive CANNOT rescue a neglected metric — 20 strength, 0 cardio is still 80", () => {
-  const p = buildRings(counts({ strength: ok(20) }), WINDOW_DAYS).find((x) => x.pillar === "physical")!;
+  const p = buildRings(counts({ strength: ok(20) }), WINDOW_DAYS).find(
+    (x) => x.pillar === "physical",
+  )!;
   assert.equal(Math.round(p.fill! * 100), 80);
-  const s = find(buildRings(counts({ strength: ok(20) }), WINDOW_DAYS), "physical", "strength");
+  const s = find(
+    buildRings(counts({ strength: ok(20) }), WINDOW_DAYS),
+    "physical",
+    "strength",
+  );
   assert.equal(s.fill, 1, "fill must stay capped");
   assert.equal(s.overdrive, 1, "and the excess shows only as overdrive");
 });
 
 test("no amount of strength reaches 100 without cardio", () => {
   for (const n of [8, 16, 40, 400]) {
-    const p = buildRings(counts({ strength: ok(n) }), WINDOW_DAYS).find((x) => x.pillar === "physical")!;
+    const p = buildRings(counts({ strength: ok(n) }), WINDOW_DAYS).find(
+      (x) => x.pillar === "physical",
+    )!;
     assert.ok(p.fill! < 1, `${n} strength days must not fill Physical`);
   }
 });
@@ -218,19 +259,24 @@ test("no amount of strength reaches 100 without cardio", () => {
 // ---------------------------------------------------------------- unscored
 
 test("misc is tracked but not scored: a count, no ring, no lie about the source", () => {
-  const m = find(buildRings(counts({ misc: ok(3) }), WINDOW_DAYS), "physical", "misc");
+  const m = find(
+    buildRings(counts({ misc: ok(3) }), WINDOW_DAYS),
+    "physical",
+    "misc",
+  );
   assert.equal(m.state, "unscored");
   assert.equal(m.fill, null);
   assert.equal(m.fact, "3 sessions · not scored");
 });
 
 test("misc is excluded from the Physical mean entirely", () => {
-  const without = buildRings(counts({ strength: ok(8), cardio: ok(2) }), WINDOW_DAYS).find(
-    (x) => x.pillar === "physical"
-  )!;
+  const without = buildRings(
+    counts({ strength: ok(8), cardio: ok(2) }),
+    WINDOW_DAYS,
+  ).find((x) => x.pillar === "physical")!;
   const withMisc = buildRings(
     counts({ strength: ok(8), cardio: ok(2), misc: ok(9) }),
-    WINDOW_DAYS
+    WINDOW_DAYS,
   ).find((x) => x.pillar === "physical")!;
   assert.equal(withMisc.fill, without.fill);
 });

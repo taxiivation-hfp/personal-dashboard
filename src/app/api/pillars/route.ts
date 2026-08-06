@@ -10,7 +10,10 @@ export async function GET() {
     const db = await getDb();
     return Response.json({ pillars: await getPillars(db) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }
 
@@ -26,6 +29,9 @@ export async function PATCH(req: Request) {
     await setPillarColor(db, key, b.color == null ? null : String(b.color));
     return Response.json({ pillars: await getPillars(db) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 400 },
+    );
   }
 }

@@ -19,7 +19,8 @@ const PUBLIC_ROUTES = new Set(["/login", "/api/auth/login", "/api/up"]);
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (MACHINE_ROUTES.has(pathname) || PUBLIC_ROUTES.has(pathname)) return NextResponse.next();
+  if (MACHINE_ROUTES.has(pathname) || PUBLIC_ROUTES.has(pathname))
+    return NextResponse.next();
 
   const mode = gateMode();
   if (mode === "off") return NextResponse.next();
@@ -27,12 +28,16 @@ export async function proxy(req: NextRequest) {
   if (mode === "misconfigured") {
     // Deployed with no passcode: refuse everything rather than serve an open app.
     return NextResponse.json(
-      { error: "APP_PASSCODE is not configured on this deployment — refusing to serve." },
-      { status: 503 }
+      {
+        error:
+          "APP_PASSCODE is not configured on this deployment — refusing to serve.",
+      },
+      { status: 503 },
     );
   }
 
-  if (await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
+  if (await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value))
+    return NextResponse.next();
 
   // An API call gets a 401 it can act on; a page gets sent to the login screen.
   if (pathname.startsWith("/api/")) {

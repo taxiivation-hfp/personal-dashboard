@@ -37,14 +37,19 @@ export default function JournalText({
           <h2 className="text-small font-semibold">Tonight&apos;s page</h2>
         </div>
         <p className="mt-2 text-micro text-[var(--color-muted)]">
-          Typed, on the same page. Saved as words — nothing reads it back or summarises it.
+          Typed, on the same page. Saved as words — nothing reads it back or
+          summarises it.
         </p>
       </div>
 
       <div className="flex min-h-0 flex-1 items-center justify-center">
         <div
           className="relative max-h-full max-w-full overflow-hidden rounded-2xl border border-[var(--color-line)]"
-          style={{ aspectRatio: "1 / 1.4142", height: "100%", background: PAPER }}
+          style={{
+            aspectRatio: "1 / 1.4142",
+            height: "100%",
+            background: PAPER,
+          }}
         >
           <textarea
             value={body}
@@ -78,7 +83,11 @@ export default function JournalText({
           <div
             aria-hidden
             className="pointer-events-none absolute inset-y-0"
-            style={{ left: MARGIN_X, width: 1, background: "var(--color-line-strong)" }}
+            style={{
+              left: MARGIN_X,
+              width: 1,
+              background: "var(--color-line-strong)",
+            }}
           />
         </div>
       </div>

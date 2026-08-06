@@ -23,11 +23,17 @@ function secret(): string | null {
 }
 
 async function hmac(message: string, key: string): Promise<string> {
-  const k = await crypto.subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, [
-    "sign",
-  ]);
+  const k = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
   const sig = await crypto.subtle.sign("HMAC", k, enc.encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return [...new Uint8Array(sig)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /**
@@ -38,11 +44,18 @@ async function hmac(message: string, key: string): Promise<string> {
  * operands first maps any input to a fixed-width digest, so the loop below always runs
  * over the same number of bytes whatever was submitted.
  */
-export async function constantTimeEqual(a: string, b: string): Promise<boolean> {
+export async function constantTimeEqual(
+  a: string,
+  b: string,
+): Promise<boolean> {
   // A per-process random key: these digests are only ever compared with each other.
-  const [da, db] = await Promise.all([hmac(a, COMPARE_KEY), hmac(b, COMPARE_KEY)]);
+  const [da, db] = await Promise.all([
+    hmac(a, COMPARE_KEY),
+    hmac(b, COMPARE_KEY),
+  ]);
   let diff = 0;
-  for (let i = 0; i < da.length; i++) diff |= da.charCodeAt(i) ^ db.charCodeAt(i);
+  for (let i = 0; i < da.length; i++)
+    diff |= da.charCodeAt(i) ^ db.charCodeAt(i);
   return diff === 0;
 }
 
@@ -52,12 +65,17 @@ const COMPARE_KEY = [...crypto.getRandomValues(new Uint8Array(32))]
 
 export async function createSessionToken(): Promise<string> {
   const key = secret();
-  if (!key) throw new Error("APP_PASSCODE (or SESSION_SECRET) must be set to issue a session");
+  if (!key)
+    throw new Error(
+      "APP_PASSCODE (or SESSION_SECRET) must be set to issue a session",
+    );
   const exp = Date.now() + SESSION_MAX_AGE * 1000;
   return `${exp}.${await hmac(`v1:${exp}`, key)}`;
 }
 
-export async function verifySessionToken(token: string | undefined | null): Promise<boolean> {
+export async function verifySessionToken(
+  token: string | undefined | null,
+): Promise<boolean> {
   if (!token) return false;
   const key = secret();
   if (!key) return false;
@@ -99,12 +117,16 @@ export function isSecureRequest(req: Request): boolean {
  * prevent, so it refuses everyone rather than letting everyone in.
  */
 export function gateMode(): "off" | "on" | "misconfigured" {
-  const hasPasscode = Boolean(process.env.APP_PASSCODE && process.env.APP_PASSCODE.length > 0);
+  const hasPasscode = Boolean(
+    process.env.APP_PASSCODE && process.env.APP_PASSCODE.length > 0,
+  );
   if (process.env.NODE_ENV === "production") {
     // Production needs BOTH: a passcode to check, and a real signing key. Without the
     // key, secret() returns null and every session silently fails to verify — which
     // would look like a broken login rather than a missing config.
-    const hasKey = Boolean(process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 32);
+    const hasKey = Boolean(
+      process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 32,
+    );
     return hasPasscode && hasKey ? "on" : "misconfigured";
   }
   return hasPasscode ? "on" : "off";

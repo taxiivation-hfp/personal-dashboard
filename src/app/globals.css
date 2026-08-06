@@ -67,14 +67,18 @@
    * ink token stays usable on it without re-certification. ONE casualty: --color-skipped
    * measures 4.39:1 there and FAILS. No block-state chip may render in the band.
    *
-   * The three window tones differ by 1.03-1.07:1 — at or below the 1.04:1 the
-   * Legible-Empty Rule documents as invisible. THAT IS INTENDED. The 1px hairline and the
-   * page-ground gutter separate the windows; the tone only says which one you are in, and
-   * is meant to be felt rather than seen. See The Window Exception in DESIGN.md. */
-  --color-bar: #ede7db; /* masthead · muted 4.53:1 · skipped 4.39:1 FAILS, ink only */
-  --color-surface-1: #fdfbf8; /* TODAY    · the hero column, lightest */
-  --color-surface-2: #f9f7f3; /* CALENDAR · the days around it */
-  --color-surface-3: #f7f3ee; /* PILLARS  · the fortnight behind */
+   * The windows are separated by HUE, not by lightness. A first attempt spread them only
+   * in lightness and landed 1.03-1.07:1 apart — below what the eye resolves, so they read
+   * as one surface. Contrast ratio measures luminance ONLY, so two surfaces at similar
+   * lightness and different hue score ~1.0 against each other while being obviously
+   * different to look at, which is exactly what is wanted here.
+   *
+   * Hue 82 / 120 / 68 at chroma 0.006 / 0.014 / 0.020 — a warm near-white, a cool green
+   * and a gold. Every one keeps --color-muted above the 4.5:1 floor (5.50, 5.11, 4.67). */
+  --color-bar: #eee7da; /* masthead · muted 4.54:1 · skipped FAILS here, ink only */
+  --color-surface-1: #fffdf9; /* TODAY    · warm near-white, the hero column */
+  --color-surface-2: #f3f6ec; /* CALENDAR · cool green, the days around it */
+  --color-surface-3: #f5e9dd; /* PILLARS  · gold, the fortnight behind */
 
   /* Recorded vs not-yet, in the calendar column and the strip.
    *

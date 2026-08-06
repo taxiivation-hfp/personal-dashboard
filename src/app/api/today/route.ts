@@ -15,6 +15,9 @@ export async function GET(req: Request) {
     const cal = await getCalendarForDate(d);
     return Response.json(await getDayView(db, d, cal.events, cal.connected));
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

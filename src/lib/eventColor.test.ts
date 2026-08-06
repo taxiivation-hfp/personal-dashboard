@@ -6,7 +6,8 @@ import { GOOGLE_PROJECTED, projectedColour } from "./eventColor.ts";
 // The projection's whole justification is that every value is certified against every
 // surface. If someone retunes a hex by eye, this is what catches it.
 
-const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+const srgbToLinear = (c: number) =>
+  c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 const luminance = (hex: string) => {
   const n = parseInt(hex.slice(1), 16);
   return (
@@ -32,7 +33,8 @@ const SURFACES = [
 ];
 
 test("all eleven Google colours are mapped", () => {
-  for (let i = 1; i <= 11; i++) assert.ok(GOOGLE_PROJECTED[String(i)], `colorId ${i} is mapped`);
+  for (let i = 1; i <= 11; i++)
+    assert.ok(GOOGLE_PROJECTED[String(i)], `colorId ${i} is mapped`);
   assert.equal(Object.keys(GOOGLE_PROJECTED).length, 11);
 });
 
@@ -44,14 +46,17 @@ test("every projected value is a six-digit lowercase hex", () => {
 test("every projected colour clears the stroke floor on every surface", () => {
   for (const [id, hex] of Object.entries(GOOGLE_PROJECTED))
     for (const s of SURFACES)
-      assert.ok(contrast(hex, s) >= 3, `colorId ${id} on ${s} is ${contrast(hex, s).toFixed(2)}`);
+      assert.ok(
+        contrast(hex, s) >= 3,
+        `colorId ${id} on ${s} is ${contrast(hex, s).toFixed(2)}`,
+      );
 });
 
 test("every projected colour clears The Chip Test with white on top", () => {
   for (const [id, hex] of Object.entries(GOOGLE_PROJECTED))
     assert.ok(
       contrast("#ffffff", hex) >= 4.5,
-      `colorId ${id} is ${contrast("#ffffff", hex).toFixed(2)} with white`
+      `colorId ${id} is ${contrast("#ffffff", hex).toFixed(2)} with white`,
     );
 });
 
@@ -67,7 +72,9 @@ test("Tomato is no longer red", () => {
 
 test("the three reds stay distinguishable from each other", () => {
   // Hue rotation was rejected precisely because it collapsed these into one stroke.
-  const [flamingo, tangerine, tomato] = ["4", "6", "11"].map((k) => GOOGLE_PROJECTED[k]);
+  const [flamingo, tangerine, tomato] = ["4", "6", "11"].map(
+    (k) => GOOGLE_PROJECTED[k],
+  );
   assert.notEqual(flamingo, tangerine);
   assert.notEqual(tangerine, tomato);
   assert.notEqual(flamingo, tomato);
@@ -82,7 +89,11 @@ test("a near-grey source projects to a true grey", () => {
 });
 
 test("absence is the default, never a twelfth state", () => {
-  assert.equal(projectedColour(null), null, "the calendar default gets no stroke");
+  assert.equal(
+    projectedColour(null),
+    null,
+    "the calendar default gets no stroke",
+  );
   assert.equal(projectedColour("99"), null, "an unknown id gets no stroke");
   assert.equal(projectedColour(""), null);
 });

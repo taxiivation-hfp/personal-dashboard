@@ -37,12 +37,16 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function POST(req: Request) {
   if (gateMode() === "misconfigured") {
     return Response.json(
-      { error: "This deployment is missing APP_PASSCODE or a 32+ character SESSION_SECRET." },
-      { status: 503 }
+      {
+        error:
+          "This deployment is missing APP_PASSCODE or a 32+ character SESSION_SECRET.",
+      },
+      { status: 503 },
     );
   }
   const passcode = process.env.APP_PASSCODE;
-  if (!passcode) return Response.json({ error: "no passcode configured" }, { status: 503 });
+  if (!passcode)
+    return Response.json({ error: "no passcode configured" }, { status: 503 });
 
   // This route is public AND mutating (it mints a session), so it's the one place a
   // cross-origin POST could matter. SameSite=Lax covers the cookie; this covers the form.
@@ -50,7 +54,10 @@ export async function POST(req: Request) {
   if (origin) {
     try {
       if (new URL(origin).host !== req.headers.get("host")) {
-        return Response.json({ error: "cross-origin request rejected" }, { status: 403 });
+        return Response.json(
+          { error: "cross-origin request rejected" },
+          { status: 403 },
+        );
       }
     } catch {
       return Response.json({ error: "bad origin" }, { status: 403 });
@@ -60,7 +67,10 @@ export async function POST(req: Request) {
   const now = Date.now();
   if (now < lockedUntil) {
     const retryAfter = Math.ceil((lockedUntil - now) / 1000);
-    return Response.json({ error: `too many attempts — try again in ${retryAfter}s`, retryAfter }, { status: 429 });
+    return Response.json(
+      { error: `too many attempts — try again in ${retryAfter}s`, retryAfter },
+      { status: 429 },
+    );
   }
   if (lastFailAt && now - lastFailAt > DECAY_MS) {
     fails = 0;
@@ -91,7 +101,10 @@ export async function POST(req: Request) {
   if (process.env.NODE_ENV === "production" && !secure) {
     // Minting a session over plain HTTP in production would send the cookie in clear
     // text on every later request. Refuse rather than downgrade silently.
-    return Response.json({ error: "refusing to start a session over plain HTTP" }, { status: 400 });
+    return Response.json(
+      { error: "refusing to start a session over plain HTTP" },
+      { status: 400 },
+    );
   }
 
   fails = 0;
@@ -109,7 +122,7 @@ export async function POST(req: Request) {
       secure ? "Secure" : "",
     ]
       .filter(Boolean)
-      .join("; ")
+      .join("; "),
   );
   return res;
 }

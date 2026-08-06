@@ -52,7 +52,8 @@ export const PILLAR_DEFAULT_VAR: Record<PillarKey, string> = {
   portfolio: "var(--color-portfolio)",
 };
 
-export const isPaletteHex = (hex: string): boolean => PILLAR_PALETTE.some((p) => p.hex === hex);
+export const isPaletteHex = (hex: string): boolean =>
+  PILLAR_PALETTE.some((p) => p.hex === hex);
 
 export const WINDOW_DAYS = 14;
 
@@ -236,6 +237,16 @@ export type MetricRing = {
   /** Which workout row this metric counts, when it counts one. Carried through so the UI
    *  can tell which rows get a Log button without re-deriving it from the key. */
   workoutKind?: WorkoutKind;
+  /**
+   * The metric's share of the pillar's mean, copied from the registry.
+   *
+   * Carried through so the segmented donut can give each metric an ARC LENGTH — Strength
+   * owns most of Physical's circle and Cardio a fifth. Without it the view would have to
+   * re-import METRICS and match on key, which is the registry leaking into the UI.
+   *
+   * It is the WEIGHT, not the value: what a metric is worth, never how well it went.
+   */
+  weight: number;
 };
 
 export type PillarRingView = {
@@ -252,7 +263,11 @@ export function metricState(m: Metric, hasSource: boolean): MetricState {
   return m.required == null || m.required < 1 ? "unscored" : "scored";
 }
 
-export function metricFill(count: number, required: number | null, hasSource: boolean): number | null {
+export function metricFill(
+  count: number,
+  required: number | null,
+  hasSource: boolean,
+): number | null {
   if (!hasSource) return null;
   if (required == null || required < 1) return null;
   return Math.min(1, count / required);
@@ -268,7 +283,11 @@ export function metricFill(count: number, required: number | null, hasSource: bo
  * That is the failure the cap exists to prevent, so the cap stays in the maths and the
  * acknowledgement lives in the pixels.
  */
-export function metricOverdrive(count: number, required: number | null, hasSource: boolean): number | null {
+export function metricOverdrive(
+  count: number,
+  required: number | null,
+  hasSource: boolean,
+): number | null {
   if (!hasSource || required == null || required < 1) return null;
   const ratio = count / required;
   if (ratio <= 1) return null;
@@ -290,7 +309,10 @@ function windowLine(state: MetricState, observedDays: number): string | null {
   return `day ${observedDays} of ${WINDOW_DAYS}`;
 }
 
-export function buildRings(counts: Record<string, RawCount>, observedDays: number): PillarRingView[] {
+export function buildRings(
+  counts: Record<string, RawCount>,
+  observedDays: number,
+): PillarRingView[] {
   return PILLAR_ORDER.map((pillar) => {
     const mine = METRICS.filter((m) => m.pillar === pillar);
 
@@ -310,6 +332,7 @@ export function buildRings(counts: Record<string, RawCount>, observedDays: numbe
         fact: factLine(m, raw.count, state),
         window: windowLine(state, observedDays),
         workoutKind: m.workoutKind,
+        weight: m.weight,
       };
     });
 
@@ -325,7 +348,8 @@ export function buildRings(counts: Record<string, RawCount>, observedDays: numbe
 
     const totalWeight = live.reduce((s, x) => s + x.weight, 0);
     const fill = totalWeight
-      ? live.reduce((s, x) => s + (x.r.fill as number) * x.weight, 0) / totalWeight
+      ? live.reduce((s, x) => s + (x.r.fill as number) * x.weight, 0) /
+        totalWeight
       : null;
 
     return { pillar, fill, metrics };

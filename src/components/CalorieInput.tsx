@@ -52,7 +52,9 @@ export default function CalorieInput({
     const last = entries[entries.length - 1];
     if (!last) return;
     setBusy(true);
-    await fetch(`/api/calories?id=${last.id}&date=${date}`, { method: "DELETE" }).catch(() => {});
+    await fetch(`/api/calories?id=${last.id}&date=${date}`, {
+      method: "DELETE",
+    }).catch(() => {});
     setBusy(false);
     onChanged();
   }
@@ -68,7 +70,11 @@ export default function CalorieInput({
       {/* The total is the value now, so it takes ink — the field beside it is only an
           increment. Tabular so it doesn't jitter as it climbs through the day. */}
       <span className="ml-auto text-body tabular-nums">
-        {calories == null ? <span className="text-[var(--color-muted)]">—</span> : calories}
+        {calories == null ? (
+          <span className="text-[var(--color-muted)]">—</span>
+        ) : (
+          calories
+        )}
       </span>
 
       {entries.length > 0 && (

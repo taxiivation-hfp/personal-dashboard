@@ -4,12 +4,17 @@ import { updateSubgoal, setSubgoalDone, deleteSubgoal } from "@/lib/engine";
 
 export const runtime = "nodejs";
 
-async function subgoalId(ctx: { params: Promise<{ id: string }> }): Promise<number | null> {
+async function subgoalId(ctx: {
+  params: Promise<{ id: string }>;
+}): Promise<number | null> {
   const n = Number((await ctx.params).id);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
   try {
     const id = await subgoalId(ctx);
     if (id == null) return Response.json({ error: "bad id" }, { status: 400 });
@@ -21,11 +26,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     return Response.json({ goals: await listGoals(db) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
   try {
     const id = await subgoalId(ctx);
     if (id == null) return Response.json({ error: "bad id" }, { status: 400 });
@@ -33,6 +44,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     await deleteSubgoal(db, id);
     return Response.json({ goals: await listGoals(db) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

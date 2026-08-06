@@ -64,8 +64,8 @@ export default function BlockList({
   if (!live.length) {
     return (
       <p className="max-w-[42ch] py-6 text-body leading-relaxed text-[var(--color-muted)]">
-        Nothing on the calendar today. Blocks come from Google Calendar — put something there and it
-        shows up here to mark.
+        Nothing on the calendar today. Blocks come from Google Calendar — put
+        something there and it shows up here to mark.
       </p>
     );
   }
@@ -123,7 +123,11 @@ export default function BlockList({
                       onClick={() => choose(b, s)}
                       className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small text-[var(--color-ink)] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
                     >
-                      {s === "adhered" ? "Adhered" : s === "drifted" ? "Drifted" : "Skipped"}
+                      {s === "adhered"
+                        ? "Adhered"
+                        : s === "drifted"
+                          ? "Drifted"
+                          : "Skipped"}
                     </button>
                   ))}
                 </div>
@@ -156,7 +160,11 @@ export default function BlockList({
                             }
                     }
                   >
-                    {b.state === "adhered" ? "Adhered" : b.state === "drifted" ? "Drifted" : "Skipped"}
+                    {b.state === "adhered"
+                      ? "Adhered"
+                      : b.state === "drifted"
+                        ? "Drifted"
+                        : "Skipped"}
                   </span>
                   {b.reason && (
                     <span className="min-w-0 truncate font-serif text-small text-[var(--color-muted)]">

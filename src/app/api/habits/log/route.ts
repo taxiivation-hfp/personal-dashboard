@@ -15,13 +15,15 @@ export async function POST(req: Request) {
     const db = await getDb();
     const b = await req.json();
     const id = Number(b.habit_id);
-    if (!Number.isInteger(id) || id <= 0) return Response.json({ error: "habit_id required" }, { status: 400 });
+    if (!Number.isInteger(id) || id <= 0)
+      return Response.json({ error: "habit_id required" }, { status: 400 });
     const date = isISODate(b.date) ? b.date : todayISO();
 
     if (b.value !== undefined) {
       // null / empty clears the day, exactly like unticking.
       const v = b.value === null || b.value === "" ? null : Number(b.value);
-      if (v !== null && !Number.isFinite(v)) return Response.json({ error: "bad value" }, { status: 400 });
+      if (v !== null && !Number.isFinite(v))
+        return Response.json({ error: "bad value" }, { status: 400 });
       await setHabitValue(db, id, date, v);
       return Response.json({ ok: true });
     }
@@ -29,6 +31,9 @@ export async function POST(req: Request) {
     await setHabit(db, id, date, b.done === undefined ? true : Boolean(b.done));
     return Response.json({ ok: true });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

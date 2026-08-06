@@ -82,7 +82,10 @@ export function PhoneTabBar({
             transform: `translateX(${ORDER.indexOf(tab) * 100}%)`,
           }}
         >
-          <span className="h-[2px] w-6 rounded-full" style={{ background: "var(--color-accent)" }} />
+          <span
+            className="h-[2px] w-6 rounded-full"
+            style={{ background: "var(--color-accent)" }}
+          />
         </span>
       </div>
     </nav>
@@ -123,7 +126,8 @@ export function PhoneSwipe({
     const dy = e.clientY - s.y;
     // Horizontal INTENT, not just horizontal distance — otherwise a diagonal scroll
     // flips the tab out from under you.
-    if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < Math.abs(dy) * SWIPE_RATIO) return;
+    if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < Math.abs(dy) * SWIPE_RATIO)
+      return;
     const i = ORDER.indexOf(tab);
     const next = dx < 0 ? i + 1 : i - 1;
     if (next >= 0 && next < ORDER.length) onTab(ORDER[next]);

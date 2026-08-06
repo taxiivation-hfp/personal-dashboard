@@ -10,8 +10,10 @@ const STATES = new Set(["adhered", "drifted", "skipped", "dismissed"]);
 export async function POST(req: Request) {
   try {
     const b = await req.json();
-    if (!isISODate(b.date)) return Response.json({ error: "bad date" }, { status: 400 });
-    if (!b.event_id) return Response.json({ error: "event_id required" }, { status: 400 });
+    if (!isISODate(b.date))
+      return Response.json({ error: "bad date" }, { status: 400 });
+    if (!b.event_id)
+      return Response.json({ error: "event_id required" }, { status: 400 });
 
     const db = await getDb();
 
@@ -21,7 +23,8 @@ export async function POST(req: Request) {
       await unmarkBlock(db, b.date, String(b.event_id));
       return Response.json({ ok: true, state: null });
     }
-    if (!STATES.has(String(b.state))) return Response.json({ error: "bad state" }, { status: 400 });
+    if (!STATES.has(String(b.state)))
+      return Response.json({ error: "bad state" }, { status: 400 });
 
     await markBlock(db, {
       date: b.date,
@@ -35,6 +38,9 @@ export async function POST(req: Request) {
     });
     return Response.json({ ok: true, state: b.state });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

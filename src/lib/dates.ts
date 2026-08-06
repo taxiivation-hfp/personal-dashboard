@@ -21,7 +21,11 @@ export function isISODate(s: unknown): s is string {
   if (typeof s !== "string" || !DATE_RE.test(s)) return false;
   const [y, m, d] = s.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
-  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  );
 }
 
 /** Shift a 'YYYY-MM-DD' by n days (UTC math on the date parts — safe for date-only). */
@@ -50,20 +54,33 @@ export function daysBetween(a: string, b: string): number {
 /** The app-tz UTC offset for a given date, e.g. "+11:00" (DST-aware). */
 export function tzOffset(date: string, tz: string = APP_TZ): string {
   const dt = new Date(`${date}T12:00:00Z`);
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "longOffset" }).formatToParts(dt);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    timeZoneName: "longOffset",
+  }).formatToParts(dt);
   const v = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+00:00";
   const m = v.match(/GMT([+-])(\d{2}):?(\d{2})/);
   return m ? `${m[1]}${m[2]}:${m[3]}` : "+00:00";
 }
 
 /** RFC3339 day bounds for a date in the app tz (for Google Calendar timeMin/timeMax). */
-export function dayBoundsRFC3339(date: string, tz: string = APP_TZ): { timeMin: string; timeMax: string } {
+export function dayBoundsRFC3339(
+  date: string,
+  tz: string = APP_TZ,
+): { timeMin: string; timeMax: string } {
   const off = tzOffset(date, tz);
-  return { timeMin: `${date}T00:00:00${off}`, timeMax: `${date}T23:59:59${off}` };
+  return {
+    timeMin: `${date}T00:00:00${off}`,
+    timeMax: `${date}T23:59:59${off}`,
+  };
 }
 
 /** RFC3339 instant for a date + 'HH:MM' in the app tz (for creating timed events). */
-export function rfc3339(date: string, time: string, tz: string = APP_TZ): string {
+export function rfc3339(
+  date: string,
+  time: string,
+  tz: string = APP_TZ,
+): string {
   return `${date}T${time.length === 5 ? time + ":00" : time}${tzOffset(date, tz)}`;
 }
 

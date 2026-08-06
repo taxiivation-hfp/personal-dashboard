@@ -31,7 +31,10 @@ export default function GoalEditor({
   async function call(url: string, init: RequestInit) {
     setBusy(true);
     try {
-      const r = await fetch(url, { headers: { "content-type": "application/json" }, ...init })
+      const r = await fetch(url, {
+        headers: { "content-type": "application/json" },
+        ...init,
+      })
         .then((x) => x.json())
         .catch(() => ({ error: true }));
       if (!r.error && r.goals) setGoals(r.goals);
@@ -53,9 +56,10 @@ export default function GoalEditor({
       </header>
 
       <p className="mt-3 max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
-        Subgoals split a goal evenly unless you set a weight. Leave one blank and it takes an
-        equal share of whatever the others leave behind. Progress comes from what you&apos;ve
-        ticked — there&apos;s nothing to set by hand.
+        Subgoals split a goal evenly unless you set a weight. Leave one blank
+        and it takes an equal share of whatever the others leave behind.
+        Progress comes from what you&apos;ve ticked — there&apos;s nothing to
+        set by hand.
       </p>
 
       {/* Ruled rows, not cards. Every goal used to be its own rounded panel, which made the
@@ -138,12 +142,17 @@ export default function GoalEditor({
                       max={100}
                       placeholder="auto"
                       aria-label={`Weight for ${s.title}, blank for auto`}
-                      defaultValue={s.weight > 0 ? Math.round(s.weight * 100) : ""}
+                      defaultValue={
+                        s.weight > 0 ? Math.round(s.weight * 100) : ""
+                      }
                       onBlur={(e) =>
                         call(`/api/subgoals/${s.id}`, {
                           method: "PATCH",
                           body: JSON.stringify({
-                            weight: e.target.value === "" ? 0 : Number(e.target.value) / 100,
+                            weight:
+                              e.target.value === ""
+                                ? 0
+                                : Number(e.target.value) / 100,
                           }),
                         })
                       }
@@ -169,7 +178,8 @@ export default function GoalEditor({
                   arithmetic, not a fault. */}
               {g.overAllocated && (
                 <p className="mt-2 text-micro text-[var(--color-muted)]">
-                  Set weights total more than 100%, so the auto ones have nothing left.
+                  Set weights total more than 100%, so the auto ones have
+                  nothing left.
                 </p>
               )}
 
@@ -188,7 +198,9 @@ export default function GoalEditor({
               >
                 <input
                   value={newSub[g.id] ?? ""}
-                  onChange={(e) => setNewSub({ ...newSub, [g.id]: e.target.value })}
+                  onChange={(e) =>
+                    setNewSub({ ...newSub, [g.id]: e.target.value })
+                  }
                   placeholder="Add a subgoal"
                   className="w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-small outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
                 />
@@ -198,7 +210,9 @@ export default function GoalEditor({
         ))}
 
         {goals.length === 0 && (
-          <p className="py-5 text-body text-[var(--color-muted)]">No goals yet.</p>
+          <p className="py-5 text-body text-[var(--color-muted)]">
+            No goals yet.
+          </p>
         )}
       </div>
 

@@ -20,16 +20,37 @@ export default function JournalPanel({
   date,
   entries,
   onChanged,
+  prompt = false,
+  onPromptHandled,
 }: {
   date: string;
   entries: JournalView[];
   onChanged: () => void;
+  /** Raised by the Journal row in the day's checklist. The journal is written, not ticked,
+   *  so its row asks which kind of page rather than toggling a box. */
+  prompt?: boolean;
+  onPromptHandled?: () => void;
 }) {
   const [mode, setMode] = useState<Mode>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<number | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const chooserRef = useRef<HTMLDialogElement>(null);
+
+  // The chooser stands down the moment a kind is picked — the page itself is the next
+  // thing on screen, and two stacked modals would be one too many.
+  useEffect(() => {
+    const d = chooserRef.current;
+    if (!d) return;
+    if (prompt && !mode && !d.open) d.showModal();
+    if ((!prompt || mode) && d.open) d.close();
+  }, [prompt, mode]);
+
+  const choose = (m: Mode) => {
+    onPromptHandled?.();
+    setMode(m);
+  };
 
   useEffect(() => {
     const d = dialogRef.current;
@@ -78,10 +99,16 @@ export default function JournalPanel({
                 className="flex h-[119px] w-[84px] overflow-hidden rounded-lg border border-[var(--color-line)] p-2"
                 style={{ background: "#fdfbf6" }}
               >
-                <span className="line-clamp-6 font-serif text-micro text-[var(--color-ink)]">{e.preview || "…"}</span>
+                <span className="line-clamp-6 font-serif text-micro text-[var(--color-ink)]">
+                  {e.preview || "…"}
+                </span>
               </div>
             ) : (
-              <a href={`/api/journal/${e.id}/image`} target="_blank" rel="noreferrer">
+              <a
+                href={`/api/journal/${e.id}/image`}
+                target="_blank"
+                rel="noreferrer"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`/api/journal/${e.id}/image`}
@@ -111,7 +138,9 @@ export default function JournalPanel({
                 model, and it is enough. */}
             {confirming === e.id && (
               <div className="absolute left-0 top-full z-[var(--z-popover)] mt-1.5 w-48 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] p-3">
-                <p className="text-small leading-snug">Delete this page? It can&apos;t be undone.</p>
+                <p className="text-small leading-snug">
+                  Delete this page? It can&apos;t be undone.
+                </p>
                 <div className="mt-3 flex items-center gap-3">
                   <button
                     onClick={() => remove(e.id)}
@@ -149,6 +178,40 @@ export default function JournalPanel({
         </div>
       </div>
 
+      {/* The chooser, raised from the day's checklist. Two equally-weighted options: a
+          handwritten page and a typed one are the same artefact here, and giving either a
+          filled button would quietly nominate one as the proper way to keep a journal. */}
+      <dialog
+        ref={chooserRef}
+        onClose={() => onPromptHandled?.()}
+        className="w-[min(92vw,22rem)] rounded-2xl bg-[var(--color-panel)] p-5 text-[var(--color-ink)]"
+      >
+        <p className="font-serif text-body">Tonight&apos;s page</p>
+        <p className="mt-1 text-micro text-[var(--color-muted)]">
+          Both land on the same sheet. Nothing reads it back.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2.5">
+          <button
+            onClick={() => choose("draw")}
+            className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-bg)]"
+          >
+            Write it
+          </button>
+          <button
+            onClick={() => choose("type")}
+            className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-bg)]"
+          >
+            Type it
+          </button>
+          <button
+            onClick={() => onPromptHandled?.()}
+            className="ml-auto text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+          >
+            not now
+          </button>
+        </div>
+      </dialog>
+
       {/* Ink at weight 600, not the accent. The accent is certified at 4.7:1 with WHITE ON
           TOP — as a fill. As text on the beige page it measures 4.02:1 and fails the body
           floor, and it also made error-ness ride on hue alone. Same treatment as the login
@@ -171,7 +234,9 @@ export default function JournalPanel({
       >
         {mode === "draw" && (
           <JournalCanvas
-            onSave={(image, width, height) => post({ kind: "drawing", image, width, height })}
+            onSave={(image, width, height) =>
+              post({ kind: "drawing", image, width, height })
+            }
             onCancel={() => !busy && setMode(null)}
             busy={busy}
           />

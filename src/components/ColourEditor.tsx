@@ -47,9 +47,9 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
       </header>
 
       <p className="mt-3 max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
-        Pick a hue for each pillar. It colours that pillar&apos;s rings, goals and skills.
-        The accent, the ink and the three block states stay as they are — one accent is
-        what keeps the page quiet.
+        Pick a hue for each pillar. It colours that pillar&apos;s rings, goals
+        and skills. The accent, the ink and the three block states stay as they
+        are — one accent is what keeps the page quiet.
       </p>
 
       <div className="mt-10 flex flex-col gap-10">
@@ -63,7 +63,8 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
               <h2 className="text-small font-semibold">{p.name}</h2>
               <span className="text-micro text-[var(--color-muted)]">
                 {p.color
-                  ? PILLAR_PALETTE.find((x) => x.hex === p.color)?.name ?? p.color
+                  ? (PILLAR_PALETTE.find((x) => x.hex === p.color)?.name ??
+                    p.color)
                   : "Default"}
               </span>
             </div>
@@ -72,7 +73,13 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
                 real pillar ring does on Today — the preview is worth nothing if it is not
                 the thing it previews. */}
             <div className="mt-4">
-              <Ring fill={0.68} size={36} stroke={3.5} tone={p.key as PillarKey} color={p.color} />
+              <Ring
+                fill={0.68}
+                size={36}
+                stroke={3.5}
+                tone={p.key as PillarKey}
+                color={p.color}
+              />
             </div>
 
             {/* A curated row, not a picker. Selection is carried by the ink rim — form, not
@@ -87,10 +94,14 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
                 className="h-7 w-7 rounded-full border-2 transition-colors disabled:opacity-40"
                 style={{
                   background: PILLAR_DEFAULT_VAR[p.key as PillarKey],
-                  borderColor: p.color == null ? "var(--color-ink)" : "transparent",
+                  borderColor:
+                    p.color == null ? "var(--color-ink)" : "transparent",
                 }}
               />
-              <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--color-line)]" />
+              <span
+                aria-hidden
+                className="mx-0.5 h-5 w-px bg-[var(--color-line)]"
+              />
               {PILLAR_PALETTE.map((c) => (
                 <button
                   key={c.hex}
@@ -102,7 +113,8 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
                   className="h-7 w-7 rounded-full border-2 transition-colors disabled:opacity-40"
                   style={{
                     background: c.hex,
-                    borderColor: p.color === c.hex ? "var(--color-ink)" : "transparent",
+                    borderColor:
+                      p.color === c.hex ? "var(--color-ink)" : "transparent",
                   }}
                 />
               ))}

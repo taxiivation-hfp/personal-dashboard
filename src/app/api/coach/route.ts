@@ -1,5 +1,9 @@
 import { getDb } from "@/lib/db/client";
-import { runCoachStream, getCoachHistory, type CoachEvent } from "@/lib/coach/coach";
+import {
+  runCoachStream,
+  getCoachHistory,
+  type CoachEvent,
+} from "@/lib/coach/coach";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +14,10 @@ export async function GET() {
     const db = await getDb();
     return Response.json({ messages: await getCoachHistory(db) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }
 
@@ -28,19 +35,24 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
-  if (!message) return Response.json({ error: "message required" }, { status: 400 });
+  if (!message)
+    return Response.json({ error: "message required" }, { status: 400 });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (e: CoachEvent) => controller.enqueue(encoder.encode(JSON.stringify(e) + "\n"));
+      const send = (e: CoachEvent) =>
+        controller.enqueue(encoder.encode(JSON.stringify(e) + "\n"));
       try {
         const db = await getDb();
         await runCoachStream(db, message, send);
       } catch (e) {
         // The turn already began streaming, so a mid-turn failure can't become an
         // HTTP status — it has to arrive as an event the client can render.
-        send({ type: "error", message: e instanceof Error ? e.message : String(e) });
+        send({
+          type: "error",
+          message: e instanceof Error ? e.message : String(e),
+        });
       } finally {
         controller.close();
       }

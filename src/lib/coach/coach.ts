@@ -12,7 +12,8 @@ import { executeTool, TOOL_DEFS } from "./tools";
 // One-line swap via COACH_MODEL in .env.local. Coach runs on Sonnet 4.6 — Haiku 4.5 was
 // tested first but missed/hallucinated tool calls, so it's reserved for cheap background jobs.
 const MODEL = process.env.COACH_MODEL || "claude-sonnet-4-6";
-const EFFORT = (process.env.COACH_EFFORT || "medium") as "low" | "medium" | "high" | "xhigh" | "max";
+const EFFORT = (process.env.COACH_EFFORT || "medium") as
+  "low" | "medium" | "high" | "xhigh" | "max";
 const MAX_TOOL_ITERS = 8;
 
 // History is re-sent on EVERY call in the tool loop, so an unbounded transcript makes
@@ -26,7 +27,8 @@ const HISTORY_LIMIT = Number(process.env.COACH_HISTORY_LIMIT || 30);
 // NOTE: this list must include every model that supports adaptive thinking + effort.
 // It previously omitted opus-5 and sonnet-5, so setting COACH_MODEL to either silently
 // dropped BOTH thinking and effort with no error — a quiet downgrade, not a crash.
-const ADAPTIVE_THINKING = /opus-5|sonnet-5|opus-4-[678]|sonnet-4-6|fable-5|mythos-5/.test(MODEL);
+const ADAPTIVE_THINKING =
+  /opus-5|sonnet-5|opus-4-[678]|sonnet-4-6|fable-5|mythos-5/.test(MODEL);
 
 function systemPrompt(date: string): string {
   return `You are the coach inside a private single-user app built around ADHERENCE. Today is ${prettyDate(date)} (${date}, ${APP_TZ}).
@@ -74,7 +76,11 @@ async function loadHistory(db: Client): Promise<Anthropic.MessageParam[]> {
   return msgs;
 }
 
-async function saveTurn(db: Client, userText: string, assistantText: string): Promise<void> {
+async function saveTurn(
+  db: Client,
+  userText: string,
+  assistantText: string,
+): Promise<void> {
   await db.batch(
     [
       {
@@ -86,7 +92,7 @@ async function saveTurn(db: Client, userText: string, assistantText: string): Pr
         args: [JSON.stringify([{ type: "text", text: assistantText }])],
       },
     ],
-    "write"
+    "write",
   );
 }
 
@@ -103,7 +109,7 @@ async function saveTurn(db: Client, userText: string, assistantText: string): Pr
 export async function runCoachStream(
   db: Client,
   userText: string,
-  emit: (e: CoachEvent) => void
+  emit: (e: CoachEvent) => void,
 ): Promise<void> {
   if (!process.env.ANTHROPIC_API_KEY) {
     emit({
@@ -130,7 +136,10 @@ export async function runCoachStream(
     {
       role: "user",
       content: [
-        { type: "text", text: `<board date="${date}">${JSON.stringify(board)}</board>` },
+        {
+          type: "text",
+          text: `<board date="${date}">${JSON.stringify(board)}</board>`,
+        },
         { type: "text", text: userText },
       ],
     },
@@ -148,13 +157,17 @@ export async function runCoachStream(
       // system block caches the entire fixed prefix (system + the 12 tool schemas,
       // ~3k tokens). Without this it is re-billed at full price on every iteration
       // of the loop below, which is the single largest line on the coach's bill.
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      system: [
+        { type: "text", text: system, cache_control: { type: "ephemeral" } },
+      ],
       tools: TOOL_DEFS as unknown as Anthropic.ToolUnion[],
       messages,
       // Second breakpoint, auto-placed on the last content block: each iteration reads
       // back the tool exchange the previous one wrote instead of paying for it again.
       cache_control: { type: "ephemeral" },
-      ...(ADAPTIVE_THINKING ? { thinking: { type: "adaptive" }, output_config: { effort: EFFORT } } : {}),
+      ...(ADAPTIVE_THINKING
+        ? { thinking: { type: "adaptive" }, output_config: { effort: EFFORT } }
+        : {}),
     } as Anthropic.MessageStreamParams);
 
     stream.on("text", (delta) => {
@@ -183,8 +196,16 @@ export async function runCoachStream(
     for (const block of resp.content) {
       if (block.type !== "tool_use") continue;
       try {
-        const out = await executeTool(db, block.name, (block.input ?? {}) as Record<string, unknown>);
-        toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(out) });
+        const out = await executeTool(
+          db,
+          block.name,
+          (block.input ?? {}) as Record<string, unknown>,
+        );
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify(out),
+        });
       } catch (e) {
         toolResults.push({
           type: "tool_result",
@@ -216,10 +237,17 @@ export async function runCoach(db: Client, userText: string): Promise<Result> {
   return offline ? { text, offline } : { text };
 }
 
-export async function getCoachHistory(db: Client): Promise<{ role: string; text: string }[]> {
-  const r = await db.execute("SELECT role, content FROM coach_messages ORDER BY id");
+export async function getCoachHistory(
+  db: Client,
+): Promise<{ role: string; text: string }[]> {
+  const r = await db.execute(
+    "SELECT role, content FROM coach_messages ORDER BY id",
+  );
   return r.rows.map((row) => {
-    const blocks = JSON.parse(String(row.content)) as { type: string; text?: string }[];
+    const blocks = JSON.parse(String(row.content)) as {
+      type: string;
+      text?: string;
+    }[];
     const text = blocks
       .filter((b) => b.type === "text")
       .map((b) => b.text ?? "")

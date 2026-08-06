@@ -32,6 +32,9 @@ export async function GET(req: Request) {
       pillars: buildRings(counts, observedDays),
     });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

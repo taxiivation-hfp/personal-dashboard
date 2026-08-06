@@ -279,6 +279,16 @@ CREATE TABLE IF NOT EXISTS health_logs (
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
+-- What you INTEND the day to be, in your own words. One line, set ahead of time and
+-- rewriteable — it is an intention, not a record, so changing it is normal rather than
+-- revisionism. Deliberately unconnected to adherence, the rings and the score: naming a
+-- day "thesis push" must never become something you can succeed or fail at.
+CREATE TABLE IF NOT EXISTS day_titles (
+  date       TEXT PRIMARY KEY NOT NULL CHECK (date GLOB '????-??-??'),
+  title      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
 -- Calories through the day. A LOG, not a total: 400 in the morning and 800 later reads
 -- 1200, and a mistyped entry is REMOVED rather than retyped. The total is derived on
 -- read, so a stored total can never drift out of step with the entries that define it —

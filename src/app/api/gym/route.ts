@@ -1,5 +1,10 @@
 import { getDb } from "@/lib/db/client";
-import { saveWorkout, deleteWorkout, workoutsOn, type WorkoutKind } from "@/lib/engine";
+import {
+  saveWorkout,
+  deleteWorkout,
+  workoutsOn,
+  type WorkoutKind,
+} from "@/lib/engine";
 import { isISODate, todayISO } from "@/lib/dates";
 
 export const runtime = "nodejs";
@@ -24,9 +29,11 @@ export async function POST(req: Request) {
   try {
     const b = await req.json();
     const kind = String(b.kind ?? "") as WorkoutKind;
-    if (!KINDS.has(kind)) return Response.json({ error: "bad kind" }, { status: 400 });
+    if (!KINDS.has(kind))
+      return Response.json({ error: "bad kind" }, { status: 400 });
     const note = String(b.note ?? "");
-    if (note.length > MAX_NOTE) return Response.json({ error: "note too long" }, { status: 413 });
+    if (note.length > MAX_NOTE)
+      return Response.json({ error: "note too long" }, { status: 413 });
     const date = isISODate(b.date) ? b.date : todayISO();
     // Distinguish "no id supplied" from "an id was supplied and it was rubbish".
     if (b.id != null && rowId(b.id) == null) {
@@ -37,7 +44,10 @@ export async function POST(req: Request) {
     const id = await saveWorkout(db, { id: rowId(b.id), date, kind, note });
     return Response.json({ id, workouts: await workoutsOn(db, date) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }
 
@@ -46,7 +56,8 @@ export async function DELETE(req: Request) {
   try {
     const url = new URL(req.url);
     const id = rowId(url.searchParams.get("id"));
-    if (id == null) return Response.json({ error: "id required" }, { status: 400 });
+    if (id == null)
+      return Response.json({ error: "id required" }, { status: 400 });
     const raw = url.searchParams.get("date");
     const date = isISODate(raw) ? raw : todayISO();
 
@@ -54,6 +65,9 @@ export async function DELETE(req: Request) {
     const removed = await deleteWorkout(db, id);
     return Response.json({ removed, workouts: await workoutsOn(db, date) });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

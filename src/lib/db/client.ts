@@ -21,7 +21,7 @@ function assertProductionDatabase(): void {
     throw new Error(
       `DATABASE_URL is "${url}" in production. A file-backed database on an ephemeral ` +
         `container filesystem loses ALL data on restart. Set DATABASE_URL to a libsql:// ` +
-        `URL (plus TURSO_AUTH_TOKEN) before deploying.`
+        `URL (plus TURSO_AUTH_TOKEN) before deploying.`,
     );
   }
 }
@@ -40,23 +40,32 @@ async function ensure(c: Client): Promise<Client> {
     throw new Error("Could not enable foreign_keys pragma");
   }
 
-  const schema = readFileSync(resolve(process.cwd(), "src/lib/db/schema.sql"), "utf8");
+  const schema = readFileSync(
+    resolve(process.cwd(), "src/lib/db/schema.sql"),
+    "utf8",
+  );
   await c.executeMultiple(schema);
 
   // Idempotent column adds (SQLite ALTER errors if the column exists).
   const has = async (table: string, col: string): Promise<boolean> => {
     const r = await c.execute(`PRAGMA table_info(${table})`);
-    return r.rows.some((x) => String((x as Record<string, unknown>).name) === col);
+    return r.rows.some(
+      (x) => String((x as Record<string, unknown>).name) === col,
+    );
   };
 
   if (!(await has("tasks", "calendar_event_id"))) {
     await c.execute("ALTER TABLE tasks ADD COLUMN calendar_event_id TEXT");
   }
   if (!(await has("gym_sessions", "kind"))) {
-    await c.execute("ALTER TABLE gym_sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'strength'");
+    await c.execute(
+      "ALTER TABLE gym_sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'strength'",
+    );
   }
   if (!(await has("journal_entries", "kind"))) {
-    await c.execute("ALTER TABLE journal_entries ADD COLUMN kind TEXT NOT NULL DEFAULT 'drawing'");
+    await c.execute(
+      "ALTER TABLE journal_entries ADD COLUMN kind TEXT NOT NULL DEFAULT 'drawing'",
+    );
   }
   if (!(await has("journal_entries", "body"))) {
     await c.execute("ALTER TABLE journal_entries ADD COLUMN body TEXT");
@@ -66,12 +75,20 @@ async function ensure(c: Client): Promise<Client> {
   }
   if (!(await has("habits", "input"))) {
     await c.execute(
-      "ALTER TABLE habits ADD COLUMN input TEXT NOT NULL DEFAULT 'check' CHECK (input IN ('check','number'))"
+      "ALTER TABLE habits ADD COLUMN input TEXT NOT NULL DEFAULT 'check' CHECK (input IN ('check','number'))",
     );
   }
   if (!(await has("habits", "unit"))) {
     await c.execute("ALTER TABLE habits ADD COLUMN unit TEXT");
   }
+
+  // day_titles arrived after the last migration latch, so ensure() creates it here as
+  // well as in schema.sql — a dev DB that never runs db:migrate still gets it.
+  await c.execute(`CREATE TABLE IF NOT EXISTS day_titles (
+    date       TEXT PRIMARY KEY NOT NULL CHECK (date GLOB '????-??-??'),
+    title      TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )`);
 
   // Only after the back-fills — see the note in schema.sql.
   //
@@ -82,7 +99,9 @@ async function ensure(c: Client): Promise<Client> {
   // engine.saveWorkout is addressed by row id and has no ON CONFLICT to fall back on.
   await c.execute("DROP INDEX IF EXISTS idx_gym_sessions_date_kind");
   await c.execute("DROP INDEX IF EXISTS idx_gym_sessions_date");
-  await c.execute("CREATE INDEX IF NOT EXISTS idx_gym_sessions_date ON gym_sessions(date)");
+  await c.execute(
+    "CREATE INDEX IF NOT EXISTS idx_gym_sessions_date ON gym_sessions(date)",
+  );
 
   const { rows } = await c.execute("SELECT COUNT(*) AS n FROM pillars");
   if (Number((rows[0] as Record<string, unknown>).n) === 0) {
@@ -106,7 +125,7 @@ async function ensure(c: Client): Promise<Client> {
         // Marks v2 as already applied so migrate.mjs doesn't re-run its reshape.
         `INSERT INTO app_meta (key,value) VALUES ('timezone','Australia/Melbourne'),('habits_v2','1')`,
       ],
-      "write"
+      "write",
     );
   }
   return c;

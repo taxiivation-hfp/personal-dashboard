@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { deriveWeights } from "./goals.ts";
 
-const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
+const close = (a: number, b: number) =>
+  assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
 
 test("all-auto subgoals split evenly", () => {
   const r = deriveWeights([
@@ -48,13 +49,16 @@ test("progress is 0 with no subgoals and nothing is over-allocated", () => {
 // The one genuinely broken case. An all-auto goal must NOT trip this — under the old
 // weightSum test it would have warned "weights total 0%, not 100%" on a well-formed goal.
 test("overAllocated fires only when explicit overrides exceed 100%", () => {
-  assert.equal(deriveWeights([{ weight: 0, done: false }]).overAllocated, false);
+  assert.equal(
+    deriveWeights([{ weight: 0, done: false }]).overAllocated,
+    false,
+  );
   assert.equal(
     deriveWeights([
       { weight: 0.6, done: false },
       { weight: 0.6, done: false },
     ]).overAllocated,
-    true
+    true,
   );
 });
 

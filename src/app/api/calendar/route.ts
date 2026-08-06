@@ -11,6 +11,11 @@ export async function GET(req: Request) {
     return Response.json(await getCalendarForDate(d));
   } catch (e) {
     // Degrade gracefully — the UI just shows nothing rather than erroring.
-    return Response.json({ connected: false, configured: true, events: [], error: e instanceof Error ? e.message : String(e) });
+    return Response.json({
+      connected: false,
+      configured: true,
+      events: [],
+      error: e instanceof Error ? e.message : String(e),
+    });
   }
 }

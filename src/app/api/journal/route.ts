@@ -18,14 +18,20 @@ export async function POST(req: Request) {
   try {
     const b = await req.json();
     const date = b.date != null ? String(b.date) : todayISO();
-    if (!isISODate(date)) return Response.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
+    if (!isISODate(date))
+      return Response.json(
+        { error: "date must be YYYY-MM-DD" },
+        { status: 400 },
+      );
 
     const kind = b.kind === "text" ? "text" : "drawing";
 
     if (kind === "text") {
       const body = String(b.body ?? "").trim();
-      if (!body) return Response.json({ error: "body required" }, { status: 400 });
-      if (body.length > MAX_BODY_CHARS) return Response.json({ error: "page too long" }, { status: 413 });
+      if (!body)
+        return Response.json({ error: "body required" }, { status: 400 });
+      if (body.length > MAX_BODY_CHARS)
+        return Response.json({ error: "page too long" }, { status: 413 });
       const db = await getDb();
       // image='' — see the schema comment. `kind` is the discriminator, never emptiness.
       const id = await saveJournalEntry(db, { date, kind, image: "", body });
@@ -34,9 +40,13 @@ export async function POST(req: Request) {
 
     const image = String(b.image ?? "");
     if (!/^data:image\/(png|jpeg|webp);base64,/.test(image)) {
-      return Response.json({ error: "image must be a PNG/JPEG/WebP data URL" }, { status: 400 });
+      return Response.json(
+        { error: "image must be a PNG/JPEG/WebP data URL" },
+        { status: 400 },
+      );
     }
-    if (image.length > MAX_IMAGE_BYTES) return Response.json({ error: "image too large" }, { status: 413 });
+    if (image.length > MAX_IMAGE_BYTES)
+      return Response.json({ error: "image too large" }, { status: 413 });
 
     const db = await getDb();
     const id = await saveJournalEntry(db, {
@@ -48,6 +58,9 @@ export async function POST(req: Request) {
     });
     return Response.json({ id, date, kind });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

@@ -19,10 +19,14 @@ const rowId = (v: unknown): number | null => {
 export async function POST(req: Request) {
   try {
     const b = await req.json();
-    if (!isISODate(b.date)) return Response.json({ error: "bad date" }, { status: 400 });
+    if (!isISODate(b.date))
+      return Response.json({ error: "bad date" }, { status: 400 });
     const n = Math.round(Number(b.kcal));
     if (!Number.isFinite(n) || n < MIN_KCAL || n > MAX_KCAL) {
-      return Response.json({ error: `kcal must be ${MIN_KCAL}–${MAX_KCAL}` }, { status: 400 });
+      return Response.json(
+        { error: `kcal must be ${MIN_KCAL}–${MAX_KCAL}` },
+        { status: 400 },
+      );
     }
 
     const db = await getDb();
@@ -30,7 +34,10 @@ export async function POST(req: Request) {
     const { total, entries } = await caloriesForDate(db, b.date);
     return Response.json({ id, total, entries });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }
 
@@ -45,15 +52,20 @@ export async function DELETE(req: Request) {
   try {
     const url = new URL(req.url);
     const id = rowId(url.searchParams.get("id"));
-    if (id == null) return Response.json({ error: "id required" }, { status: 400 });
+    if (id == null)
+      return Response.json({ error: "id required" }, { status: 400 });
     const date = url.searchParams.get("date");
-    if (!isISODate(date)) return Response.json({ error: "bad date" }, { status: 400 });
+    if (!isISODate(date))
+      return Response.json({ error: "bad date" }, { status: 400 });
 
     const db = await getDb();
     const removed = await deleteCalorieEntry(db, id);
     const { total, entries } = await caloriesForDate(db, date);
     return Response.json({ removed, total, entries });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

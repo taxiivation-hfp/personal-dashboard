@@ -47,7 +47,9 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
   return (
     <main className="mx-auto w-full max-w-[46rem] px-6 pb-24 pt-12 sm:px-8">
       <header className="flex items-baseline justify-between gap-4">
-        <h1 className="text-heading font-serif font-semibold">Non-negotiables</h1>
+        <h1 className="text-heading font-serif font-semibold">
+          Non-negotiables
+        </h1>
         <Link
           href="/"
           className="text-small text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
@@ -57,8 +59,9 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
       </header>
 
       <p className="mt-3 max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
-        Small, binary, and separate from your blocks. No states and no reasons here — that&apos;s the
-        point of the contrast. Pick which days each one applies to.
+        Small, binary, and separate from your blocks. No states and no reasons
+        here — that&apos;s the point of the contrast. Pick which days each one
+        applies to.
       </p>
 
       {/* A ruled list, not a stack of cards. The whole promise of this screen is that these
@@ -73,7 +76,11 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
                   filled in rather than a list to be glanced at. */}
               <input
                 defaultValue={h.name}
-                onBlur={(e) => e.target.value.trim() && e.target.value !== h.name && patch({ id: h.id, name: e.target.value })}
+                onBlur={(e) =>
+                  e.target.value.trim() &&
+                  e.target.value !== h.name &&
+                  patch({ id: h.id, name: e.target.value })
+                }
                 className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)]"
                 aria-label={`Rename ${h.name}`}
               />

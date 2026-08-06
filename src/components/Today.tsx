@@ -20,6 +20,11 @@ type StripDay = {
   pct: number | null;
   isToday: boolean;
   isFuture: boolean;
+  /** Hours SPENT, uncapped. null when the calendar is unreachable — see CLAUDE.md's
+   *  Productivity section; it is a quarantined exception, not a second adherence. */
+  productivity: { points: number } | null;
+  /** What the owner intends the day to be. */
+  title: string | null;
 };
 
 // Desktop only: each column owns its scroll, bounded to whatever the masthead leaves.
@@ -55,6 +60,12 @@ export default function Today({
   // Phone only: which of the three panes is showing. Opens on the day's work, and a
   // reload returns there rather than wherever you last wandered.
   const [tab, setTab] = useState<PhoneTab>("today");
+  // Naming the day. `editingTitle` is today's; `editingDay` is a date in the strip.
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [editingDay, setEditingDay] = useState<string | null>(null);
+  // Raised by the Journal row in the checklist — the journal is written, not ticked.
+  const [journalPrompt, setJournalPrompt] = useState(false);
 
   // Centred on today: past days to the left, upcoming to the right.
   const loadStrip = useCallback(() => {
@@ -152,7 +163,45 @@ export default function Today({
     loadRings();
   }
 
+  /** Name a day, or clear it with an empty string. An intention, so rewriting is normal. */
+  async function saveDayTitle(date: string, title: string) {
+    setEditingTitle(false);
+    setEditingDay(null);
+    await fetch("/api/day-title", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ date, title }),
+    }).catch(() => {});
+    refresh();
+  }
+
   const a = data.adherence;
+
+  /**
+   * The productivity trace across the visible week, as polyline points in a 0-100 box.
+   *
+   * Scaled to the week's OWN high because the score is uncapped and has no ceiling to
+   * scale against — the caption says so out loud, since a shape whose scale is unstated is
+   * a shape that lies. Stops at today: a line drawn through days that have not happened
+   * would be a prediction, and this app does not make those.
+   */
+  const productivityLine = (() => {
+    const upTo = strip.filter((d) => !d.isFuture && d.productivity != null);
+    if (upTo.length < 2) return null;
+    const peak = Math.max(...upTo.map((d) => d.productivity!.points), 1);
+    // Each bar is one 1/n slice of the row; the point sits at its centre.
+    const n = strip.length;
+    const points = upTo
+      .map((d) => {
+        const i = strip.findIndex((s) => s.date === d.date);
+        const x = ((i + 0.5) / n) * 100;
+        // 8% headroom at the top so the peak never touches the frame.
+        const y = 100 - (d.productivity!.points / peak) * 92;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(" ");
+    return { points };
+  })();
   // Straight off DayView.pillars — no extra request for something already loaded.
   const colors = Object.fromEntries(
     data.pillars.map((p) => [p.key, p.color]),
@@ -164,16 +213,55 @@ export default function Today({
     pillar ? toneColor(pillar, colors[pillar]) : "var(--color-accent)";
 
   const middle = (
-    <div className="flex flex-col gap-11">
-      <section>
-        {/* THE HERO. A large amber ring with the figure inside, and the seven-day strip
-            beneath it — both fixed by CLAUDE.md, so the redesign works within them rather
-            than around them. The stroke is finer and the circle wider than before: a line
-            drawn around a number reads as a mark on a page, where a thick arc reads as a
-            gauge on a dashboard, and this app is emphatically not the latter.
-            `a.pct == null` is passed straight through: Ring guards before any arithmetic,
-            so a morning with nothing due draws a neutral track and "—", never a 0% ring. */}
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
+    <div className="flex flex-col gap-10">
+      {/* THE DAY. Date first and small — orienting meta, not a headline — then what you
+          INTEND the day to be, in your own words. The intention is deliberately connected
+          to nothing: it feeds no rate, no ring and no score, because the moment naming a
+          day becomes something you can fail at, it stops being a plan. */}
+      <header>
+        <p className="text-micro text-[var(--color-muted)]">
+          {prettyDate(data.date)}
+        </p>
+        {editingTitle ? (
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => saveDayTitle(data.date, titleDraft)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") setEditingTitle(false);
+            }}
+            maxLength={80}
+            placeholder="What is today for?"
+            aria-label="What is today for?"
+            className="mt-1 w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-heading outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+          />
+        ) : (
+          <button
+            onClick={() => {
+              setTitleDraft(data.title ?? "");
+              setEditingTitle(true);
+            }}
+            className="mt-1 block w-full text-left font-serif text-heading transition-colors hover:text-[var(--color-accent)]"
+          >
+            {data.title ?? (
+              <span className="text-[var(--color-muted)]">
+                What is today for?
+              </span>
+            )}
+          </button>
+        )}
+      </header>
+
+      {/* THE HERO. The ring keeps the left side to itself and stays the largest thing on
+          the screen; the checklist sits beside it deliberately quieter, because the number
+          is the answer and the list is the work. */}
+      <section className="flex flex-wrap items-start gap-x-9 gap-y-7">
+        <div className="shrink-0">
+          {/* `a.pct == null` passes straight through: Ring guards before any arithmetic, so
+              a morning with nothing due draws a neutral track and "—", never a 0% ring. NOT
+              dashed — dashes mean "no source", and nothing-due-yet is emphatically not that. */}
           <Ring
             fill={a.pct == null ? null : a.pct / 100}
             size={176}
@@ -191,7 +279,7 @@ export default function Today({
               )}
             </div>
           </Ring>
-          <p className="max-w-[20rem] text-body text-[var(--color-muted)]">
+          <p className="mt-3 max-w-[11rem] text-micro text-[var(--color-muted)]">
             {a.pct == null
               ? "Nothing due yet today."
               : `adhered · ${a.adhered} of ${a.due} so far`}
@@ -204,7 +292,7 @@ export default function Today({
             {/* Say what is NOT yet in the denominator. The rate moves at the cutoff when
                 these join it, and an unexplained drop at 9pm reads as a bug. */}
             {a.habitsPending > 0 && (
-              <span className="mt-1 block text-small">
+              <span className="mt-1 block">
                 {a.habitsPending} non-negotiable
                 {a.habitsPending === 1 ? "" : "s"} not due yet
               </span>
@@ -212,33 +300,202 @@ export default function Today({
           </p>
         </div>
 
-        {/* The strip sits ON a baseline rule, the way a pencil chart sits on a ruled line,
-            with the weekday letters below it as its axis. The old version floated seven
-            fat rounded slabs in mid-air with no ground to read them against. */}
-        <div className="mt-9">
+        {/* The checklist, beside the ring rather than below it. Five items is the settled
+            size of this list, so it fits without scrolling or shrinking the ring. */}
+        <div className="min-w-[15rem] flex-1">
+          <ul className="divide-y divide-[var(--color-line)]">
+            {data.habits.map((h) =>
+              h.input === "number" ? (
+                // A NUMERIC non-negotiable — weight. Typing the number IS the tick: the
+                // entry exists or it does not, so adherence needs no special case, and
+                // clearing the field clears the day exactly like unticking.
+                <li key={h.id}>
+                  <div className="flex w-full items-center gap-3 py-2.5">
+                    <span
+                      aria-hidden
+                      className="h-[18px] w-[18px] shrink-0 rounded-[5px] border transition-colors"
+                      style={{
+                        borderColor: h.done
+                          ? habitTone(h.pillar)
+                          : "var(--color-line-strong)",
+                        background: h.done
+                          ? habitTone(h.pillar)
+                          : "transparent",
+                      }}
+                    />
+                    <label
+                      htmlFor={`h${h.id}`}
+                      className={`font-serif text-body ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                    >
+                      {h.name}
+                    </label>
+                    <span className="ml-auto flex items-baseline gap-1.5">
+                      <input
+                        id={`h${h.id}`}
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        inputMode="decimal"
+                        placeholder="—"
+                        defaultValue={h.value ?? ""}
+                        onBlur={(e) => setHabitNumber(h.id, e.target.value)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" &&
+                          (e.target as HTMLInputElement).blur()
+                        }
+                        className="w-[3.5rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-body tabular-nums outline-none transition-colors focus:border-[var(--color-accent)]"
+                      />
+                      {h.unit && (
+                        <span className="text-micro text-[var(--color-muted)]">
+                          {h.unit}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </li>
+              ) : (
+                <li key={h.id}>
+                  <button
+                    onClick={() =>
+                      // The journal is not a thing you tick, it is a thing you write. Its
+                      // row opens the page picker instead of toggling, and the tick follows
+                      // from saving a page — the only honest signal that one exists.
+                      h.system_key === "journal"
+                        ? setJournalPrompt(true)
+                        : toggleHabit(h.id, !h.done)
+                    }
+                    aria-pressed={
+                      h.system_key === "journal" ? undefined : h.done
+                    }
+                    className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+                  >
+                    <span
+                      aria-hidden
+                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors"
+                      style={{
+                        // Its pillar's hue, so the checklist reads as categorised rather
+                        // than as one undifferentiated list. The tick and the muted label
+                        // carry done-ness too, so nothing rides on colour alone.
+                        borderColor: h.done
+                          ? habitTone(h.pillar)
+                          : "var(--color-line-strong)",
+                        background: h.done
+                          ? habitTone(h.pillar)
+                          : "transparent",
+                      }}
+                    >
+                      {h.done && (
+                        <svg
+                          width="11"
+                          height="11"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                        >
+                          <path
+                            d="M2.5 6.5l2.2 2.2L9.5 3.8"
+                            stroke="#fff"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </span>
+                    <span
+                      className={`font-serif text-body ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                    >
+                      {h.name}
+                    </span>
+                  </button>
+                </li>
+              ),
+            )}
+            {data.habits.length === 0 && (
+              <li className="py-2.5 text-body text-[var(--color-muted)]">
+                Nothing set for today.{" "}
+                <Link
+                  href="/habits"
+                  className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
+                >
+                  Add some
+                </Link>
+                .
+              </li>
+            )}
+          </ul>
+
+          <CalorieInput
+            date={data.date}
+            calories={data.calories}
+            entries={data.calorieEntries}
+            onChanged={refresh}
+          />
+
+          {/* STEPS. No writer exists for this yet — an iOS Shortcut posting one number is
+              separate, unstarted work — so it is a dashed placeholder rather than a zero. A
+              zero would be a failure no behaviour could fix; a dashed rule says plainly
+              that nothing is wired up, which is the same language the ghost rings use. */}
+          <div className="flex items-baseline gap-3 border-t border-[var(--color-line)] py-3">
+            <span className="text-body text-[var(--color-muted)]">Steps</span>
+            <span
+              aria-hidden
+              className="ml-auto w-14 border-b border-dashed border-[var(--color-line-strong)]"
+            />
+            <span className="text-micro text-[var(--color-muted)]">
+              from your phone, soon
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* THE WEEK. Bars are adherence, capped 0-100. The line is the productivity score,
+          which is uncapped, so it is scaled to this week's own high and says so. It is
+          drawn in INK, never the accent: a second amber quantity beside the adherence bars
+          would read as one measurement instead of two. */}
+      <section>
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <span className="text-micro text-[var(--color-muted)]">
+            adherence · productivity to this week&apos;s high
+          </span>
+          {data.streak > 0 && (
+            // A count, deliberately undramatised — no flame, no badge, no "don't break it".
+            // A fact about the record, not a thing you can lose.
+            <span className="text-micro text-[var(--color-muted)]">
+              {data.streak} day{data.streak === 1 ? "" : "s"} logged in a row
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          {strip.map((d) => (
+            <span
+              key={d.date}
+              className="flex-1 text-center text-micro tabular-nums"
+              style={{
+                color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
+              }}
+            >
+              {d.productivity ? d.productivity.points : "—"}
+            </span>
+          ))}
+        </div>
+
+        <div className="relative mt-1.5">
           <div className="flex items-end gap-2">
             {strip.map((d) => (
               <div
                 key={d.date}
-                className="h-14 flex-1 overflow-hidden rounded-t-[3px] border-x border-t"
+                className="h-16 flex-1 overflow-hidden rounded-t-[3px] border-x border-t"
                 style={{
                   // OUTLINED, not filled. --color-panel-2 measures 1.04:1 against the page,
-                  // so a day with no bar vanished completely and the strip read as five
-                  // days instead of seven — the same trap PillarRing documents for an
-                  // unfilled ring. Filling the track with --color-line-strong fixed the
-                  // legibility but put seven solid slabs under the hero, which is far more
-                  // mass than a secondary element earns.
-                  //
-                  // An outline is the system's existing answer to exactly this: it is how
-                  // "skipped" stays legible without becoming a third weight of fill. The
-                  // day reads as present, the bar reads as its value, and neither shouts.
+                  // so a day with no bar vanished entirely and the strip read as five days
+                  // instead of seven. An outline is the system's existing answer: it is how
+                  // "skipped" stays legible without becoming a third weight of fill.
                   borderColor: "var(--color-line-strong)",
                   background: d.isToday
                     ? "var(--color-accent-soft)"
                     : "transparent",
-                  // Upcoming days are drawn but empty — they haven't happened, and an
-                  // empty bar reads as "not yet" rather than as a zero.
-                  opacity: d.isFuture ? 0.45 : 1,
+                  opacity: d.isFuture ? 0.55 : 1,
                 }}
               >
                 {d.pct != null && (
@@ -247,19 +504,9 @@ export default function Today({
                     style={{
                       // SLID, not grown. The bar is always full height and translates down
                       // so the track clips all but the top `pct`. translateY is composited
-                      // and skips layout entirely.
-                      //
-                      // It replaced `height` + `marginTop`, which was wrong twice over:
-                      // both are layout properties, and only `height` was in the transition
-                      // list — so marginTop snapped while height eased, and the bar's top
-                      // edge teleported on every change.
-                      //
-                      // translateY over scaleY because scaling squashes the corner radius
-                      // vertically; sliding keeps the top corners perfectly round at every
-                      // value, which is the only part of the bar the track doesn't clip.
+                      // and skips layout entirely — the old height+marginTop version
+                      // animated two layout properties and only transitioned one of them.
                       transform: `translateY(${100 - Math.max(d.pct, 3)}%)`,
-                      // Translucent, so a bar sits IN its track rather than on top of it
-                      // and the day's shape reads as depth. Today stays fully opaque.
                       background: "var(--color-accent)",
                       opacity: d.isToday ? 1 : 0.78,
                     }}
@@ -268,31 +515,82 @@ export default function Today({
               </div>
             ))}
           </div>
-          <div className="h-px w-full bg-[var(--color-line-strong)]" />
-          <div className="mt-2 flex gap-2">
-            {strip.map((d) => (
-              <span
-                key={d.date}
-                className="flex-1 text-center text-micro tabular-nums"
-                style={{
-                  color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
-                }}
-              >
-                {new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", {
-                  weekday: "narrow",
-                })}
-              </span>
-            ))}
-          </div>
+
+          {/* The productivity trace, over the bars. Not animated: `points` is neither
+              transform nor opacity, so the Transform-Only Rule forbids it, and
+              stroke-dasharray is reserved for ring arcs — using it here would make the line
+              look like it was being drawn, which is to say celebrated. */}
+          {productivityLine && (
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden
+            >
+              <polyline
+                points={productivityLine.points}
+                fill="none"
+                stroke="var(--color-ink)"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
         </div>
 
-        {/* A count, deliberately undramatised — no flame, no badge, no "don't break it".
-            It is a fact about the record, not a thing you can lose. */}
-        {data.streak > 0 && (
-          <p className="mt-5 text-small text-[var(--color-muted)]">
-            {data.streak} day{data.streak === 1 ? "" : "s"} logged in a row
-          </p>
-        )}
+        <div className="h-px w-full bg-[var(--color-line-strong)]" />
+
+        <div className="mt-2 flex gap-2">
+          {strip.map((d) => (
+            <span
+              key={d.date}
+              className="flex-1 text-center text-micro"
+              style={{
+                color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
+              }}
+            >
+              {new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", {
+                weekday: "narrow",
+              })}
+            </span>
+          ))}
+        </div>
+
+        {/* Naming the days ahead. The strip already holds the next three, so they are named
+            where they are read rather than on a screen of their own. */}
+        <div className="mt-2 flex gap-2">
+          {strip.map((d) =>
+            d.isFuture ? (
+              <div key={d.date} className="min-w-0 flex-1">
+                {editingDay === d.date ? (
+                  <input
+                    autoFocus
+                    defaultValue={d.title ?? ""}
+                    onBlur={(e) => saveDayTitle(d.date, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")
+                        (e.target as HTMLInputElement).blur();
+                      if (e.key === "Escape") setEditingDay(null);
+                    }}
+                    maxLength={80}
+                    aria-label={`Name ${d.date}`}
+                    className="w-full border-b border-[var(--color-accent)] bg-transparent text-center font-serif text-micro outline-none"
+                  />
+                ) : (
+                  <button
+                    onClick={() => setEditingDay(d.date)}
+                    className="block w-full truncate text-center font-serif text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
+                  >
+                    {d.title ?? "+"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div key={d.date} className="min-w-0 flex-1" />
+            ),
+          )}
+        </div>
       </section>
 
       <CoachNote date={data.date} />
@@ -457,6 +755,8 @@ export default function Today({
             date={data.date}
             entries={data.journal}
             onChanged={refresh}
+            prompt={journalPrompt}
+            onPromptHandled={() => setJournalPrompt(false)}
           />
         </div>
       </section>
@@ -520,28 +820,27 @@ export default function Today({
           whatever the masthead leaves, rather than a calc() that goes stale. */}
       <div className="lg:flex lg:h-dvh lg:flex-col">
         <div className="shrink-0 border-b border-[var(--color-line-strong)] bg-[var(--color-bar)]">
-          <div className="mx-auto flex w-full max-w-[92rem] items-baseline justify-between gap-4 px-6 py-5 sm:px-8">
-            {/* Serif because a page heading is the owner's side of the Author Rule, and
-              text-heading rather than text-hero — 52px is the adherence numeral and
-              nothing else, and a masthead outsizing the hero would invert the hierarchy
-              PRODUCT.md fixes. */}
-            <h1 className="font-serif text-heading">
-              Look Into My Life by Nero
+          {/* The title is CENTRED on the page, not on the space left over beside the
+              link — hence a three-column grid with an empty cell mirroring the link. A
+              flex row with one item pushed right would drift the title off centre by
+              exactly half the link’s width. */}
+          <div className="mx-auto grid w-full max-w-[92rem] grid-cols-[1fr_auto_1fr] items-baseline gap-4 px-6 py-5 sm:px-8">
+            <span aria-hidden />
+            {/* Serif because a page heading is the owner’s side of the Author Rule, and
+                text-heading rather than text-hero — 52px is the adherence numeral and
+                nothing else, and a masthead outsizing the hero would invert the
+                hierarchy PRODUCT.md fixes. */}
+            <h1 className="text-center font-serif text-heading">
+              The Book of Nero
             </h1>
-            <div className="flex shrink-0 items-baseline gap-4">
-              {/* The date demotes to orienting meta. It used to be set in small tracked
-                uppercase — the most over-used AI scaffold there is, and it made the one
-                piece of orienting information the hardest thing on the screen to read. */}
-              <p className="text-micro text-[var(--color-muted)]">
-                {prettyDate(data.date)}
-              </p>
-              <Link
-                href="/colours"
-                className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-              >
-                colours
-              </Link>
-            </div>
+            {/* The date lives on the middle window now, above the ring, where it belongs
+                to the day rather than to the app. */}
+            <Link
+              href="/colours"
+              className="justify-self-end text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+            >
+              colours
+            </Link>
           </div>
         </div>
 

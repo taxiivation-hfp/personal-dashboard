@@ -83,7 +83,7 @@ export function habitsDueOn(
   dateISO: string,
   todayISO: string,
   nowMs: number,
-  cutoffInstantMs: number
+  cutoffInstantMs: number,
 ): boolean {
   if (dateISO < todayISO) return true; // the day is over
   if (dateISO > todayISO) return false; // hasn't happened
@@ -98,7 +98,11 @@ function isDue(ev: CalEvent, dateISO: string, nowMs: number): boolean {
     const endOfDay = new Date(`${dateISO}T23:59:59`).getTime();
     return nowMs > endOfDay;
   }
-  const end = ev.end ? localDateTime(ev.end) : ev.start ? localDateTime(ev.start) : null;
+  const end = ev.end
+    ? localDateTime(ev.end)
+    : ev.start
+      ? localDateTime(ev.start)
+      : null;
   if (end == null || Number.isNaN(end)) return false;
   return nowMs >= end;
 }
@@ -115,7 +119,10 @@ const hhmm = (iso: string | null): string | null =>
 
 /** Scheduled length, for scoring. Null rather than 0 when either end is missing or
  *  unparseable — an unknown duration is not a zero-length block. */
-const durationMinutes = (start: string | null, end: string | null): number | null => {
+const durationMinutes = (
+  start: string | null,
+  end: string | null,
+): number | null => {
   if (!start || !end) return null;
   const a = Date.parse(start);
   const b = Date.parse(end);
@@ -128,7 +135,7 @@ export function buildBlocks(
   dateISO: string,
   events: CalEvent[],
   marks: Map<string, { state: BlockState; reason: string | null }>,
-  nowMs = Date.now()
+  nowMs = Date.now(),
 ): Block[] {
   return events
     .filter((e) => !e.allDay) // all-day entries are not time blocks
@@ -163,7 +170,10 @@ export function buildBlocks(
  * something or tap-as-you-go becomes pointless until 21:00, and that outranks tidiness.
  * The number settles when the cutoff passes and the rest join the denominator.
  */
-export function adherenceFor(blocks: Block[], habits?: HabitTally | null): Adherence {
+export function adherenceFor(
+  blocks: Block[],
+  habits?: HabitTally | null,
+): Adherence {
   const counted = blocks.filter((b) => b.state !== "dismissed" && b.due);
   const drifted = counted.filter((b) => b.state === "drifted").length;
   const skipped = counted.filter((b) => b.state === "skipped").length;

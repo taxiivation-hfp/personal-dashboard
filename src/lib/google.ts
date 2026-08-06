@@ -14,7 +14,9 @@ const API = "https://www.googleapis.com/calendar/v3";
 
 const clientId = () => process.env.GOOGLE_CLIENT_ID || "";
 const clientSecret = () => process.env.GOOGLE_CLIENT_SECRET || "";
-const redirectUri = () => process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/google/callback";
+const redirectUri = () =>
+  process.env.GOOGLE_REDIRECT_URI ||
+  "http://localhost:3000/api/google/callback";
 
 export const googleConfigured = () => Boolean(clientId() && clientSecret());
 
@@ -66,7 +68,10 @@ export async function exchangeCode(db: Client, code: string): Promise<void> {
     }),
   });
   const t = await res.json();
-  if (!res.ok) throw new Error(`token exchange failed: ${t.error_description || t.error || res.status}`);
+  if (!res.ok)
+    throw new Error(
+      `token exchange failed: ${t.error_description || t.error || res.status}`,
+    );
   const expiry = Date.now() + (Number(t.expires_in) || 3600) * 1000;
   await db.execute({
     sql: `INSERT INTO google_oauth_tokens (id, access_token, refresh_token, scope, token_type, expiry, updated_at)
@@ -75,7 +80,13 @@ export async function exchangeCode(db: Client, code: string): Promise<void> {
             refresh_token=COALESCE(excluded.refresh_token, google_oauth_tokens.refresh_token),
             scope=excluded.scope, token_type=excluded.token_type, expiry=excluded.expiry,
             updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
-    args: [t.access_token, t.refresh_token ?? null, t.scope ?? null, t.token_type ?? null, expiry],
+    args: [
+      t.access_token,
+      t.refresh_token ?? null,
+      t.scope ?? null,
+      t.token_type ?? null,
+      expiry,
+    ],
   });
 }
 
@@ -86,7 +97,9 @@ export async function isConnected(db: Client): Promise<boolean> {
 
 export async function disconnect(db: Client): Promise<void> {
   // Actually revoke the grant at Google, not just forget it locally.
-  const r = await db.execute("SELECT refresh_token, access_token FROM google_oauth_tokens WHERE id=1");
+  const r = await db.execute(
+    "SELECT refresh_token, access_token FROM google_oauth_tokens WHERE id=1",
+  );
   const tok = r.rows[0]?.refresh_token ?? r.rows[0]?.access_token;
   if (tok) {
     try {
@@ -111,7 +124,9 @@ export async function disconnect(db: Client): Promise<void> {
  * reconnecting could not clear it either. See the 401 retry in api().
  */
 async function validAccessToken(db: Client, force = false): Promise<string> {
-  const r = await db.execute("SELECT access_token, refresh_token, expiry FROM google_oauth_tokens WHERE id=1");
+  const r = await db.execute(
+    "SELECT access_token, refresh_token, expiry FROM google_oauth_tokens WHERE id=1",
+  );
   if (!r.rows.length) throw new Error("not_connected");
   const row = r.rows[0] as Record<string, unknown>;
   const expiry = Number(row.expiry);
@@ -135,7 +150,9 @@ async function validAccessToken(db: Client, force = false): Promise<string> {
       await disconnect(db); // refresh token revoked → drop creds
       throw new Error("not_connected"); // so getCalendarForDate degrades to {connected:false}
     }
-    throw new Error(`token refresh failed: ${t.error_description || t.error || res.status}`);
+    throw new Error(
+      `token refresh failed: ${t.error_description || t.error || res.status}`,
+    );
   }
   const newExpiry = Date.now() + (Number(t.expires_in) || 3600) * 1000;
   await db.execute({
@@ -149,7 +166,11 @@ async function api(db: Client, path: string, init?: RequestInit) {
   const call = async (token: string) =>
     fetch(`${API}${path}`, {
       ...init,
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init?.headers || {}) },
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        ...(init?.headers || {}),
+      },
     });
 
   let res = await call(await validAccessToken(db));
@@ -170,7 +191,9 @@ async function api(db: Client, path: string, init?: RequestInit) {
 
   if (!res.ok) {
     const body = await res.text();
-    const err = new Error(`calendar api ${res.status}: ${body.slice(0, 200)}`) as Error & { status?: number };
+    const err = new Error(
+      `calendar api ${res.status}: ${body.slice(0, 200)}`,
+    ) as Error & { status?: number };
     err.status = res.status;
     throw err;
   }
@@ -179,9 +202,18 @@ async function api(db: Client, path: string, init?: RequestInit) {
 
 // ---- Calendar ----
 
-export async function listEvents(db: Client, date: string): Promise<CalEvent[]> {
+export async function listEvents(
+  db: Client,
+  date: string,
+): Promise<CalEvent[]> {
   const { timeMin, timeMax } = dayBoundsRFC3339(date);
-  const q = new URLSearchParams({ timeMin, timeMax, singleEvents: "true", orderBy: "startTime", maxResults: "50" });
+  const q = new URLSearchParams({
+    timeMin,
+    timeMax,
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "50",
+  });
   const data = await api(db, `/calendars/primary/events?${q.toString()}`);
   return (data?.items ?? []).map((e: Record<string, unknown>) => {
     const start = e.start as { dateTime?: string; date?: string } | undefined;
@@ -205,10 +237,20 @@ export async function listEvents(db: Client, date: string): Promise<CalEvent[]> 
  * would read 100%, because the two you never marked wouldn't be in the denominator.
  * One range request is also far cheaper than seven per-day calls.
  */
-export async function listEventsRange(db: Client, fromDate: string, toDate: string): Promise<Map<string, CalEvent[]>> {
+export async function listEventsRange(
+  db: Client,
+  fromDate: string,
+  toDate: string,
+): Promise<Map<string, CalEvent[]>> {
   const { timeMin } = dayBoundsRFC3339(fromDate);
   const { timeMax } = dayBoundsRFC3339(toDate);
-  const q = new URLSearchParams({ timeMin, timeMax, singleEvents: "true", orderBy: "startTime", maxResults: "250" });
+  const q = new URLSearchParams({
+    timeMin,
+    timeMax,
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "250",
+  });
   const data = await api(db, `/calendars/primary/events?${q.toString()}`);
   const byDate = new Map<string, CalEvent[]>();
   for (const e of (data?.items ?? []) as Record<string, unknown>[]) {
@@ -241,24 +283,41 @@ export async function listEventsRange(db: Client, fromDate: string, toDate: stri
 
 export async function getCalendarRange(
   fromDate: string,
-  toDate: string
+  toDate: string,
 ): Promise<{ connected: boolean; byDate: Map<string, CalEvent[]> }> {
   if (!googleConfigured()) return { connected: false, byDate: new Map() };
   const db = await getDb();
   if (!(await isConnected(db))) return { connected: false, byDate: new Map() };
   try {
-    return { connected: true, byDate: await listEventsRange(db, fromDate, toDate) };
+    return {
+      connected: true,
+      byDate: await listEventsRange(db, fromDate, toDate),
+    };
   } catch {
     return { connected: false, byDate: new Map() };
   }
 }
 
-type EventInput = { summary: string; date: string; timeStart: string; timeEnd?: string | null; description?: string };
+type EventInput = {
+  summary: string;
+  date: string;
+  timeStart: string;
+  timeEnd?: string | null;
+  description?: string;
+};
 
 // End of a timed event as an instant, rolling to the next day when it crosses midnight,
 // so the end is never before the start (Google rejects end <= start with 400).
-function endInstant(date: string, startHHMM: string, timeEnd?: string | null): { date: string; time: string } {
-  if (timeEnd) return { date: timeEnd <= startHHMM ? addDays(date, 1) : date, time: timeEnd };
+function endInstant(
+  date: string,
+  startHHMM: string,
+  timeEnd?: string | null,
+): { date: string; time: string } {
+  if (timeEnd)
+    return {
+      date: timeEnd <= startHHMM ? addDays(date, 1) : date,
+      time: timeEnd,
+    };
   const [h, m] = startHHMM.split(":").map(Number);
   const total = h * 60 + m + 30; // default 30-min block
   const t = total % 1440;
@@ -279,11 +338,18 @@ function eventBody(ev: EventInput) {
 }
 
 export async function insertEvent(db: Client, ev: EventInput): Promise<string> {
-  const data = await api(db, "/calendars/primary/events", { method: "POST", body: JSON.stringify(eventBody(ev)) });
+  const data = await api(db, "/calendars/primary/events", {
+    method: "POST",
+    body: JSON.stringify(eventBody(ev)),
+  });
   return String(data.id);
 }
 
-export async function updateEvent(db: Client, eventId: string, ev: EventInput): Promise<void> {
+export async function updateEvent(
+  db: Client,
+  eventId: string,
+  ev: EventInput,
+): Promise<void> {
   try {
     await api(db, `/calendars/primary/events/${encodeURIComponent(eventId)}`, {
       method: "PATCH",
@@ -297,7 +363,9 @@ export async function updateEvent(db: Client, eventId: string, ev: EventInput): 
 
 export async function deleteEvent(db: Client, eventId: string): Promise<void> {
   try {
-    await api(db, `/calendars/primary/events/${encodeURIComponent(eventId)}`, { method: "DELETE" });
+    await api(db, `/calendars/primary/events/${encodeURIComponent(eventId)}`, {
+      method: "DELETE",
+    });
   } catch (e) {
     const st = (e as { status?: number }).status;
     if (st !== 404 && st !== 410) throw e; // already gone is fine
@@ -318,7 +386,10 @@ export async function syncTaskEvent(db: Client, taskId: number): Promise<void> {
     try {
       await deleteEvent(db, eventId);
     } catch {}
-    await db.execute({ sql: "UPDATE tasks SET calendar_event_id=NULL WHERE id=?", args: [taskId] });
+    await db.execute({
+      sql: "UPDATE tasks SET calendar_event_id=NULL WHERE id=?",
+      args: [taskId],
+    });
     return;
   }
   try {
@@ -345,19 +416,32 @@ export async function syncTaskEvent(db: Client, taskId: number): Promise<void> {
  */
 function isAuthFailure(e: unknown): boolean {
   const status = (e as { status?: number } | null)?.status;
-  return String(e).includes("not_connected") || status === 401 || status === 403;
+  return (
+    String(e).includes("not_connected") || status === 401 || status === 403
+  );
 }
 
 /** Convenience for routes/coach: ready-to-use db + connected check. */
-export async function getCalendarForDate(date: string): Promise<{ connected: boolean; configured: boolean; events: CalEvent[] }> {
-  if (!googleConfigured()) return { connected: false, configured: false, events: [] };
+export async function getCalendarForDate(
+  date: string,
+): Promise<{ connected: boolean; configured: boolean; events: CalEvent[] }> {
+  if (!googleConfigured())
+    return { connected: false, configured: false, events: [] };
   const db = await getDb();
-  if (!(await isConnected(db))) return { connected: false, configured: true, events: [] };
+  if (!(await isConnected(db)))
+    return { connected: false, configured: true, events: [] };
   try {
-    return { connected: true, configured: true, events: await listEvents(db, date) };
+    return {
+      connected: true,
+      configured: true,
+      events: await listEvents(db, date),
+    };
   } catch (e) {
     if (isAuthFailure(e)) {
-      console.error("[google] calendar auth failed — reconnect at /api/google/connect:", String(e).slice(0, 160));
+      console.error(
+        "[google] calendar auth failed — reconnect at /api/google/connect:",
+        String(e).slice(0, 160),
+      );
       return { connected: false, configured: true, events: [] };
     }
     throw e;

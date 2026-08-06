@@ -43,7 +43,9 @@ export default function LoginPage() {
     <main className="flex min-h-dvh items-center justify-center px-5">
       <form onSubmit={submit} className="w-full max-w-xs">
         <h1 className="text-heading font-serif font-semibold">Today</h1>
-        <p className="mt-1 text-small text-[var(--color-muted)]">This one&apos;s just for you.</p>
+        <p className="mt-1 text-small text-[var(--color-muted)]">
+          This one&apos;s just for you.
+        </p>
 
         {/* A line, not a box. This is the whole screen, so the one filled rectangle on it
             used to read as a demand; a rule reads as somewhere to write.

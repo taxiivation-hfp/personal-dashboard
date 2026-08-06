@@ -10,8 +10,13 @@ export async function GET(req: Request) {
     // The 14-day figures are anchored to the date being VIEWED, so the caller passes it.
     const raw = new URL(req.url).searchParams.get("date");
     const db = await getDb();
-    return Response.json({ skills: await listSkills(db, isISODate(raw) ? raw : todayISO()) });
+    return Response.json({
+      skills: await listSkills(db, isISODate(raw) ? raw : todayISO()),
+    });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
 }

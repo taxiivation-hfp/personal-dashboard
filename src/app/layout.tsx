@@ -55,7 +55,7 @@ export const viewport: Viewport = {
   // the page — the status bar abuts the band, not the ground behind it. Left over from the
   // pre-pivot dark theme this was #0a0a0c, which painted the iPhone status bar near-black
   // above a warm beige app: the one seam a home-screen web app cannot hide.
-  themeColor: "#ede7db", // --color-bar
+  themeColor: "#eee7da", // --color-bar
 
   width: "device-width",
   initialScale: 1,
@@ -64,7 +64,11 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en-AU" className={`${sans.variable} ${serif.variable}`}>
       <body className="min-h-screen antialiased">{children}</body>
