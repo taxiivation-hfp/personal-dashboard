@@ -40,7 +40,7 @@ export default function CalorieInput({
 
   return (
     <div className="flex items-center gap-3">
-      <label htmlFor="kcal" className="text-[15px] text-[var(--color-muted)]">
+      <label htmlFor="kcal" className="text-body text-[var(--color-muted)]">
         Calories
       </label>
       <input
@@ -51,9 +51,9 @@ export default function CalorieInput({
         onKeyDown={(e) => e.key === "Enter" && save()}
         inputMode="numeric"
         placeholder="—"
-        className="w-28 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-[15px] tabular-nums outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-line-strong)]"
+        className="w-28 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-body tabular-nums outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-line-strong)]"
       />
-      {saved && <span className="text-[13px] text-[var(--color-muted)]">saved</span>}
+      {saved && <span className="text-small text-[var(--color-muted)]">saved</span>}
     </div>
   );
 }

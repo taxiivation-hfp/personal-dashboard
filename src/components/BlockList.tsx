@@ -63,7 +63,7 @@ export default function BlockList({
 
   if (!live.length) {
     return (
-      <p className="px-1 py-6 text-[15px] leading-relaxed text-[var(--color-muted)]">
+      <p className="px-1 py-6 text-body leading-relaxed text-[var(--color-muted)]">
         Nothing on the calendar today. Blocks come from Google Calendar — put something there and it
         shows up here to mark.
       </p>
@@ -85,8 +85,8 @@ export default function BlockList({
           >
             <div className="flex items-baseline justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-[15px]">{b.title}</p>
-                <p className="mt-0.5 text-[13px] tabular-nums text-[var(--color-muted)]">
+                <p className="truncate text-body font-serif">{b.title}</p>
+                <p className="mt-0.5 text-small tabular-nums text-[var(--color-muted)]">
                   {b.time_start}
                   {b.time_end ? `–${b.time_end}` : ""}
                   {/* Never "overdue" or "missed" — the block is fine, it just needs a mark. */}
@@ -97,7 +97,7 @@ export default function BlockList({
               {marked && (
                 <button
                   onClick={() => mark(b, null)}
-                  className="shrink-0 text-[13px] text-[var(--color-muted)] underline-offset-4 hover:underline"
+                  className="shrink-0 text-small text-[var(--color-muted)] underline-offset-4 hover:underline"
                 >
                   undo
                 </button>
@@ -111,7 +111,7 @@ export default function BlockList({
                     key={s}
                     disabled={busy === b.event_id}
                     onClick={() => choose(b, s)}
-                    className="rounded-full border px-3.5 py-1.5 text-[13px] transition-colors disabled:opacity-40"
+                    className="rounded-full border px-3.5 py-1.5 text-small transition-colors disabled:opacity-40"
                     style={{ borderColor: "var(--color-line-strong)", color: "var(--color-ink)" }}
                   >
                     {s === "adhered" ? "Adhered" : s === "drifted" ? "Drifted" : "Skipped"}
@@ -123,7 +123,7 @@ export default function BlockList({
             {marked && b.state !== "dismissed" && (
               <div className="mt-2.5 flex items-center gap-2">
                 <span
-                  className="rounded-full px-3 py-1 text-[13px]"
+                  className="rounded-full px-3 py-1 text-small"
                   style={
                     b.state === "adhered"
                       ? { background: "var(--color-adhered)", color: "#fff" }
@@ -134,7 +134,7 @@ export default function BlockList({
                 >
                   {b.state === "adhered" ? "Adhered" : b.state === "drifted" ? "Drifted" : "Skipped"}
                 </span>
-                {b.reason && <span className="truncate text-[13px] text-[var(--color-muted)]">{b.reason}</span>}
+                {b.reason && <span className="truncate text-small text-[var(--color-muted)]">{b.reason}</span>}
               </div>
             )}
 
@@ -152,20 +152,20 @@ export default function BlockList({
                   }}
                   autoFocus
                   placeholder="What happened instead? (optional)"
-                  className="min-w-0 flex-1 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-bg)] px-3 py-2 text-[14px] outline-none placeholder:text-[var(--color-muted)]"
+                  className="min-w-0 flex-1 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-bg)] px-3 py-2 text-small outline-none placeholder:text-[var(--color-muted)]"
                 />
                 <button
                   onClick={() => {
                     void mark(b, "drifted", reason);
                     setOpenReason(null);
                   }}
-                  className="shrink-0 rounded-xl bg-[var(--color-accent)] px-3.5 py-2 text-[14px] text-white"
+                  className="shrink-0 rounded-xl bg-[var(--color-accent)] px-3.5 py-2 text-small text-white"
                 >
                   Save
                 </button>
                 <button
                   onClick={() => setOpenReason(null)}
-                  className="shrink-0 text-[13px] text-[var(--color-muted)] underline-offset-4 hover:underline"
+                  className="shrink-0 text-small text-[var(--color-muted)] underline-offset-4 hover:underline"
                 >
                   skip
                 </button>

@@ -37,16 +37,16 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
   return (
     <main className="mx-auto w-full max-w-[46rem] px-6 pb-24 pt-12 sm:px-8">
       <header className="flex items-baseline justify-between gap-4">
-        <h1 className="text-[28px] font-semibold tracking-tight">Colours</h1>
+        <h1 className="text-heading font-serif font-semibold">Colours</h1>
         <Link
           href="/"
-          className="text-[14px] text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+          className="text-small text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
         >
           ← Today
         </Link>
       </header>
 
-      <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-[var(--color-muted)]">
+      <p className="mt-3 max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
         Pick a hue for each pillar. It colours that pillar&apos;s rings, goals and skills.
         The accent, the ink and the three block states stay as they are — one accent is
         what keeps the page quiet.
@@ -58,8 +58,8 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
             <div className="flex items-center gap-3">
               <Ring fill={0.68} size={36} stroke={3.5} tone={p.key as PillarKey} color={p.color} />
               <div className="min-w-0">
-                <h2 className="text-[15px] font-semibold">{p.name}</h2>
-                <p className="text-[12px] text-[var(--color-muted)]">
+                <h2 className="text-body font-semibold">{p.name}</h2>
+                <p className="text-micro text-[var(--color-muted)]">
                   {p.color
                     ? PILLAR_PALETTE.find((x) => x.hex === p.color)?.name ?? p.color
                     : "Default"}

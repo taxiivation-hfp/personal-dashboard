@@ -56,7 +56,7 @@ export function PhoneTabBar({
               key={t}
               onClick={() => onTab(t)}
               aria-current={on ? "page" : undefined}
-              className="flex-1 px-2 pb-3 pt-2.5 text-[12px]"
+              className="flex-1 px-2 pb-3 pt-2.5 text-micro"
               style={{ color: on ? "var(--color-ink)" : "var(--color-muted)" }}
             >
               {LABEL[t]}

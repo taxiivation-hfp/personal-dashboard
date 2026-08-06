@@ -29,7 +29,7 @@ export default function CoachNote({ date }: { date: string }) {
 
   return (
     <section className="mt-10 rounded-2xl bg-[var(--color-panel)] px-5 py-4">
-      <p className="max-w-[62ch] text-[15px] leading-relaxed">{note}</p>
+      <p className="max-w-[62ch] font-serif text-body">{note}</p>
     </section>
   );
 }

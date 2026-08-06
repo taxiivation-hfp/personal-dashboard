@@ -79,23 +79,23 @@ export default function WorkoutLog({
     >
       <div className="flex items-baseline justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-2 text-[16px] font-semibold">
+          <h2 className="flex items-center gap-2 text-body font-semibold">
             <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: hue }} />
             {label}
           </h2>
-          <p className="mt-0.5 text-[12px] text-[var(--color-muted)]">{pretty}</p>
+          <p className="mt-0.5 text-micro text-[var(--color-muted)]">{pretty}</p>
         </div>
         <button
           onClick={onClose}
           disabled={busy}
-          className="shrink-0 text-[13px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+          className="shrink-0 text-small text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
         >
           Close
         </button>
       </div>
 
       {workout?.title && (
-        <p className="mt-3 text-[13px] text-[var(--color-muted)]">{workout.title}</p>
+        <p className="mt-3 text-small text-[var(--color-muted)]">{workout.title}</p>
       )}
 
       <textarea
@@ -107,7 +107,7 @@ export default function WorkoutLog({
         spellCheck={false}
         rows={14}
         aria-label={`${label} log`}
-        className="mt-4 w-full resize-y rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-3 text-[14px] leading-[1.7] outline-none focus-visible:border-[var(--color-line-strong)] disabled:opacity-60"
+        className="mt-4 w-full resize-y rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-3 font-serif text-body leading-[1.7] outline-none focus-visible:border-[var(--color-line-strong)] disabled:opacity-60"
         style={{ fontVariantNumeric: "tabular-nums" }}
       />
 
@@ -118,7 +118,7 @@ export default function WorkoutLog({
           <button
             onClick={() => run(onDelete)}
             disabled={busy}
-            className="text-[13px] text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
+            className="text-small text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
           >
             Remove this session
           </button>
@@ -128,7 +128,7 @@ export default function WorkoutLog({
         <button
           onClick={() => run(() => onSave(note))}
           disabled={busy}
-          className="rounded-xl px-4 py-2 text-[14px] text-white transition-opacity disabled:opacity-40"
+          className="rounded-xl px-4 py-2 text-small text-white transition-opacity disabled:opacity-40"
           style={{ background: hue }}
         >
           {busy ? "Saving…" : workout ? "Save" : "Log it"}

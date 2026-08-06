@@ -64,7 +64,7 @@ export default function CalendarColumn({ date }: { date: string }) {
 
   return (
     <section>
-      <h2 className="text-[15px] font-semibold">Calendar</h2>
+      <h2 className="text-body font-semibold">Calendar</h2>
       <ul className="mt-4 flex flex-col gap-3">
         {days.map((d) => (
           <li
@@ -77,7 +77,7 @@ export default function CalendarColumn({ date }: { date: string }) {
             }}
           >
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[14px]">
+              <p className="text-small">
                 {d.isToday
                   ? "Today"
                   : new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", {
@@ -86,7 +86,7 @@ export default function CalendarColumn({ date }: { date: string }) {
                       month: "short",
                     })}
               </p>
-              <span className="shrink-0 text-[14px] tabular-nums text-[var(--color-muted)]">
+              <span className="shrink-0 text-small tabular-nums text-[var(--color-muted)]">
                 {d.pct == null ? "—" : `${d.pct}%`}
               </span>
             </div>
@@ -96,22 +96,22 @@ export default function CalendarColumn({ date }: { date: string }) {
                 {d.blocks.slice(0, 4).map((b, i) => (
                   <li key={i} className="flex items-baseline gap-2">
                     <span aria-hidden className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-full" style={dot(b.state)} />
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--color-muted)]">{b.title}</span>
-                    <span className="shrink-0 text-[12px] tabular-nums text-[var(--color-muted)]">
+                    <span className="min-w-0 flex-1 truncate text-small font-serif text-[var(--color-muted)]">{b.title}</span>
+                    <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
                       {span(b.time, b.timeEnd)}
                     </span>
                   </li>
                 ))}
                 {d.blocks.length > 4 && (
-                  <li className="pl-4 text-[12px] text-[var(--color-muted)]">+{d.blocks.length - 4} more</li>
+                  <li className="pl-4 text-micro text-[var(--color-muted)]">+{d.blocks.length - 4} more</li>
                 )}
               </ul>
             ) : (
-              <p className="mt-1.5 text-[13px] text-[var(--color-muted)]">Nothing scheduled.</p>
+              <p className="mt-1.5 text-small text-[var(--color-muted)]">Nothing scheduled.</p>
             )}
           </li>
         ))}
-        {days.length === 0 && <li className="text-[14px] text-[var(--color-muted)]">No calendar data.</li>}
+        {days.length === 0 && <li className="text-small text-[var(--color-muted)]">No calendar data.</li>}
       </ul>
     </section>
   );

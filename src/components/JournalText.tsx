@@ -31,8 +31,8 @@ export default function JournalText({
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold tracking-wide">Tonight&apos;s page</h2>
-        <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+        <h2 className="text-small font-semibold tracking-wide">Tonight&apos;s page</h2>
+        <p className="mt-0.5 text-micro text-[var(--color-muted)]">
           Typed, on the same page. Saved as words — nothing reads it back or summarises it.
         </p>
       </div>
@@ -64,7 +64,10 @@ export default function JournalText({
               paddingRight: 24,
               paddingTop: LINE_GAP / 2,
               lineHeight: `${LINE_GAP}px`,
-              fontSize: 15,
+              // The page is the owner's words on paper, so it takes the serif and the
+              // body step — not the 15px it inherited from the old scale.
+              fontFamily: "var(--font-serif)",
+              fontSize: 16,
               color: "var(--color-ink)",
             }}
           />
@@ -77,21 +80,21 @@ export default function JournalText({
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-[var(--color-muted)]">
+        <span className="text-micro text-[var(--color-muted)]">
           {busy ? "Saving…" : hasWords ? "Ready to save." : "Empty page."}
         </span>
         <div className="flex shrink-0 items-center gap-2">
           <button
             onClick={onCancel}
             disabled={busy}
-            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
           >
             Cancel
           </button>
           <button
             onClick={() => hasWords && onSave(body)}
             disabled={!hasWords || busy}
-            className="rounded-xl bg-[var(--color-accent)] px-4 py-1.5 text-xs text-white transition-opacity disabled:opacity-40"
+            className="rounded-xl bg-[var(--color-accent)] px-4 py-1.5 text-micro text-white transition-opacity disabled:opacity-40"
           >
             Save page
           </button>

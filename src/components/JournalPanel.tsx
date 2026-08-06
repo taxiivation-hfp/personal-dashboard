@@ -98,17 +98,17 @@ export default function JournalPanel({
                 handwriting. It asks now. */}
             {confirming === e.id && (
               <div className="absolute left-0 top-full z-[var(--z-popover)] mt-1.5 w-40 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] p-2.5 shadow-sm">
-                <p className="text-[12px] leading-snug">Delete this page? It can&apos;t be undone.</p>
+                <p className="text-micro leading-snug">Delete this page? It can&apos;t be undone.</p>
                 <div className="mt-2 flex gap-1.5">
                   <button
                     onClick={() => remove(e.id)}
-                    className="rounded-lg bg-[var(--color-accent)] px-2.5 py-1 text-[11px] text-white"
+                    className="rounded-lg bg-[var(--color-accent)] px-2.5 py-1 text-micro text-white"
                   >
                     Delete
                   </button>
                   <button
                     onClick={() => setConfirming(null)}
-                    className="rounded-lg px-2.5 py-1 text-[11px] text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                    className="rounded-lg px-2.5 py-1 text-micro text-[var(--color-muted)] hover:text-[var(--color-ink)]"
                   >
                     Keep
                   </button>
@@ -121,13 +121,13 @@ export default function JournalPanel({
         <div className="flex flex-col gap-2">
           <button
             onClick={() => setMode("draw")}
-            className="rounded-xl border border-[var(--color-line-strong)] px-4 py-2.5 text-[15px] transition-colors hover:bg-[var(--color-panel)]"
+            className="rounded-xl border border-[var(--color-line-strong)] px-4 py-2.5 text-body transition-colors hover:bg-[var(--color-panel)]"
           >
             {entries.length ? "Write another page" : "Write today's page"}
           </button>
           <button
             onClick={() => setMode("type")}
-            className="rounded-xl px-4 py-1.5 text-[13px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
+            className="rounded-xl px-4 py-1.5 text-small text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
           >
             or type it
           </button>
@@ -135,7 +135,7 @@ export default function JournalPanel({
       </div>
 
       {error && (
-        <p role="alert" className="mt-2 text-[13px] text-[var(--color-accent)]">
+        <p role="alert" className="mt-2 text-small text-[var(--color-accent)]">
           {error}
         </p>
       )}

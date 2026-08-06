@@ -145,13 +145,13 @@ export default function Today({
         <div className="flex flex-wrap items-center gap-x-7 gap-y-4">
           <Ring fill={a.pct == null ? null : a.pct / 100} size={168} stroke={10} tone="accent">
             <div className="flex items-end">
-              <span className="stat-hero text-[3.25rem]">{a.pct == null ? "—" : a.pct}</span>
+              <span className="stat-hero text-hero">{a.pct == null ? "—" : a.pct}</span>
               {a.pct != null && (
-                <span className="stat-hero pb-1.5 text-[1.05rem] text-[var(--color-muted)]">%</span>
+                <span className="stat-hero pb-1.5 text-body text-[var(--color-muted)]">%</span>
               )}
             </div>
           </Ring>
-          <p className="max-w-[22rem] text-[15px] leading-relaxed text-[var(--color-muted)]">
+          <p className="max-w-[22rem] text-body leading-relaxed text-[var(--color-muted)]">
             {a.pct == null
               ? "Nothing due yet today."
               : `adhered · ${a.adhered} of ${a.due} so far`}
@@ -159,7 +159,7 @@ export default function Today({
             {/* Say what is NOT yet in the denominator. The rate moves at the cutoff when
                 these join it, and an unexplained drop at 9pm reads as a bug. */}
             {a.habitsPending > 0 && (
-              <span className="block text-[13px]">
+              <span className="block text-small">
                 {a.habitsPending} non-negotiable{a.habitsPending === 1 ? "" : "s"} not due yet
               </span>
             )}
@@ -194,7 +194,7 @@ export default function Today({
                 )}
               </div>
               <span
-                className="text-[11px]"
+                className="text-micro"
                 style={{ color: d.isToday ? "var(--color-ink)" : "var(--color-muted)" }}
               >
                 {new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", { weekday: "narrow" })}
@@ -203,7 +203,7 @@ export default function Today({
           ))}
         </div>
         {data.streak > 0 && (
-          <p className="mt-4 text-[14px] text-[var(--color-muted)]">
+          <p className="mt-4 text-small text-[var(--color-muted)]">
             {data.streak} day{data.streak === 1 ? "" : "s"} logged in a row
           </p>
         )}
@@ -212,12 +212,12 @@ export default function Today({
       <CoachNote date={data.date} />
 
       <section>
-        <h2 className="text-[15px] font-semibold">Today&apos;s blocks</h2>
+        <h2 className="text-body font-semibold">Today&apos;s blocks</h2>
         <div className="mt-4">
           {data.calendarConnected ? (
             <BlockList date={data.date} blocks={data.blocks} onChanged={refresh} />
           ) : (
-            <p className="text-[15px] leading-relaxed text-[var(--color-muted)]">
+            <p className="text-body leading-relaxed text-[var(--color-muted)]">
               Google Calendar isn&apos;t connected, so there are no blocks to mark.{" "}
               <a href="/api/google/connect" className="text-[var(--color-accent)] underline underline-offset-4">
                 Connect it
@@ -230,10 +230,10 @@ export default function Today({
 
       <section>
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-[15px] font-semibold">Non-negotiables</h2>
+          <h2 className="text-body font-semibold">Non-negotiables</h2>
           <Link
             href="/habits"
-            className="text-[13px] text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+            className="text-small text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
           >
             edit
           </Link>
@@ -262,7 +262,7 @@ export default function Today({
                         : "transparent",
                     }}
                   />
-                  <label htmlFor={`h${h.id}`} className={`text-[15px] ${h.done ? "text-[var(--color-muted)]" : ""}`}>
+                  <label htmlFor={`h${h.id}`} className={`text-body font-serif ${h.done ? "text-[var(--color-muted)]" : ""}`}>
                     {h.name}
                   </label>
                   <span className="ml-auto flex items-center gap-1.5">
@@ -276,9 +276,9 @@ export default function Today({
                       defaultValue={h.value ?? ""}
                       onBlur={(e) => setHabitNumber(h.id, e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                      className="w-[4.5rem] rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1 text-right text-[14px] tabular-nums outline-none"
+                      className="w-[4.5rem] rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1 text-right text-small tabular-nums outline-none"
                     />
-                    {h.unit && <span className="text-[13px] text-[var(--color-muted)]">{h.unit}</span>}
+                    {h.unit && <span className="text-small text-[var(--color-muted)]">{h.unit}</span>}
                   </span>
                 </div>
               </li>
@@ -313,13 +313,13 @@ export default function Today({
                     </svg>
                   )}
                 </span>
-                <span className={`text-[15px] ${h.done ? "text-[var(--color-muted)]" : ""}`}>{h.name}</span>
+                <span className={`text-body font-serif ${h.done ? "text-[var(--color-muted)]" : ""}`}>{h.name}</span>
               </button>
             </li>
             )
           )}
           {data.habits.length === 0 && (
-            <li className="px-2 py-2 text-[15px] text-[var(--color-muted)]">
+            <li className="px-2 py-2 text-body text-[var(--color-muted)]">
               Nothing set for today.{" "}
               <Link href="/habits" className="text-[var(--color-accent)] underline underline-offset-4">
                 Add some
@@ -331,7 +331,7 @@ export default function Today({
       </section>
 
       <section>
-        <h2 className="text-[15px] font-semibold">Journal</h2>
+        <h2 className="text-body font-semibold">Journal</h2>
         <div className="mt-4">
           <JournalPanel date={data.date} entries={data.journal} onChanged={refresh} />
         </div>
@@ -377,12 +377,12 @@ export default function Today({
     <PhoneSwipe tab={tab} onTab={setTab}>
       <div className="mx-auto w-full max-w-[92rem] px-6 pb-28 pt-10 sm:px-8 lg:pb-24">
         <header className="flex items-baseline justify-between gap-4">
-          <p className="text-[13px] uppercase tracking-[0.16em] text-[var(--color-muted)]">
+          <p className="text-small uppercase tracking-[0.16em] text-[var(--color-muted)]">
             {prettyDate(data.date)}
           </p>
           <Link
             href="/colours"
-            className="text-[12px] text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+            className="text-micro text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
           >
             colours
           </Link>

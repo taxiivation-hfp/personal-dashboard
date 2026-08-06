@@ -47,6 +47,37 @@
    * --color-line-strong measures 1.47:1 and is for strokes only. */
   --color-placeholder: #6e675d;
 
+  /* TYPE.
+   * Two families from one superfamily. next/font sets --font-source-* on <html>; these
+   * aliases are what Tailwind's `font-sans` / `font-serif` utilities resolve through, and
+   * each already carries the plain fallback stack passed in layout.tsx. That stack is NOT
+   * metric-matched — this Next version emits no adjusted fallback face — which is why the
+   * fonts load with `display: optional` rather than `swap`. See layout.tsx. */
+  --font-sans: var(--font-source-sans);
+  --font-serif: var(--font-source-serif);
+
+  /* FIVE STEPS, named by role rather than by value — `text-body`, never `text-15`.
+   *
+   * This replaced an eight-step scale whose middle was a lie: 12/13/14/15 carried 98 of
+   * 110 usages at ratios of 1.07–1.08, which is four ways of saying the same thing rather
+   * than a hierarchy, while the documented 11 and 16 steps were used six times between
+   * them. Five steps at 1.14–1.17 through the text range is the product band, and the two
+   * display steps stand well clear of it.
+   *
+   * rem, not px: px ignores the reader's browser font-size setting. Fixed, not fluid —
+   * this is product UI at consistent DPI, and a clamped heading that shrinks inside a
+   * column looks worse, not better. */
+  --text-micro: 0.75rem; /* 12px · ring captions, fact lines, meta, tab bar */
+  --text-micro--line-height: 1.35;
+  --text-small: 0.875rem; /* 14px · dense rows, chips, controls, secondary actions */
+  --text-small--line-height: 1.45;
+  --text-body: 1rem; /* 16px · the default. Prose, names, section headings */
+  --text-body--line-height: 1.6;
+  --text-heading: 1.75rem; /* 28px · deeper-screen page headings */
+  --text-heading--line-height: 1.2;
+  --text-hero: 3.25rem; /* 52px · the adherence numeral, and nothing else */
+  --text-hero--line-height: 0.92;
+
   /* MOTION.
    * The built-in CSS easings are too weak to read as intentional. These are the strong
    * variants: --ease-out for anything entering or responding (starts fast, so the UI
@@ -70,19 +101,25 @@
   --z-popover: 60;
 }
 
-/* TYPE SPINE — product register: one family, fixed rem-equivalent steps, no fluid type.
+/* THE AUTHOR RULE.
  *
- *   11px  micro     ring captions, fact lines, meta
- *   12px  small     secondary labels, inline links
- *   13px  compact   dense list rows
- *   14px  control   values and control labels
- *   15px  body      the default
- *   16px  emphasis  dialog titles
- *   28px  title     deeper-screen page headings
- *   52px  hero      the adherence numeral, and nothing else
+ * The serif renders what the OWNER wrote — journal pages, workout logs, habit names,
+ * block titles, goal and subgoal text — plus the two things that are about the day rather
+ * than about operating the app: the adherence numeral and page headings. The sans renders
+ * everything the APP says: labels, chips, buttons, units, counts, captions, the tab bar.
  *
- * Eight steps for a surface this dense is already generous. Do not add a ninth; if
- * something needs to stand out, use weight or space, not a new size. */
+ * Your words on one side, the ruled lines on the other. That split is why there are two
+ * families rather than one; it is not decoration, and a serif applied anywhere else is a
+ * bug. Sans is the default, so serif is always opt-in via `font-serif`.
+ *
+ * WHOSE words, not which widget. An <input> holding a goal title takes the serif, because
+ * the title is the owner's either way — the first cut of this rule kept every input in the
+ * sans, and "Grow Network" then rendered serif on Today and sans on /goals. One string,
+ * two faces, which reads as a bug rather than a system. Number and weight fields stay sans:
+ * those are settings, not writing.
+ *
+ * Steps are `text-micro` / `text-small` / `text-body` / `text-heading` / `text-hero`,
+ * defined in @theme above. Never `text-[15px]`, never Tailwind's default `text-sm`. */
 
 html {
   color-scheme: light;
@@ -91,8 +128,15 @@ html {
 body {
   background: var(--color-bg);
   color: var(--color-ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: "cv02", "cv03", "cv04";
+  /* Was `"cv02", "cv03", "cv04"` — Inter character variants, with no Inter loaded. They
+   * were silent no-ops on both devices for the life of the project. Kerning is the one
+   * that actually earns its place here: Source Serif's capital pairs need it at 28px. */
+  font-kerning: normal;
+  /* Source Serif 4 ships an `opsz` axis. Without this the browser holds one optical
+   * master for every size, which is the whole reason the axis was requested. */
+  font-optical-sizing: auto;
   overflow-x: hidden;
 }
 
@@ -114,12 +158,19 @@ b,
   font-weight: 600;
 }
 
-/* The hero number. Tabular figures so the percentage doesn't jitter as it changes,
- * and tight tracking because large numerals default to looking loose. */
+/* The hero number, and the `%` that shares its baseline. Serif, because this is what the
+ * day amounts to rather than a control you operate.
+ *
+ * Tabular figures so the percentage doesn't jitter as it changes through the day. Tracking
+ * is gentler than the -0.03em a sans numeral wanted: a serif's own brackets already bridge
+ * the gaps, so the same negative value closes the counters instead of tightening the
+ * rhythm. Line-height lives here rather than on the size token because the numeral and the
+ * `%` take different steps and must still sit on one baseline. */
 .stat-hero {
+  font-family: var(--font-serif);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   line-height: 0.92;
 }
 
@@ -250,3 +301,4 @@ dialog[open]::backdrop {
   border-radius: 8px;
   border: 3px solid var(--color-bg);
 }
+

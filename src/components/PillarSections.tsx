@@ -94,8 +94,8 @@ export default function PillarSections({
             <div className="flex items-center gap-3.5">
               <Ring fill={ring?.fill ?? null} size={52} stroke={4.5} tone={pk} color={colors[pk]} />
               <div className="min-w-0">
-                <h2 className="text-[15px] font-semibold">{PILLAR_NAME[pk]}</h2>
-                {soleFact && <p className="text-[12px] text-[var(--color-muted)]">{soleFact}</p>}
+                <h2 className="text-body font-semibold">{PILLAR_NAME[pk]}</h2>
+                {soleFact && <p className="text-micro text-[var(--color-muted)]">{soleFact}</p>}
               </div>
             </div>
 
@@ -111,7 +111,7 @@ export default function PillarSections({
                     {m.state === "unscored" ? (
                       // No ring — there is nothing to fill toward. The count sits where a
                       // ring would, so the row still scans, but it is plainly not a gauge.
-                      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center text-[14px] tabular-nums text-[var(--color-muted)]">
+                      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center text-small tabular-nums text-[var(--color-muted)]">
                         {m.count}
                       </span>
                     ) : (
@@ -124,8 +124,8 @@ export default function PillarSections({
                         color={colors[pk]}
                       />
                     )}
-                    <span className="min-w-0 flex-1 text-[13px]">{m.label}</span>
-                    <span className="shrink-0 text-[11px] tabular-nums text-[var(--color-muted)]">
+                    <span className="min-w-0 flex-1 text-small">{m.label}</span>
+                    <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
                       {m.fact}
                     </span>
                   </li>
@@ -135,7 +135,7 @@ export default function PillarSections({
 
             {pk === "physical" && (
               <div className="mt-4">
-                <h3 className="text-[13px] font-semibold text-[var(--color-muted)]">Log workout</h3>
+                <h3 className="text-small font-semibold text-[var(--color-muted)]">Log workout</h3>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {WORKOUTS.map((w) => {
                     const logged = workouts.find((x) => x.kind === w.kind);
@@ -144,7 +144,7 @@ export default function PillarSections({
                         key={w.kind}
                         onClick={() => setOpenLog(w.kind)}
                         aria-haspopup="dialog"
-                        className="rounded-full border px-3 py-1.5 text-[12px] transition-colors"
+                        className="rounded-full border px-3 py-1.5 text-micro transition-colors"
                         style={{
                           borderColor: logged ? hue : "var(--color-line-strong)",
                           background: logged ? hue : "transparent",
@@ -177,10 +177,10 @@ export default function PillarSections({
                 its visual counterpart. */}
             <div className="mt-5">
               <div className="flex items-baseline justify-between gap-3">
-                <h3 className="text-[13px] font-semibold text-[var(--color-muted)]">Goals</h3>
+                <h3 className="text-small font-semibold text-[var(--color-muted)]">Goals</h3>
                 <Link
                   href="/goals"
-                  className="text-[12px] text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+                  className="text-micro text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
                 >
                   edit
                 </Link>
@@ -190,8 +190,8 @@ export default function PillarSections({
                 {mine.map((g) => (
                   <li key={g.id} className="rounded-2xl bg-[var(--color-panel)] px-4 py-3.5">
                     <div className="flex items-baseline justify-between gap-3">
-                      <p className="min-w-0 text-[15px]">{g.title}</p>
-                      <span className="shrink-0 text-[14px] tabular-nums text-[var(--color-muted)]">
+                      <p className="min-w-0 text-body font-serif">{g.title}</p>
+                      <span className="shrink-0 text-small tabular-nums text-[var(--color-muted)]">
                         {Math.round(g.progress * 100)}%
                       </span>
                     </div>
@@ -231,13 +231,13 @@ export default function PillarSections({
                               }
                             />
                             <span
-                              className={`min-w-0 flex-1 truncate text-[13px] ${
+                              className={`min-w-0 flex-1 truncate text-small font-serif ${
                                 s.done ? "text-[var(--color-muted)]" : ""
                               }`}
                             >
                               {s.title}
                             </span>
-                            <span className="shrink-0 text-[12px] tabular-nums text-[var(--color-muted)]">
+                            <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
                               {Math.round(s.effectiveWeight * 100)}%
                             </span>
                           </button>
@@ -246,19 +246,19 @@ export default function PillarSections({
                     </ul>
 
                     {g.subgoals.length === 0 && (
-                      <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-muted)]">No subgoals yet — add a few and this bar starts filling.</p>
+                      <p className="mt-2 text-micro leading-relaxed text-[var(--color-muted)]">No subgoals yet — add a few and this bar starts filling.</p>
                     )}
                     {/* Fires only when explicit overrides exceed 100% — an all-auto goal
                         is well-formed and must never warn. */}
                     {g.overAllocated && (
-                      <p className="mt-2 text-[12px] text-[var(--color-muted)]">
+                      <p className="mt-2 text-micro text-[var(--color-muted)]">
                         set weights total more than 100%
                       </p>
                     )}
                   </li>
                 ))}
                 {mine.length === 0 && (
-                  <li className="text-[13px] leading-relaxed text-[var(--color-muted)]">
+                  <li className="text-small leading-relaxed text-[var(--color-muted)]">
                     Nothing here yet — add one from{" "}
                     <Link href="/goals" className="underline underline-offset-4 hover:text-[var(--color-ink)]">
                       the goals screen
@@ -272,8 +272,8 @@ export default function PillarSections({
             {myS.length > 0 && (
               <div className="mt-5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-[13px] font-semibold text-[var(--color-muted)]">Skills</h3>
-                  <span className="text-[12px] text-[var(--color-muted)]">last 14 days</span>
+                  <h3 className="text-small font-semibold text-[var(--color-muted)]">Skills</h3>
+                  <span className="text-micro text-[var(--color-muted)]">last 14 days</span>
                 </div>
 
                 <ul className="mt-2.5 flex flex-col gap-3">
@@ -285,18 +285,18 @@ export default function PillarSections({
                         className="flex w-full items-baseline justify-between gap-3 text-left"
                       >
                         <span
-                          className={`min-w-0 truncate text-[14px] ${
+                          className={`min-w-0 truncate text-small font-serif ${
                             s.state === "parked" ? "text-[var(--color-muted)]" : ""
                           }`}
                         >
                           {s.name}
                           {s.state === "active" && (
-                            <span className="ml-2 text-[12px] text-[var(--color-accent)]">active</span>
+                            <span className="ml-2 text-micro text-[var(--color-accent)]">active</span>
                           )}
                         </span>
-                        <span className="shrink-0 text-[13px] tabular-nums">
+                        <span className="shrink-0 text-small tabular-nums">
                           {asTime(s.minutes14)}
-                          <span className="ml-2 text-[12px] text-[var(--color-muted)]">
+                          <span className="ml-2 text-micro text-[var(--color-muted)]">
                             {asTime(s.minutes)} lifetime
                           </span>
                         </span>
@@ -343,12 +343,12 @@ export default function PillarSections({
                               aria-label={`Minutes on ${s.name}`}
                               value={mins[s.id] ?? ""}
                               onChange={(e) => setMins({ ...mins, [s.id]: e.target.value })}
-                              className="w-[4.5rem] rounded-full bg-[var(--color-panel-2)] px-3 py-1 text-[12px] tabular-nums outline-none"
+                              className="w-[4.5rem] rounded-full bg-[var(--color-panel-2)] px-3 py-1 text-micro tabular-nums outline-none"
                             />
                             <button
                               type="submit"
                               disabled={busy === `st${s.id}` || !(mins[s.id] ?? "").trim()}
-                              className="rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-[12px] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+                              className="rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-micro transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
                             >
                               log
                             </button>
@@ -357,7 +357,7 @@ export default function PillarSections({
                                 type="button"
                                 onClick={() => run(`st${s.id}`, () => onUndoTime(s.id))}
                                 disabled={busy === `st${s.id}`}
-                                className="rounded-full px-3 py-1 text-[12px] text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+                                className="rounded-full px-3 py-1 text-micro text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
                               >
                                 undo
                               </button>
@@ -369,7 +369,7 @@ export default function PillarSections({
                                 key={min}
                                 onClick={() => run(`st${s.id}`, () => onLogTime(s.id, min))}
                                 disabled={busy === `st${s.id}`}
-                                className="rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-[12px] tabular-nums transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+                                className="rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-micro tabular-nums transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
                               >
                                 +{min}m
                               </button>
@@ -382,7 +382,7 @@ export default function PillarSections({
                 </ul>
 
                 {!anyRecent && (
-                  <p className="mt-3 text-[12px] leading-relaxed text-[var(--color-muted)]">
+                  <p className="mt-3 text-micro leading-relaxed text-[var(--color-muted)]">
                     Nothing logged in the last 14 days. Lifetime totals stay listed, so everything
                     you&apos;ve put time into is still visible.
                   </p>

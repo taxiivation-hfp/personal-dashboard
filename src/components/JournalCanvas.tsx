@@ -176,8 +176,8 @@ export default function JournalCanvas({
     <div className="flex h-full flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold tracking-wide">Tonight&apos;s page</h2>
-          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+          <h2 className="text-small font-semibold tracking-wide">Tonight&apos;s page</h2>
+          <p className="mt-0.5 text-micro text-[var(--color-muted)]">
             {penType === "pen"
               ? "Stylus detected — pressure is shaping the line."
               : "Write with a stylus, finger, or mouse. It gets saved as handwriting, not text."}
@@ -187,14 +187,14 @@ export default function JournalCanvas({
           <button
             onClick={undo}
             disabled={!hasInk || busy}
-            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
           >
             Undo
           </button>
           <button
             onClick={clear}
             disabled={!hasInk || busy}
-            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
           >
             Clear
           </button>
@@ -218,21 +218,21 @@ export default function JournalCanvas({
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-[var(--color-muted)]">
+        <span className="text-micro text-[var(--color-muted)]">
           {busy ? "Saving and reading it…" : hasInk ? "Ready to save." : "Empty page."}
         </span>
         <div className="flex shrink-0 items-center gap-2">
           <button
             onClick={onCancel}
             disabled={busy}
-            className="rounded-xl border border-[var(--color-line)] px-3.5 py-2 text-sm text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+            className="rounded-xl border border-[var(--color-line)] px-3.5 py-2 text-small text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
           >
             Close
           </button>
           <button
             onClick={save}
             disabled={!hasInk || busy}
-            className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-[14px] text-white transition-opacity disabled:opacity-40"
+            className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity disabled:opacity-40"
           >
             {busy ? "Saving…" : "Save page"}
           </button>

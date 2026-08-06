@@ -47,16 +47,16 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
   return (
     <main className="mx-auto w-full max-w-[46rem] px-6 pb-24 pt-12 sm:px-8">
       <header className="flex items-baseline justify-between gap-4">
-        <h1 className="text-[28px] font-semibold tracking-tight">Non-negotiables</h1>
+        <h1 className="text-heading font-serif font-semibold">Non-negotiables</h1>
         <Link
           href="/"
-          className="text-[14px] text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+          className="text-small text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
         >
           ← Today
         </Link>
       </header>
 
-      <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-[var(--color-muted)]">
+      <p className="mt-3 max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
         Small, binary, and separate from your blocks. No states and no reasons here — that&apos;s the
         point of the contrast. Pick which days each one applies to.
       </p>
@@ -68,12 +68,12 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
               <input
                 defaultValue={h.name}
                 onBlur={(e) => e.target.value.trim() && e.target.value !== h.name && patch({ id: h.id, name: e.target.value })}
-                className="min-w-0 flex-1 bg-transparent text-[15px] outline-none"
+                className="min-w-0 flex-1 bg-transparent font-serif text-body outline-none"
                 aria-label={`Rename ${h.name}`}
               />
               <button
                 onClick={() => patch({ id: h.id, remove: true })}
-                className="shrink-0 text-[13px] text-[var(--color-muted)] underline-offset-4 hover:underline"
+                className="shrink-0 text-small text-[var(--color-muted)] underline-offset-4 hover:underline"
               >
                 remove
               </button>
@@ -87,7 +87,7 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
                     onClick={() => toggleDay(h, i)}
                     aria-label={`${d} ${on ? "on" : "off"}`}
                     aria-pressed={on}
-                    className="h-7 w-7 rounded-lg text-[12px] transition-colors"
+                    className="h-7 w-7 rounded-lg text-micro transition-colors"
                     style={{
                       background: on ? "var(--color-accent)" : "transparent",
                       color: on ? "#fff" : "var(--color-muted)",
@@ -109,12 +109,12 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()}
           placeholder="Add a non-negotiable…"
-          className="min-w-0 flex-1 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-panel)] px-3.5 py-2.5 text-[15px] outline-none placeholder:text-[var(--color-muted)]"
+          className="min-w-0 flex-1 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-panel)] px-3.5 py-2.5 font-serif text-body outline-none placeholder:text-[var(--color-muted)]"
         />
         <button
           onClick={add}
           disabled={!name.trim()}
-          className="shrink-0 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-[15px] text-white disabled:opacity-40"
+          className="shrink-0 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-body text-white disabled:opacity-40"
         >
           Add
         </button>
