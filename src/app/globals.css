@@ -30,10 +30,18 @@
    * Three shades of "worse" would encode judgement in the palette itself. Using fill
    * vs outline keeps them instantly distinguishable while staying tonally equal, and
    * it sidesteps a contrast failure — a third grey pale enough to read as "least"
-   * came out at 2.1:1, below the 3:1 floor for a meaningful swatch. */
-  --color-adhered: #9a6a2e; /* the accent — the only coloured state */
-  --color-drifted: #8a8378; /* 3.6:1 warm grey. Information, not alarm. */
-  --color-skipped: #8f8676; /* 3.4:1, used as an outline + label, never as a fill */
+   * came out at 2.1:1, below the 3:1 floor for a meaningful swatch.
+   *
+   * Both greys were darkened here. The chip rule this palette already applies to the
+   * pillar hues — a filled chip must clear 4.5:1 with WHITE on top, not merely 3:1
+   * against the page — had never been run against the two block states, and both failed
+   * it. Drifted carried white text at 3.75:1; Skipped was used as 13px label text at
+   * 3.08:1 on the page. Darkening moves them TOWARD Adhered's 4.69:1 rather than away,
+   * so the three states end up more tonally equal than before, not less. No ramp is
+   * introduced: Skipped is still an outline, and form is still what separates them. */
+  --color-adhered: #9a6a2e; /* the accent — the only coloured state · 4.69:1 with white */
+  --color-drifted: #7b746a; /* filled warm grey · 4.62:1 with white. Information, not alarm. */
+  --color-skipped: #72695a; /* outline + label · 4.64:1 on page, 5.14:1 on panel. Never a fill. */
 
   /* pillars: categorisation only, desaturated for a light ground.
    * All three are verified at >=3:1 against the page as ring strokes AND >=4.5:1 with
