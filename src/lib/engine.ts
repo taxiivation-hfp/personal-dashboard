@@ -95,6 +95,33 @@ export async function setHabit(db: Client, habitId: number, date: string, done: 
   }
 }
 
+/**
+ * A non-negotiable that takes a NUMBER rather than a tick — daily weight.
+ *
+ * The number lives in habit_entries.value, which is already a REAL, so adherence and the
+ * rings need no special case: an entry exists or it does not. Passing null clears the
+ * day, exactly like unticking.
+ *
+ * Guarded to a plausible human range. A stray keystroke should not silently become a
+ * permanent 700kg data point in a chart you later trust.
+ */
+export async function setHabitValue(
+  db: Client,
+  habitId: number,
+  date: string,
+  value: number | null
+): Promise<void> {
+  if (value == null || !Number.isFinite(value) || value <= 0) {
+    await db.execute({ sql: "DELETE FROM habit_entries WHERE habit_id=? AND date=?", args: [habitId, date] });
+    return;
+  }
+  const v = Math.min(999, Math.max(0.1, Math.round(value * 10) / 10));
+  await db.execute({
+    sql: "INSERT INTO habit_entries (habit_id,date,value) VALUES (?,?,?) ON CONFLICT(habit_id,date) DO UPDATE SET value=excluded.value",
+    args: [habitId, date, v],
+  });
+}
+
 export async function createHabit(
   db: Client,
   h: { name: string; pillar_id?: number | null; days_mask?: number }
@@ -495,10 +522,48 @@ export async function setGymSession(
   }
 }
 
-/** Which kinds are logged for a date — drives the Log workout toggles. */
-export async function workoutKindsOn(db: Client, date: string): Promise<WorkoutKind[]> {
-  const r = await db.execute({ sql: "SELECT DISTINCT kind FROM gym_sessions WHERE date=?", args: [date] });
-  return r.rows.map((x) => String(x.kind) as WorkoutKind);
+/** Which kinds are logged for a date, with their notes — drives the workout documents. */
+export async function workoutsOn(
+  db: Client,
+  date: string
+): Promise<{ kind: WorkoutKind; title: string | null; note: string | null }[]> {
+  const r = await db.execute({
+    sql: "SELECT kind,title,note FROM gym_sessions WHERE date=? ORDER BY kind",
+    args: [date],
+  });
+  return r.rows.map((x) => ({
+    kind: String(x.kind) as WorkoutKind,
+    title: x.title == null ? null : String(x.title),
+    note: x.note == null ? null : String(x.note),
+  }));
+}
+
+/**
+ * Write a workout document. Three kinds means three SEPARATE documents per day — a lift
+ * and a run on the same Tuesday are different sessions with different notes, and merging
+ * them into one field would lose that.
+ *
+ * Saving is what logs the session: there is no separate "did it" toggle to forget.
+ */
+export async function saveWorkout(
+  db: Client,
+  date: string,
+  kind: WorkoutKind,
+  note: string
+): Promise<void> {
+  await db.execute({
+    sql: `INSERT INTO gym_sessions (date,kind,note) VALUES (?,?,?)
+          ON CONFLICT(date,kind) DO UPDATE SET note=excluded.note`,
+    args: [date, kind, note.trim() || null],
+  });
+}
+
+/** Remove a workout. Imported rows carry a title; those are rescued history, left alone. */
+export async function deleteWorkout(db: Client, date: string, kind: WorkoutKind): Promise<void> {
+  await db.execute({
+    sql: "DELETE FROM gym_sessions WHERE date=? AND kind=? AND title IS NULL",
+    args: [date, kind],
+  });
 }
 
 // ---------------------------------------------------------------- pillar colour

@@ -71,6 +71,11 @@ CREATE TABLE IF NOT EXISTS habits (
   -- Stable identity that survives a rename. The engine used to look habits up by
   -- literal name, which breaks the moment the owner is allowed to edit them.
   system_key   TEXT,
+  -- 'check' = a plain tick. 'number' = type a value (weight in kg). habit_entries.value
+  -- holds it either way, so adherence and the rings need no special case: an entry exists
+  -- or it does not.
+  input        TEXT NOT NULL DEFAULT 'check' CHECK (input IN ('check','number')),
+  unit         TEXT,
   -- Flags the one habit that may escalate to a phone call. Enforced as at-most-one
   -- by a partial unique index (created in migrate.mjs, after the column back-fill):
   -- escalating everything is what makes the calls ignorable.

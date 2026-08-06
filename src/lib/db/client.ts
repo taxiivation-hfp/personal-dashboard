@@ -64,6 +64,14 @@ async function ensure(c: Client): Promise<Client> {
   if (!(await has("pillars", "color"))) {
     await c.execute("ALTER TABLE pillars ADD COLUMN color TEXT");
   }
+  if (!(await has("habits", "input"))) {
+    await c.execute(
+      "ALTER TABLE habits ADD COLUMN input TEXT NOT NULL DEFAULT 'check' CHECK (input IN ('check','number'))"
+    );
+  }
+  if (!(await has("habits", "unit"))) {
+    await c.execute("ALTER TABLE habits ADD COLUMN unit TEXT");
+  }
 
   // Only after the back-fills — see the note in schema.sql. (date,kind) rather than
   // (date) so one day can hold a lift AND a run.

@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db/client";
 import { getRingCounts, getObservedDays } from "@/lib/queries";
-import { workoutKindsOn } from "@/lib/engine";
+import { workoutsOn } from "@/lib/engine";
 import { buildRings, WINDOW_DAYS } from "@/lib/rings";
 import { addDays, isISODate, todayISO } from "@/lib/dates";
 
@@ -16,19 +16,19 @@ export async function GET(req: Request) {
     const from = addDays(anchor, -(WINDOW_DAYS - 1));
 
     const db = await getDb();
-    const [counts, observedDays, workoutsToday] = await Promise.all([
+    const [counts, observedDays, workouts] = await Promise.all([
       getRingCounts(db, from, anchor),
       getObservedDays(db, anchor),
       // The workout metrics are 14-day counts, so they cannot tell the toggles what is
       // logged TODAY. One extra lookup rather than a second round trip from the client.
-      workoutKindsOn(db, anchor),
+      workoutsOn(db, anchor),
     ]);
 
     return Response.json({
       date: anchor,
       from,
       observedDays,
-      workoutsToday,
+      workouts,
       pillars: buildRings(counts, observedDays),
     });
   } catch (e) {

@@ -34,6 +34,12 @@ export type HabitView = {
   days_mask: number;
   done: boolean;
   system_key: string | null;
+  /** 'check' = a tick. 'number' = type a value. */
+  input: "check" | "number";
+  /** e.g. "kg". Shown beside a numeric input. */
+  unit: string | null;
+  /** The logged number for a numeric habit; null when nothing is entered. */
+  value: number | null;
 };
 
 export type SubgoalView = {
@@ -171,7 +177,7 @@ export async function habitsForDate(db: Client, date: string): Promise<HabitView
   const { byId } = await pillarMaps(db);
   const bit = weekdayBit(date);
   const r = await db.execute({
-    sql: `SELECT h.id,h.name,h.pillar_id,h.days_mask,h.system_key, he.value AS v
+    sql: `SELECT h.id,h.name,h.pillar_id,h.days_mask,h.system_key,h.input,h.unit, he.value AS v
           FROM habits h LEFT JOIN habit_entries he ON he.habit_id=h.id AND he.date=?
           WHERE h.active=1 AND (h.days_mask & ?) != 0
           ORDER BY h.sort_order, h.id`,
@@ -184,6 +190,9 @@ export async function habitsForDate(db: Client, date: string): Promise<HabitView
     days_mask: num(h.days_mask),
     done: h.v != null,
     system_key: str(h.system_key),
+    input: (str(h.input) ?? "check") as "check" | "number",
+    unit: str(h.unit),
+    value: h.v == null ? null : Number(h.v),
   }));
 }
 
@@ -191,7 +200,7 @@ export async function habitsForDate(db: Client, date: string): Promise<HabitView
 export async function allHabits(db: Client): Promise<HabitView[]> {
   const { byId } = await pillarMaps(db);
   const r = await db.execute(
-    "SELECT id,name,pillar_id,days_mask,system_key FROM habits WHERE active=1 ORDER BY sort_order, id"
+    "SELECT id,name,pillar_id,days_mask,system_key,input,unit FROM habits WHERE active=1 ORDER BY sort_order, id"
   );
   return r.rows.map((h) => ({
     id: num(h.id),
@@ -200,6 +209,9 @@ export async function allHabits(db: Client): Promise<HabitView[]> {
     days_mask: num(h.days_mask),
     done: false,
     system_key: str(h.system_key),
+    input: (str(h.input) ?? "check") as "check" | "number",
+    unit: str(h.unit),
+    value: null,
   }));
 }
 

@@ -348,6 +348,35 @@ async function main() {
     );
   }
 
+  // ---------------------------------------------------------------- round three
+  const r3 = await client.execute("SELECT value FROM app_meta WHERE key='round3_v1'");
+  if (!r3.rows.length) {
+    // A non-negotiable can now take a NUMBER instead of a tick. `value` in habit_entries
+    // is already a REAL, so the reading is unchanged — a weight is simply the value, and
+    // "done" still means "an entry exists". No parallel table, and it counts toward
+    // adherence exactly like every other non-negotiable.
+    const hCols = await client.execute("PRAGMA table_info(habits)");
+    if (!hCols.rows.some((r) => String(r.name) === "input")) {
+      await client.execute(
+        "ALTER TABLE habits ADD COLUMN input TEXT NOT NULL DEFAULT 'check' CHECK (input IN ('check','number'))"
+      );
+    }
+    if (!hCols.rows.some((r) => String(r.name) === "unit")) {
+      await client.execute("ALTER TABLE habits ADD COLUMN unit TEXT");
+    }
+
+    // Daily weight. Keyed by system_key so it survives a rename, like journal and steps.
+    await client.execute(
+      `INSERT INTO habits (pillar_id,name,target_value,source,cadence,active,days_mask,system_key,input,unit,sort_order)
+       SELECT (SELECT id FROM pillars WHERE key='physical'),'Weight',1,'manual','daily',1,127,'weight','number','kg',
+              (SELECT COALESCE(MAX(sort_order),0)+1 FROM habits)
+       WHERE NOT EXISTS (SELECT 1 FROM habits WHERE system_key='weight')`
+    );
+
+    await client.execute("INSERT INTO app_meta (key,value) VALUES ('round3_v1','1')");
+    console.log("round three: numeric non-negotiables + daily weight");
+  }
+
   console.log("migration complete:", url);
   client.close();
 }

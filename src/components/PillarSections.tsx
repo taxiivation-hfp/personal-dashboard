@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Ring, { toneColor } from "./PillarRing";
+import WorkoutLog, { type Workout } from "./WorkoutLog";
 import type { GoalView, SkillView, PillarKey } from "@/lib/queries";
 import type { PillarRingView, WorkoutKind } from "@/lib/rings";
 
@@ -36,26 +37,31 @@ export default function PillarSections({
   skills,
   rings,
   colors,
-  workoutsToday,
+  workouts,
+  date,
   onSubgoal,
   onLogTime,
   onUndoTime,
-  onToggleWorkout,
+  onSaveWorkout,
+  onDeleteWorkout,
 }: {
   goals: GoalView[];
   skills: SkillView[];
   rings: PillarRingView[] | null;
   /** Owner-chosen hue per pillar, from the curated palette. */
   colors: Partial<Record<PillarKey, string | null>>;
-  workoutsToday: WorkoutKind[];
+  workouts: Workout[];
+  date: string;
   onSubgoal: (id: number, done: boolean) => Promise<void>;
   onLogTime: (skillId: number, minutes: number) => Promise<void>;
   onUndoTime: (skillId: number) => Promise<void>;
-  onToggleWorkout: (kind: WorkoutKind, on: boolean) => Promise<void>;
+  onSaveWorkout: (kind: WorkoutKind, note: string) => Promise<void>;
+  onDeleteWorkout: (kind: WorkoutKind) => Promise<void>;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<number | null>(null);
   const [mins, setMins] = useState<Record<number, string>>({});
+  const [openLog, setOpenLog] = useState<WorkoutKind | null>(null);
 
   // Relative to the largest FORTNIGHT figure, so the bars compare where time went
   // recently. No target and no full state — nothing here is completable.
@@ -126,18 +132,17 @@ export default function PillarSections({
                 <h3 className="text-[13px] font-semibold text-[var(--color-muted)]">Log workout</h3>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {WORKOUTS.map((w) => {
-                    const on = workoutsToday.includes(w.kind);
+                    const logged = workouts.find((x) => x.kind === w.kind);
                     return (
                       <button
                         key={w.kind}
-                        onClick={() => run(`w${w.kind}`, () => onToggleWorkout(w.kind, !on))}
-                        aria-pressed={on}
-                        disabled={busy === `w${w.kind}`}
-                        className="rounded-full border px-3 py-1.5 text-[12px] transition-colors disabled:opacity-40"
+                        onClick={() => setOpenLog(w.kind)}
+                        aria-haspopup="dialog"
+                        className="rounded-full border px-3 py-1.5 text-[12px] transition-colors"
                         style={{
-                          borderColor: on ? hue : "var(--color-line-strong)",
-                          background: on ? hue : "transparent",
-                          color: on ? "var(--color-panel)" : "inherit",
+                          borderColor: logged ? hue : "var(--color-line-strong)",
+                          background: logged ? hue : "transparent",
+                          color: logged ? "var(--color-panel)" : "inherit",
                         }}
                       >
                         {w.label}
@@ -145,6 +150,19 @@ export default function PillarSections({
                     );
                   })}
                 </div>
+
+                {openLog && (
+                  <WorkoutLog
+                    kind={openLog}
+                    label={WORKOUTS.find((w) => w.kind === openLog)!.label}
+                    date={date}
+                    workout={workouts.find((x) => x.kind === openLog) ?? null}
+                    hue={hue}
+                    onSave={(note) => onSaveWorkout(openLog, note)}
+                    onDelete={() => onDeleteWorkout(openLog)}
+                    onClose={() => setOpenLog(null)}
+                  />
+                )}
               </div>
             )}
 

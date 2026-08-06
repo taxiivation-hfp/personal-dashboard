@@ -10,6 +10,7 @@ import CalendarColumn from "./CalendarColumn";
 import PillarSections from "./PillarSections";
 import Ring, { toneColor } from "./PillarRing";
 import { PhoneTabBar, PhoneSwipe, type PhoneTab } from "./PhoneTabs";
+import type { Workout } from "./WorkoutLog";
 import { prettyDate } from "@/lib/dates";
 import type { DayView, GoalView, SkillView, PillarKey } from "@/lib/queries";
 import type { PillarRingView, WorkoutKind } from "@/lib/rings";
@@ -40,7 +41,7 @@ export default function Today({
   const [goals, setGoals] = useState<GoalView[]>(initialGoals);
   const [skills, setSkills] = useState<SkillView[]>(initialSkills);
   const [rings, setRings] = useState<PillarRingView[] | null>(null);
-  const [workoutsToday, setWorkoutsToday] = useState<WorkoutKind[]>([]);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
   // Phone only: which of the three panes is showing. Opens on the day's work, and a
   // reload returns there rather than wherever you last wandered.
   const [tab, setTab] = useState<PhoneTab>("today");
@@ -59,7 +60,7 @@ export default function Today({
       .then((s) => {
         if (s.error) return;
         setRings(s.pillars ?? []);
-        setWorkoutsToday(s.workoutsToday ?? []);
+        setWorkouts(s.workouts ?? []);
       })
       .catch(() => {});
   }, [data.date]);
@@ -102,12 +103,29 @@ export default function Today({
     loadRings(); // a skill session feeds the Portfolio ring
   }
 
-  async function toggleWorkout(kind: WorkoutKind, on: boolean) {
+  /** Numeric non-negotiable (weight). An empty field clears the day. */
+  async function setHabitNumber(id: number, raw: string) {
+    const v = raw.trim() === "" ? null : Number(raw);
+    if (v !== null && !Number.isFinite(v)) return;
+    await fetch("/api/habits/log", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ habit_id: id, date: data.date, value: v }),
+    }).catch(() => {});
+    refresh();
+  }
+
+  async function saveWorkout(kind: WorkoutKind, note: string) {
     await fetch("/api/gym", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ date: data.date, kind, on }),
+      body: JSON.stringify({ date: data.date, kind, note }),
     }).catch(() => {});
+    loadRings();
+  }
+
+  async function deleteWorkout(kind: WorkoutKind) {
+    await fetch(`/api/gym?date=${data.date}&kind=${kind}`, { method: "DELETE" }).catch(() => {});
     loadRings();
   }
 
@@ -220,7 +238,50 @@ export default function Today({
           </Link>
         </div>
         <ul className="mt-3 flex flex-col gap-0.5">
-          {data.habits.map((h) => (
+          {data.habits.map((h) =>
+            // A NUMERIC non-negotiable — weight. Typing a number is the tick: the entry
+            // exists or it does not, so adherence needs no special case. Clearing the
+            // field clears the day, exactly like unticking.
+            h.input === "number" ? (
+              <li key={h.id}>
+                <div className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5">
+                  <span
+                    aria-hidden
+                    className="h-5 w-5 shrink-0 rounded-md border transition-colors"
+                    style={{
+                      borderColor: h.done
+                        ? h.pillar
+                          ? toneColor(h.pillar, colors[h.pillar])
+                          : "var(--color-accent)"
+                        : "var(--color-line-strong)",
+                      background: h.done
+                        ? h.pillar
+                          ? toneColor(h.pillar, colors[h.pillar])
+                          : "var(--color-accent)"
+                        : "transparent",
+                    }}
+                  />
+                  <label htmlFor={`h${h.id}`} className={`text-[15px] ${h.done ? "text-[var(--color-muted)]" : ""}`}>
+                    {h.name}
+                  </label>
+                  <span className="ml-auto flex items-center gap-1.5">
+                    <input
+                      id={`h${h.id}`}
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      inputMode="decimal"
+                      placeholder="—"
+                      defaultValue={h.value ?? ""}
+                      onBlur={(e) => setHabitNumber(h.id, e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                      className="w-[4.5rem] rounded-lg bg-[var(--color-panel-2)] px-2.5 py-1 text-right text-[14px] tabular-nums outline-none"
+                    />
+                    {h.unit && <span className="text-[13px] text-[var(--color-muted)]">{h.unit}</span>}
+                  </span>
+                </div>
+              </li>
+            ) : (
             <li key={h.id}>
               <button
                 onClick={() => toggleHabit(h.id, !h.done)}
@@ -254,7 +315,8 @@ export default function Today({
                 <span className={`text-[15px] ${h.done ? "text-[var(--color-muted)]" : ""}`}>{h.name}</span>
               </button>
             </li>
-          ))}
+            )
+          )}
           {data.habits.length === 0 && (
             <li className="px-2 py-2 text-[15px] text-[var(--color-muted)]">
               Nothing set for today.{" "}
@@ -286,7 +348,8 @@ export default function Today({
       skills={skills}
       rings={rings}
       colors={colors}
-      workoutsToday={workoutsToday}
+      workouts={workouts}
+      date={data.date}
       onSubgoal={(id, done) =>
         mutateGoals(`/api/subgoals/${id}`, { method: "PATCH", body: JSON.stringify({ done }) })
       }
@@ -299,7 +362,8 @@ export default function Today({
       onUndoTime={(skillId) =>
         mutateSkills(`/api/skills/${skillId}/time?date=${data.date}`, { method: "DELETE" })
       }
-      onToggleWorkout={toggleWorkout}
+      onSaveWorkout={saveWorkout}
+      onDeleteWorkout={deleteWorkout}
     />
   );
 
