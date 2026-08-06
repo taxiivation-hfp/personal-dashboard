@@ -55,8 +55,9 @@ export default function PillarSections({
   onSubgoal: (id: number, done: boolean) => Promise<void>;
   onLogTime: (skillId: number, minutes: number) => Promise<void>;
   onUndoTime: (skillId: number) => Promise<void>;
-  onSaveWorkout: (kind: WorkoutKind, note: string) => Promise<void>;
-  onDeleteWorkout: (kind: WorkoutKind) => Promise<void>;
+  /** id null = log a NEW session; an id edits that one. */
+  onSaveWorkout: (kind: WorkoutKind, note: string, id: number | null) => Promise<void>;
+  onDeleteWorkout: (id: number) => Promise<void>;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<number | null>(null);
@@ -185,8 +186,13 @@ export default function PillarSections({
                     date={date}
                     workout={workouts.find((x) => x.kind === openLog) ?? null}
                     hue={hue}
-                    onSave={(note) => onSaveWorkout(openLog, note)}
-                    onDelete={() => onDeleteWorkout(openLog)}
+                    onSave={(note) =>
+                      onSaveWorkout(openLog, note, workouts.find((x) => x.kind === openLog)?.id ?? null)
+                    }
+                    onDelete={() => {
+                      const w = workouts.find((x) => x.kind === openLog);
+                      return w ? onDeleteWorkout(w.id) : Promise.resolve();
+                    }}
                     onClose={() => setOpenLog(null)}
                   />
                 )}

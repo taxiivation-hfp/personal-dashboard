@@ -73,12 +73,16 @@ async function ensure(c: Client): Promise<Client> {
     await c.execute("ALTER TABLE habits ADD COLUMN unit TEXT");
   }
 
-  // Only after the back-fills — see the note in schema.sql. (date,kind) rather than
-  // (date) so one day can hold a lift AND a run.
+  // Only after the back-fills — see the note in schema.sql.
+  //
+  // SESSIONS, not days. The unique index is DROPPED here rather than merely left unused,
+  // and that is load-bearing: this function runs on EVERY app boot, so leaving the old
+  // CREATE in place would silently re-add the constraint after the migration and the
+  // second workout of a kind would start failing with UNIQUE constraint violations.
+  // engine.saveWorkout is addressed by row id and has no ON CONFLICT to fall back on.
+  await c.execute("DROP INDEX IF EXISTS idx_gym_sessions_date_kind");
   await c.execute("DROP INDEX IF EXISTS idx_gym_sessions_date");
-  await c.execute(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_sessions_date_kind ON gym_sessions(date, kind)"
-  );
+  await c.execute("CREATE INDEX IF NOT EXISTS idx_gym_sessions_date ON gym_sessions(date)");
 
   const { rows } = await c.execute("SELECT COUNT(*) AS n FROM pillars");
   if (Number((rows[0] as Record<string, unknown>).n) === 0) {

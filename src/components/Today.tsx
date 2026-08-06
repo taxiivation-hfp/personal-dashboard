@@ -115,17 +115,18 @@ export default function Today({
     refresh();
   }
 
-  async function saveWorkout(kind: WorkoutKind, note: string) {
+  /** id null logs a NEW session; an id edits that one. A day can hold two lifts. */
+  async function saveWorkout(kind: WorkoutKind, note: string, id: number | null) {
     await fetch("/api/gym", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ date: data.date, kind, note }),
+      body: JSON.stringify({ date: data.date, kind, note, id }),
     }).catch(() => {});
     loadRings();
   }
 
-  async function deleteWorkout(kind: WorkoutKind) {
-    await fetch(`/api/gym?date=${data.date}&kind=${kind}`, { method: "DELETE" }).catch(() => {});
+  async function deleteWorkout(id: number) {
+    await fetch(`/api/gym?date=${data.date}&id=${id}`, { method: "DELETE" }).catch(() => {});
     loadRings();
   }
 

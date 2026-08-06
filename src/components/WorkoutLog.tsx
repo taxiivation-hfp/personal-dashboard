@@ -15,7 +15,9 @@ import type { WorkoutKind } from "@/lib/rings";
  * the rescued Discord history is already free text.
  */
 
-export type Workout = { kind: WorkoutKind; title: string | null; note: string | null };
+/** One SESSION, not one kind-per-day: a day can hold two lifts, so the id is what
+ *  distinguishes them. */
+export type Workout = { id: number; kind: WorkoutKind; title: string | null; note: string | null };
 
 const PLACEHOLDER: Record<WorkoutKind, string> = {
   strength: "45kg OHP - 6 reps\n45kg OHP - 6 reps\n70kg Chest Flies - 6 reps",

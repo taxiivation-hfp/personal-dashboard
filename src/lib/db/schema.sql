@@ -313,8 +313,11 @@ CREATE TABLE IF NOT EXISTS google_oauth_tokens (
 -- non-negotiable every week BY DESIGN, and an item engineered to fail teaches distrust
 -- of the whole list.
 --
--- The unique index on date encodes the per-day cap: one gym DAY, not one gym session.
--- Two visits in a day is the same event here, exactly as 15k steps is the same as 7k.
+-- One row per SESSION. This used to be one row per (date, kind), enforced by a unique
+-- index, on the reasoning that two visits in a day were the same event — as 15k steps is
+-- the same as 7k. The owner reversed that: two lifts on a Tuesday are two things that
+-- happened. The unique index is gone, every writer is addressed by row id, and the ring
+-- counts rows (see Metric.perDayCapped in rings.ts).
 --
 -- title/done_at are carried over from the Discord gym import (tasks.kind='gym') rather
 -- than dropped — that history is real and irreplaceable. done_at stays NAIVE LOCAL,
@@ -332,8 +335,8 @@ CREATE TABLE IF NOT EXISTS gym_sessions (
   kind       TEXT NOT NULL DEFAULT 'strength' CHECK (kind IN ('strength','cardio','misc')),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
--- NOTE: the unique index on (date, kind) is NOT declared here. This file runs before the
+-- NOTE: the index on gym_sessions is NOT declared here. This file runs before the
 -- idempotent column back-fills, and CREATE TABLE IF NOT EXISTS silently skips an existing
--- table — so on an upgraded database the index would be created against a `kind` column
+-- table — so on an upgraded database an index would be created against a `kind` column
 -- that does not exist yet. It is created after the ALTERs, in both db/client.ts and
--- scripts/migrate.mjs.
+-- scripts/migrate.mjs, which are also where the old UNIQUE index is dropped.

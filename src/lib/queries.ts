@@ -372,10 +372,14 @@ export async function getRingCounts(db: Client, from: string, to: string): Promi
     }
 
     if (m.source === "gym") {
-      // DISTINCT date within a kind: the per-day cap applies per kind, so two strength
-      // sessions on Tuesday is still one strength day.
+      // Driven by the metric's own perDayCapped flag rather than hard-coded. Gym now
+      // counts SESSIONS — two lifts on a Tuesday are two things that happened — which is
+      // the owner's ruling. Keeping the switch here rather than in the SQL means the noun
+      // printed in the fact line and the way it is counted can never drift apart again;
+      // `misc` spent its whole life declaring "sessions" while being counted by date.
+      const agg = m.perDayCapped ? "COUNT(DISTINCT date)" : "COUNT(*)";
       const r = await db.execute({
-        sql: "SELECT COUNT(DISTINCT date) AS n FROM gym_sessions WHERE kind=? AND date BETWEEN ? AND ?",
+        sql: `SELECT ${agg} AS n FROM gym_sessions WHERE kind=? AND date BETWEEN ? AND ?`,
         args: [m.workoutKind!, from, to],
       });
       out[m.key] = { count: num(r.rows[0].n), resolved: true };

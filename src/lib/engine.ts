@@ -496,42 +496,32 @@ export async function undoSkillTime(db: Client, skillId: number, date: string): 
 
 // ---------------------------------------------------------------- gym
 //
-// One row per gym DAY. The unique index on date carries the per-day cap: two visits in a
-// day is the same event, exactly as 15k steps is the same as 7k.
+// One row per SESSION. A day can hold two lifts and a run, and each is its own document.
+//
+// This used to be one row per (date, kind), enforced by a unique index that the writers
+// leaned on via ON CONFLICT. The owner's ruling reversed it: two lifts on a Tuesday are
+// two things that happened. The index is gone, so every writer here is addressed by ROW
+// ID — there is no (date, kind) upsert left, and adding one back would throw.
 
 export type WorkoutKind = "strength" | "cardio" | "misc";
 
-export async function setGymSession(
-  db: Client,
-  date: string,
-  kind: WorkoutKind,
-  on: boolean
-): Promise<void> {
-  if (on) {
-    await db.execute({
-      sql: "INSERT INTO gym_sessions (date,kind) VALUES (?,?) ON CONFLICT(date,kind) DO NOTHING",
-      args: [date, kind],
-    });
-  } else {
-    // Only removes a manually-toggled day. Imported rows carry a title; deleting one of
-    // those would destroy rescued history, so they are left alone.
-    await db.execute({
-      sql: "DELETE FROM gym_sessions WHERE date=? AND kind=? AND title IS NULL",
-      args: [date, kind],
-    });
-  }
-}
+export type Workout = {
+  id: number;
+  kind: WorkoutKind;
+  title: string | null;
+  note: string | null;
+};
 
-/** Which kinds are logged for a date, with their notes — drives the workout documents. */
-export async function workoutsOn(
-  db: Client,
-  date: string
-): Promise<{ kind: WorkoutKind; title: string | null; note: string | null }[]> {
+/** Every session logged for a date, with its note — drives the workout documents. */
+export async function workoutsOn(db: Client, date: string): Promise<Workout[]> {
   const r = await db.execute({
-    sql: "SELECT kind,title,note FROM gym_sessions WHERE date=? ORDER BY kind",
+    // Ordered by kind then id so a day's sessions read in a stable order and the second
+    // lift always follows the first.
+    sql: "SELECT id,kind,title,note FROM gym_sessions WHERE date=? ORDER BY kind, id",
     args: [date],
   });
   return r.rows.map((x) => ({
+    id: Number(x.id),
     kind: String(x.kind) as WorkoutKind,
     title: x.title == null ? null : String(x.title),
     note: x.note == null ? null : String(x.note),
@@ -539,31 +529,47 @@ export async function workoutsOn(
 }
 
 /**
- * Write a workout document. Three kinds means three SEPARATE documents per day — a lift
- * and a run on the same Tuesday are different sessions with different notes, and merging
- * them into one field would lose that.
+ * Write a workout document. No id means a NEW session; an id edits that one.
  *
  * Saving is what logs the session: there is no separate "did it" toggle to forget.
+ *
+ * The UPDATE is guarded on date AND kind as well as id. A stale id from a client that has
+ * been open across midnight would otherwise rewrite a different day's note, and the note
+ * is the irreplaceable part. A stale id simply falls through to an insert instead.
  */
 export async function saveWorkout(
   db: Client,
-  date: string,
-  kind: WorkoutKind,
-  note: string
-): Promise<void> {
-  await db.execute({
-    sql: `INSERT INTO gym_sessions (date,kind,note) VALUES (?,?,?)
-          ON CONFLICT(date,kind) DO UPDATE SET note=excluded.note`,
-    args: [date, kind, note.trim() || null],
+  w: { id?: number | null; date: string; kind: WorkoutKind; note: string }
+): Promise<number> {
+  const note = w.note.trim() || null;
+  if (w.id) {
+    const r = await db.execute({
+      sql: "UPDATE gym_sessions SET note=? WHERE id=? AND date=? AND kind=?",
+      args: [note, w.id, w.date, w.kind],
+    });
+    if (r.rowsAffected > 0) return w.id;
+  }
+  const ins = await db.execute({
+    sql: "INSERT INTO gym_sessions (date,kind,note) VALUES (?,?,?)",
+    args: [w.date, w.kind, note],
   });
+  return Number(ins.lastInsertRowid);
 }
 
-/** Remove a workout. Imported rows carry a title; those are rescued history, left alone. */
-export async function deleteWorkout(db: Client, date: string, kind: WorkoutKind): Promise<void> {
-  await db.execute({
-    sql: "DELETE FROM gym_sessions WHERE date=? AND kind=? AND title IS NULL",
-    args: [date, kind],
+/**
+ * Remove ONE session by id. Returns false when nothing matched, so the caller can hide
+ * the control rather than pretend it did something.
+ *
+ * Imported rows carry a title — that is rescued Discord history and is irreplaceable, so
+ * they are left alone. The old by-(date,kind) delete removed every matching row at once,
+ * which is now the wrong thing entirely.
+ */
+export async function deleteWorkout(db: Client, id: number): Promise<boolean> {
+  const r = await db.execute({
+    sql: "DELETE FROM gym_sessions WHERE id=? AND title IS NULL",
+    args: [id],
   });
+  return r.rowsAffected > 0;
 }
 
 // ---------------------------------------------------------------- pillar colour

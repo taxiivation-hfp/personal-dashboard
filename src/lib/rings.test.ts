@@ -32,7 +32,7 @@ test("the true count survives the cap in the fact line", () => {
   const r = find(buildRings(counts({ strength: ok(11) }), WINDOW_DAYS), "physical", "strength");
   assert.equal(r.fill, 1);
   assert.equal(r.count, 11);
-  assert.equal(r.fact, "11 of 8 days");
+  assert.equal(r.fact, "11 of 8 sessions");
 });
 
 test("partial fill is the plain ratio", () => {
@@ -85,13 +85,16 @@ test("an unresolved habit source is a ghost, not a zero", () => {
 
 test("a partial window says so, so day one cannot read as a fortnight of neglect", () => {
   const r = find(buildRings(counts({ strength: ok(2) }), 3), "physical", "strength");
-  assert.equal(r.fact, "2 of 8 days · day 3 of 14");
+  assert.equal(r.fact, "2 of 8 sessions");
+  // Split out of `fact` so the row can place the two around the Log button.
+  assert.equal(r.window, "day 3 of 14");
   assert.equal(r.fill, 0.25);
 });
 
 test("a fully observed window drops the day counter", () => {
   const r = find(buildRings(counts({ strength: ok(2) }), 14), "physical", "strength");
-  assert.equal(r.fact, "2 of 8 days");
+  assert.equal(r.fact, "2 of 8 sessions");
+  assert.equal(r.window, null);
 });
 
 // ---------------------------------------------------------------- units
@@ -105,9 +108,41 @@ test("skill sessions are counted as sessions, not days", () => {
 
 test("every day-capped metric requires no more than the window allows", () => {
   for (const m of METRICS) {
-    if (m.unit !== "days" || m.required == null) continue;
+    // perDayCapped, NOT unit. `unit` is only the printed noun now; keying this guard off
+    // it meant renaming a noun silently dropped a metric out of the check.
+    if (!m.perDayCapped || m.required == null) continue;
     assert.ok(m.required <= WINDOW_DAYS, `${m.key} requires ${m.required} of ${WINDOW_DAYS} days`);
   }
+});
+
+test("the gym metrics count SESSIONS — a second lift on a Tuesday is a second thing", () => {
+  for (const key of ["strength", "cardio", "misc"]) {
+    const m = METRICS.find((x) => x.key === key)!;
+    assert.equal(m.perDayCapped, false, `${key} is not per-day capped`);
+    assert.equal(m.unit, "sessions", `${key} says so in its fact line`);
+  }
+});
+
+test("things capped by nature stay capped", () => {
+  // A non-negotiable is ticked once; 15k steps IS the same day as 7k. If either of these
+  // ever flips, the ring stops meaning what its threshold says.
+  for (const key of ["outreach", "steps"]) {
+    assert.equal(METRICS.find((x) => x.key === key)!.perDayCapped, true);
+  }
+});
+
+test("the printed noun and the counting rule are allowed to disagree, but not by accident", () => {
+  // misc read "sessions" while being counted by date for its whole life. The two fields
+  // are separate on purpose; this pins the intended pairing so a drift is loud.
+  const expected: Record<string, boolean> = {
+    outreach: true,
+    strength: false,
+    cardio: false,
+    misc: false,
+    steps: true,
+    skills: false,
+  };
+  for (const m of METRICS) assert.equal(m.perDayCapped, expected[m.key], `${m.key}`);
 });
 
 test("every pillar appears exactly once and metric keys are unique", () => {

@@ -2,10 +2,16 @@
 // `node --test` with no dependencies.
 //
 // THE CORE RULE: a ring fills toward a SUFFICIENCY THRESHOLD and CAPS there. It cannot
-// be improved by doing more — 8 gym days and 20 gym days render identically, and 15k
+// be improved by doing more — 8 strength sessions and 20 render identically, and 15k
 // steps fills the steps ring exactly as much as 7k. That cap is the whole mechanism:
 // because you cannot win by overdoing one pillar, the only board that looks good is a
 // well-rounded one.
+//
+// A SECOND, INNER CAP applies to some metrics only: `perDayCapped` says whether a day can
+// contribute more than once. Steps is capped by nature (15k ≡ 7k) and a habit can only be
+// ticked once. Gym is NOT, by the owner's ruling — two lifts on a Tuesday are two things
+// that happened. That ruling makes the Physical ring easier to fill than the days rule it
+// replaced, and the threshold was deliberately left at 8 anyway.
 //
 // Thresholds are the owner's MINIMUMS, not stretch goals, and they are configured here
 // on purpose so retuning is a one-line change.
@@ -79,8 +85,23 @@ export type Metric = {
    * is deliberately never a target.
    */
   required: number | null;
-  /** The noun in the fact line. Days are per-day capped; sessions are not. */
+  /**
+   * The noun printed in the fact line, and ONLY that.
+   *
+   * It used to double as the cap semantics, which was a trap: renaming a metric's noun
+   * silently changed how it was counted and dropped it out of a test invariant. The cap
+   * now lives in `perDayCapped`, and these two must be allowed to disagree — `misc` reads
+   * "sessions" and always did, even while it was being counted by day.
+   */
   unit: "days" | "sessions";
+  /**
+   * Whether one date can contribute at most once.
+   *
+   * TRUE for things capped by nature: a habit is ticked once, and 15k steps is the same
+   * day as 7k. FALSE for gym and skills, where a second session is a second thing that
+   * happened. This is what `queries.ts` switches COUNT(DISTINCT date) vs COUNT(*) on.
+   */
+  perDayCapped: boolean;
   /**
    * Share of the pillar's mean. Default 1 — an unweighted pillar behaves exactly as an
    * equal mean, so nothing else had to change when this was added.
@@ -100,6 +121,7 @@ export const METRICS: Metric[] = [
     systemKey: "outreach",
     required: 2, // 1 / week
     unit: "days",
+    perDayCapped: true, // a non-negotiable is ticked once
     weight: 1,
     sourceReady: true,
   },
@@ -109,8 +131,9 @@ export const METRICS: Metric[] = [
     label: "Strength",
     source: "gym",
     workoutKind: "strength",
-    required: 8, // the owner's stated minimum
-    unit: "days",
+    required: 8, // the owner's stated minimum, held at 8 across the days->sessions move
+    unit: "sessions",
+    perDayCapped: false, // two lifts on a Tuesday are two things that happened
     // Physical is a WEIGHTED mean, 0.8 strength / 0.2 cardio. Eight strength days and no
     // cardio reads 80%, not 50% — the bulk of the intent was met, and the empty cardio
     // ring still shows what was skipped.
@@ -124,7 +147,8 @@ export const METRICS: Metric[] = [
     source: "gym",
     workoutKind: "cardio",
     required: 2, // a floor, not a target
-    unit: "days",
+    unit: "sessions",
+    perDayCapped: false,
     weight: 0.2,
     sourceReady: true,
   },
@@ -138,6 +162,9 @@ export const METRICS: Metric[] = [
     // becoming a target — the constitution's "output is not scored" made literal.
     required: null,
     unit: "sessions",
+    // Was counted by DATE while declaring "sessions" — the label and the counter
+    // disagreed. Fixed for free by the perDayCapped split.
+    perDayCapped: false,
     weight: 0,
     sourceReady: true,
   },
@@ -149,6 +176,7 @@ export const METRICS: Metric[] = [
     dailyThreshold: 7000,
     required: 12, // 7k / day
     unit: "days",
+    perDayCapped: true, // 15k steps IS the same day as 7k
     weight: 0,
     // Dormant: nothing writes health_logs.steps yet. Config is valid and ready for the
     // day a source lands; until then this renders as a GHOST (not unscored — !sourceReady
@@ -165,6 +193,7 @@ export const METRICS: Metric[] = [
     // badminton, dancing) are social activities, so three on one Saturday is three
     // things that happened, not cramming. The outer cap still bounds the ring.
     unit: "sessions",
+    perDayCapped: false,
     weight: 1,
     sourceReady: true,
   },
@@ -194,8 +223,19 @@ export type MetricRing = {
    * VISUAL ONLY. It never reaches the pillar mean — see buildRings.
    */
   overdrive: number | null;
-  /** The line printed under the ring. The arc caps; this never does. */
+  /** The count printed under the ring. The arc caps; this never does. */
   fact: string;
+  /**
+   * "day 9 of 14" while the window is still filling, else null.
+   *
+   * Split out of `fact` so the row can place the two independently — the Log button sits
+   * between them. Day one must not read like a fortnight of neglect, which is why this
+   * exists at all.
+   */
+  window: string | null;
+  /** Which workout row this metric counts, when it counts one. Carried through so the UI
+   *  can tell which rows get a Log button without re-deriving it from the key. */
+  workoutKind?: WorkoutKind;
 };
 
 export type PillarRingView = {
@@ -235,15 +275,19 @@ export function metricOverdrive(count: number, required: number | null, hasSourc
   return Math.min(1, (ratio - 1) / (OVERDRIVE_CAP - 1));
 }
 
-function factLine(m: Metric, count: number, state: MetricState, observedDays: number): string {
+function factLine(m: Metric, count: number, state: MetricState): string {
   if (state === "ghost") return "no data source yet";
   // Unscored: a count, and an explicit statement that it is not being measured against
   // anything. Saying "no data source yet" here would be a lie — there IS data.
   if (state === "unscored") return `${count} ${m.unit} · not scored`;
-  const base = `${count} of ${m.required} ${m.unit}`;
-  // Day one must not read like a fortnight of neglect: while the window is still
-  // filling, say so plainly rather than letting a thin ring imply failure.
-  return observedDays < WINDOW_DAYS ? `${base} · day ${observedDays} of ${WINDOW_DAYS}` : base;
+  return `${count} of ${m.required} ${m.unit}`;
+}
+
+/** Day one must not read like a fortnight of neglect: while the window is still filling,
+ *  say so plainly rather than letting a thin ring imply failure. Null once it is full. */
+function windowLine(state: MetricState, observedDays: number): string | null {
+  if (state !== "scored" || observedDays >= WINDOW_DAYS) return null;
+  return `day ${observedDays} of ${WINDOW_DAYS}`;
 }
 
 export function buildRings(counts: Record<string, RawCount>, observedDays: number): PillarRingView[] {
@@ -263,7 +307,9 @@ export function buildRings(counts: Record<string, RawCount>, observedDays: numbe
         state,
         fill: metricFill(raw.count, m.required, hasSource),
         overdrive: metricOverdrive(raw.count, m.required, hasSource),
-        fact: factLine(m, raw.count, state, observedDays),
+        fact: factLine(m, raw.count, state),
+        window: windowLine(state, observedDays),
+        workoutKind: m.workoutKind,
       };
     });
 
