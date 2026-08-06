@@ -1,6 +1,8 @@
 import { getDb } from "@/lib/db/client";
 import { getCalendarRange } from "@/lib/google";
 import { adherenceFor, buildBlocks, type BlockState } from "@/lib/adherence";
+import { getAdherenceConfig, habitTallyFor } from "@/lib/queries";
+import { weekdayBit } from "@/lib/engine";
 import { addDays, isISODate, todayISO } from "@/lib/dates";
 
 export const runtime = "nodejs";
@@ -51,16 +53,50 @@ export async function GET(req: Request) {
       });
     }
 
+    // Non-negotiables now count toward each day's rate, so the strip and the calendar
+    // column need the same tally the Today screen uses. Habit config is read as it is
+    // NOW — the schedule is not versioned, which the start stamp bounds the effect of.
+    const cfg = await getAdherenceConfig(db);
+    const habitRows = await db.execute("SELECT id, days_mask FROM habits WHERE active=1");
+    const activeHabits = habitRows.rows.map((r) => ({
+      id: Number(r.id),
+      mask: Number(r.days_mask),
+    }));
+    const tickRows = await db.execute({
+      sql: "SELECT habit_id, date FROM habit_entries WHERE date BETWEEN ? AND ? AND value > 0",
+      args: [start, end],
+    });
+    const ticksByDate = new Map<string, Set<number>>();
+    for (const r of tickRows.rows) {
+      const d = String(r.date);
+      if (!ticksByDate.has(d)) ticksByDate.set(d, new Set());
+      ticksByDate.get(d)!.add(Number(r.habit_id));
+    }
+
     const today = todayISO();
+    const nowMs = Date.now();
     const out = [];
     for (let i = 0; i < days; i++) {
       const d = addDays(start, i);
       const blocks = buildBlocks(d, byDate.get(d) ?? [], marksByDate.get(d) ?? new Map());
+
+      const bit = weekdayBit(d);
+      const scheduled = activeHabits.filter((h) => (h.mask & bit) !== 0);
+      const ticked = ticksByDate.get(d) ?? new Set<number>();
+      const tally = habitTallyFor(
+        d,
+        scheduled.length,
+        scheduled.filter((h) => ticked.has(h.id)).length,
+        cfg,
+        nowMs,
+        today
+      );
+
       out.push({
         date: d,
         isToday: d === today,
         isFuture: d > today,
-        ...adherenceFor(blocks),
+        ...adherenceFor(blocks, tally),
         // A compact summary so the calendar column can show what the day actually
         // held, not just a percentage — enough to read the pattern at a glance.
         blocks: blocks

@@ -1,5 +1,8 @@
 import type { CalEvent } from "./google";
-import { APP_TZ } from "./dates";
+// Explicit .ts extension so `node --test` can resolve this module. The type-only import
+// above is erased, so adherence.ts has exactly one runtime dependency and stays testable
+// with zero setup.
+import { APP_TZ } from "./dates.ts";
 
 /**
  * Adherence maths.
@@ -40,7 +43,40 @@ export type Adherence = {
   /** Due but not yet marked. These count against pct and are the call to action. */
   unmarked: number;
   due: number;
+  /** Scheduled non-negotiables not yet in the denominator, so the UI can say so rather
+   *  than leaving the number looking unexplained. 0 once the cutoff passes. */
+  habitsPending: number;
 };
+
+/**
+ * The day's non-negotiable tally.
+ *
+ * `scheduled` is how many applied that weekday; `done` how many were ticked. When `due`
+ * is false only `done` counts — see habitsDueOn.
+ */
+export type HabitTally = { due: boolean; scheduled: number; done: number };
+
+/**
+ * Have the day's non-negotiables had their chance?
+ *
+ * A block becomes due when its end time passes. A habit has no end time, so it becomes
+ * due at an evening cutoff. Before that an UNTICKED habit is not in the denominator at
+ * all — not missed, not pending — which preserves the rule that the number must not look
+ * bad at lunchtime for no reason.
+ *
+ * Pure: the caller computes the cutoff instant (rfc3339(date, '21:00', APP_TZ)), so this
+ * needs no timezone machinery and is trivially testable.
+ */
+export function habitsDueOn(
+  dateISO: string,
+  todayISO: string,
+  nowMs: number,
+  cutoffInstantMs: number
+): boolean {
+  if (dateISO < todayISO) return true; // the day is over
+  if (dateISO > todayISO) return false; // hasn't happened
+  return nowMs >= cutoffInstantMs;
+}
 
 const localDateTime = (iso: string): number => new Date(iso).getTime();
 
@@ -89,19 +125,51 @@ export function buildBlocks(
     });
 }
 
-export function adherenceFor(blocks: Block[]): Adherence {
+/**
+ * The day's rate over BLOCKS AND NON-NEGOTIABLES, weighted equally — one item is one
+ * item. A 15-minute habit and a 3-hour block count the same, which is the same logic that
+ * makes working a block badly identical to working it brilliantly.
+ *
+ * `habits` omitted (or null) = blocks only. That is how days before
+ * app_meta['adherence_habits_since'] stay exactly as they were lived: counting habits
+ * retroactively would hold four untouched non-negotiables against every past day.
+ *
+ * Before the cutoff the rate is deliberately OPTIMISTIC — a ticked habit counts in both
+ * numerator and denominator, an unticked one is in neither. Ticking has to visibly do
+ * something or tap-as-you-go becomes pointless until 21:00, and that outranks tidiness.
+ * The number settles when the cutoff passes and the rest join the denominator.
+ */
+export function adherenceFor(blocks: Block[], habits?: HabitTally | null): Adherence {
   const counted = blocks.filter((b) => b.state !== "dismissed" && b.due);
-  const adhered = counted.filter((b) => b.state === "adhered").length;
   const drifted = counted.filter((b) => b.state === "drifted").length;
   const skipped = counted.filter((b) => b.state === "skipped").length;
-  const unmarked = counted.filter((b) => b.state == null).length;
+
+  let adhered = counted.filter((b) => b.state === "adhered").length;
+  let unmarked = counted.filter((b) => b.state == null).length;
+  let due = counted.length;
+  let habitsPending = 0;
+
+  if (habits) {
+    const done = Math.max(0, Math.min(habits.done, habits.scheduled));
+    adhered += done;
+    if (habits.due) {
+      due += habits.scheduled;
+      unmarked += habits.scheduled - done;
+    } else {
+      // Only the ticked ones are in play; the rest have not had their chance.
+      due += done;
+      habitsPending = habits.scheduled - done;
+    }
+  }
+
   return {
     // null, not 0 — "nothing has come due yet" must not render as a 0% failure.
-    pct: counted.length ? Math.round((adhered / counted.length) * 100) : null,
+    pct: due ? Math.round((adhered / due) * 100) : null,
     adhered,
     drifted,
     skipped,
     unmarked,
-    due: counted.length,
+    due,
+    habitsPending,
   };
 }

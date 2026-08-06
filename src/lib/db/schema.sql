@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS pillars (
   name        TEXT NOT NULL,
   priority    TEXT NOT NULL CHECK (priority IN ('high','low')),
   sort_order  INTEGER NOT NULL,
+  -- Owner-chosen hue from a curated palette. NULL = the CSS default. Only PILLAR colours
+  -- are editable: the amber accent, ink and the three block states stay fixed, because
+  -- one accent is what keeps the page quiet.
+  color       TEXT,
   xp          INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
@@ -239,6 +243,12 @@ CREATE TABLE IF NOT EXISTS digest_runs (
 CREATE TABLE IF NOT EXISTS journal_entries (
   id          INTEGER PRIMARY KEY,
   date        TEXT NOT NULL CHECK (date GLOB '????-??-??'),
+  -- A TEXT entry stores image='' and body=<the words>. `image` is NOT NULL and this table
+  -- holds real, irreplaceable handwriting, so dropping the constraint would mean a
+  -- create-copy-drop-rename rebuild against exactly the data you least want to rebuild.
+  -- DELIBERATE: `kind` is the discriminator everywhere. Never test for emptiness.
+  kind        TEXT NOT NULL DEFAULT 'drawing' CHECK (kind IN ('drawing','text')),
+  body        TEXT,
   image       TEXT NOT NULL,
   width       INTEGER,
   height      INTEGER,
@@ -311,6 +321,14 @@ CREATE TABLE IF NOT EXISTS gym_sessions (
   title      TEXT,
   done_at    TEXT,
   note       TEXT,
+  -- Strength / cardio / misc. Misc (bouldering, calisthenic skills) is deliberately
+  -- TRACKED BUT NOT SCORED — it has no threshold and no ring, and is excluded from the
+  -- Physical average. A thing you log that is never a target.
+  kind       TEXT NOT NULL DEFAULT 'strength' CHECK (kind IN ('strength','cardio','misc')),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_sessions_date ON gym_sessions(date);
+-- NOTE: the unique index on (date, kind) is NOT declared here. This file runs before the
+-- idempotent column back-fills, and CREATE TABLE IF NOT EXISTS silently skips an existing
+-- table — so on an upgraded database the index would be created against a `kind` column
+-- that does not exist yet. It is created after the ALTERs, in both db/client.ts and
+-- scripts/migrate.mjs.

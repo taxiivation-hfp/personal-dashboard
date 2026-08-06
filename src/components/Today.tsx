@@ -128,8 +128,15 @@ export default function Today({
           <p className="max-w-[22rem] text-[15px] leading-relaxed text-[var(--color-muted)]">
             {a.pct == null
               ? "Nothing due yet today."
-              : `adhered · ${a.adhered} of ${a.due} block${a.due === 1 ? "" : "s"} so far`}
+              : `adhered · ${a.adhered} of ${a.due} so far`}
             {a.unmarked > 0 && <span className="text-[var(--color-ink)]"> · {a.unmarked} to mark</span>}
+            {/* Say what is NOT yet in the denominator. The rate moves at the cutoff when
+                these join it, and an unexplained drop at 9pm reads as a bug. */}
+            {a.habitsPending > 0 && (
+              <span className="block text-[13px]">
+                {a.habitsPending} non-negotiable{a.habitsPending === 1 ? "" : "s"} not due yet
+              </span>
+            )}
           </p>
         </div>
 

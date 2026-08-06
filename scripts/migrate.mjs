@@ -295,6 +295,59 @@ async function main() {
     console.log(`rings v1: outreach keyed, gym unhooked, ${Number(g.rows[0].n)} gym sessions rescued`);
   }
 
+  // ---------------------------------------------------------------- round two
+  const r2 = await client.execute("SELECT value FROM app_meta WHERE key='round2_v1'");
+  if (!r2.rows.length) {
+    // 1. Non-negotiables join the adherence rate FROM TODAY ONWARD. habit_entries holds
+    //    3 rows in its entire history, so counting them retroactively would hold four
+    //    untouched non-negotiables against every past day and drag the strip and the
+    //    calendar column to near-zero for days the owner actually lived under the old
+    //    rule. Days before this date stay blocks-only, exactly as they were.
+    await client.execute({
+      sql: "INSERT INTO app_meta (key,value) VALUES ('adherence_habits_since',?)",
+      args: [new Date().toISOString().slice(0, 10)],
+    });
+    // A habit has no end time, so it becomes due at an evening cutoff rather than at
+    // midnight — otherwise every morning would open at 0%.
+    await client.execute("INSERT INTO app_meta (key,value) VALUES ('habit_cutoff','21:00')");
+
+    // 2. Workout types. The unique index moves from (date) to (date,kind) so a Tuesday
+    //    can hold a lift AND a run; the per-day cap then applies per kind.
+    const gymCols = await client.execute("PRAGMA table_info(gym_sessions)");
+    if (!gymCols.rows.some((r) => String(r.name) === "kind")) {
+      await client.execute("ALTER TABLE gym_sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'strength'");
+    }
+    await client.execute("DROP INDEX IF EXISTS idx_gym_sessions_date");
+    await client.execute(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_sessions_date_kind ON gym_sessions(date, kind)"
+    );
+
+    // 3. Journal text entries. image is NOT NULL and this table holds real, irreplaceable
+    //    handwriting, so a text entry stores image='' rather than forcing a table rebuild
+    //    to drop the constraint. `kind` is the discriminator — never emptiness.
+    const jCols = await client.execute("PRAGMA table_info(journal_entries)");
+    if (!jCols.rows.some((r) => String(r.name) === "kind")) {
+      await client.execute("ALTER TABLE journal_entries ADD COLUMN kind TEXT NOT NULL DEFAULT 'drawing'");
+    }
+    if (!jCols.rows.some((r) => String(r.name) === "body")) {
+      await client.execute("ALTER TABLE journal_entries ADD COLUMN body TEXT");
+    }
+
+    // 4. Editable pillar hues. NULL = the CSS default.
+    const pCols = await client.execute("PRAGMA table_info(pillars)");
+    if (!pCols.rows.some((r) => String(r.name) === "color")) {
+      await client.execute("ALTER TABLE pillars ADD COLUMN color TEXT");
+    }
+
+    await client.execute("INSERT INTO app_meta (key,value) VALUES ('round2_v1','1')");
+    const g = await client.execute("SELECT kind, COUNT(*) AS n FROM gym_sessions GROUP BY kind");
+    console.log(
+      "round two: habits join adherence today, workout kinds " +
+        g.rows.map((r) => `${r.kind}=${Number(r.n)}`).join(" ") +
+        ", journal text + pillar colour ready"
+    );
+  }
+
   console.log("migration complete:", url);
   client.close();
 }

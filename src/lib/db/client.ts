@@ -44,10 +44,33 @@ async function ensure(c: Client): Promise<Client> {
   await c.executeMultiple(schema);
 
   // Idempotent column adds (SQLite ALTER errors if the column exists).
-  const taskCols = await c.execute("PRAGMA table_info(tasks)");
-  if (!taskCols.rows.some((r) => String((r as Record<string, unknown>).name) === "calendar_event_id")) {
+  const has = async (table: string, col: string): Promise<boolean> => {
+    const r = await c.execute(`PRAGMA table_info(${table})`);
+    return r.rows.some((x) => String((x as Record<string, unknown>).name) === col);
+  };
+
+  if (!(await has("tasks", "calendar_event_id"))) {
     await c.execute("ALTER TABLE tasks ADD COLUMN calendar_event_id TEXT");
   }
+  if (!(await has("gym_sessions", "kind"))) {
+    await c.execute("ALTER TABLE gym_sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'strength'");
+  }
+  if (!(await has("journal_entries", "kind"))) {
+    await c.execute("ALTER TABLE journal_entries ADD COLUMN kind TEXT NOT NULL DEFAULT 'drawing'");
+  }
+  if (!(await has("journal_entries", "body"))) {
+    await c.execute("ALTER TABLE journal_entries ADD COLUMN body TEXT");
+  }
+  if (!(await has("pillars", "color"))) {
+    await c.execute("ALTER TABLE pillars ADD COLUMN color TEXT");
+  }
+
+  // Only after the back-fills — see the note in schema.sql. (date,kind) rather than
+  // (date) so one day can hold a lift AND a run.
+  await c.execute("DROP INDEX IF EXISTS idx_gym_sessions_date");
+  await c.execute(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_sessions_date_kind ON gym_sessions(date, kind)"
+  );
 
   const { rows } = await c.execute("SELECT COUNT(*) AS n FROM pillars");
   if (Number((rows[0] as Record<string, unknown>).n) === 0) {

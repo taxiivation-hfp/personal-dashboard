@@ -2,7 +2,16 @@
 
 import type { Client } from "./db/client";
 import { getStreak, weekdayBit } from "./engine";
-import { adherenceFor, buildBlocks, type Adherence, type Block, type BlockState } from "./adherence";
+import {
+  adherenceFor,
+  buildBlocks,
+  habitsDueOn,
+  type Adherence,
+  type Block,
+  type BlockState,
+  type HabitTally,
+} from "./adherence";
+import { rfc3339, todayISO } from "./dates";
 import type { CalEvent } from "./google";
 import { addDays, daysBetween } from "./dates";
 import { deriveWeights } from "./goals";
@@ -81,6 +90,43 @@ export type DayView = {
   pillars: PillarView[];
 };
 
+// ---------------------------------------------------------------- adherence config
+
+export type AdherenceConfig = {
+  /** Non-negotiables count from this date onward. null = never (blocks only). */
+  habitsSince: string | null;
+  /** 'HH:MM' local. Before this, an unticked habit is not in the denominator. */
+  cutoff: string;
+};
+
+export async function getAdherenceConfig(db: Client): Promise<AdherenceConfig> {
+  const r = await db.execute(
+    "SELECT key,value FROM app_meta WHERE key IN ('adherence_habits_since','habit_cutoff')"
+  );
+  const m = new Map(r.rows.map((x) => [String(x.key), String(x.value)]));
+  return { habitsSince: m.get("adherence_habits_since") ?? null, cutoff: m.get("habit_cutoff") ?? "21:00" };
+}
+
+/**
+ * The habit tally for one date, or null when non-negotiables do not count for it.
+ *
+ * null for any day BEFORE the start stamp — those days were lived under the blocks-only
+ * rule and rewriting them would show four untouched non-negotiables against every one of
+ * them, which is a lie about days that already happened.
+ */
+export function habitTallyFor(
+  date: string,
+  scheduled: number,
+  done: number,
+  cfg: AdherenceConfig,
+  nowMs: number = Date.now(),
+  today: string = todayISO()
+): HabitTally | null {
+  if (!cfg.habitsSince || date < cfg.habitsSince) return null;
+  const cutoffMs = Date.parse(rfc3339(date, cfg.cutoff));
+  return { due: habitsDueOn(date, today, nowMs, cutoffMs), scheduled, done };
+}
+
 export async function pillarMaps(db: Client) {
   const r = await db.execute("SELECT id,key FROM pillars");
   const byId = new Map<number, PillarKey>();
@@ -154,10 +200,16 @@ export async function getDayView(
 ): Promise<DayView> {
   const marks = await loadMarks(db, date);
   const blocks = buildBlocks(date, events, marks);
-  const adherence = adherenceFor(blocks);
 
   const habits = await habitsForDate(db, date);
   const pillars = await getPillars(db);
+
+  // Non-negotiables join the rate, weighted equally with blocks — one item is one item.
+  const cfg = await getAdherenceConfig(db);
+  const adherence = adherenceFor(
+    blocks,
+    habitTallyFor(date, habits.length, habits.filter((h) => h.done).length, cfg)
+  );
 
   const journalRes = await db.execute({ sql: "SELECT id FROM journal_entries WHERE date=? ORDER BY id", args: [date] });
   const cal = await db.execute({ sql: "SELECT calories FROM health_logs WHERE date=?", args: [date] });
