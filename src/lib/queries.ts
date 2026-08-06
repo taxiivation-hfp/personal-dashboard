@@ -342,9 +342,11 @@ export async function getRingCounts(db: Client, from: string, to: string): Promi
     }
 
     if (m.source === "gym") {
+      // DISTINCT date within a kind: the per-day cap applies per kind, so two strength
+      // sessions on Tuesday is still one strength day.
       const r = await db.execute({
-        sql: "SELECT COUNT(DISTINCT date) AS n FROM gym_sessions WHERE date BETWEEN ? AND ?",
-        args: [from, to],
+        sql: "SELECT COUNT(DISTINCT date) AS n FROM gym_sessions WHERE kind=? AND date BETWEEN ? AND ?",
+        args: [m.workoutKind!, from, to],
       });
       out[m.key] = { count: num(r.rows[0].n), resolved: true };
       continue;

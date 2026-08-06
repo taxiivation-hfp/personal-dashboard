@@ -30,12 +30,20 @@ const TONE: Record<PillarKey | "accent", string> = {
 
 export default function Ring({
   fill,
+  overdrive = null,
   size,
   stroke,
   tone,
   children,
 }: {
   fill: number | null;
+  /**
+   * Work past the threshold, 0..1. Drawn as a second, lighter arc over the full ring.
+   *
+   * VISUAL ONLY — it never reaches the pillar mean. Extra effort is acknowledged where it
+   * happened; it cannot paper over a metric that was neglected.
+   */
+  overdrive?: number | null;
   size: number;
   stroke: number;
   tone: PillarKey | "accent";
@@ -46,6 +54,7 @@ export default function Ring({
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const dash = ghost ? 0 : c * Math.min(1, Math.max(0, fill));
+  const over = ghost || overdrive == null ? 0 : c * Math.min(1, Math.max(0, overdrive));
 
   return (
     <div
@@ -81,6 +90,23 @@ export default function Ring({
             strokeDasharray={`${dash} ${c}`}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
             style={{ transition: "stroke-dasharray 400ms ease" }}
+          />
+        )}
+        {/* A second lap, translucent and inset, over an already-full ring. Reads as
+            "past the minimum" without reading as "more is better" — it is the same fact
+            the caption already states, made visible. */}
+        {over > 0 && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={TONE[tone]}
+            strokeWidth={Math.max(1, stroke * 0.42)}
+            strokeLinecap="butt"
+            strokeDasharray={`${over} ${c}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            style={{ opacity: 0.45, transition: "stroke-dasharray 400ms ease" }}
           />
         )}
       </svg>

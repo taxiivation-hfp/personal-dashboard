@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db/client";
 import { getRingCounts, getObservedDays } from "@/lib/queries";
+import { workoutKindsOn } from "@/lib/engine";
 import { buildRings, WINDOW_DAYS } from "@/lib/rings";
 import { addDays, isISODate, todayISO } from "@/lib/dates";
 
@@ -15,19 +16,19 @@ export async function GET(req: Request) {
     const from = addDays(anchor, -(WINDOW_DAYS - 1));
 
     const db = await getDb();
-    const [counts, observedDays, gym] = await Promise.all([
+    const [counts, observedDays, workoutsToday] = await Promise.all([
       getRingCounts(db, from, anchor),
       getObservedDays(db, anchor),
-      // The gym metric is a 14-day count, so it cannot tell the toggle whether TODAY is
-      // logged. One extra row lookup rather than a second round trip from the client.
-      db.execute({ sql: "SELECT 1 FROM gym_sessions WHERE date=? LIMIT 1", args: [anchor] }),
+      // The workout metrics are 14-day counts, so they cannot tell the toggles what is
+      // logged TODAY. One extra lookup rather than a second round trip from the client.
+      workoutKindsOn(db, anchor),
     ]);
 
     return Response.json({
       date: anchor,
       from,
       observedDays,
-      gymToday: gym.rows.length > 0,
+      workoutsToday,
       pillars: buildRings(counts, observedDays),
     });
   } catch (e) {

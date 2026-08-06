@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Ring from "./PillarRing";
 import type { GoalView, SkillView, PillarKey } from "@/lib/queries";
-import type { PillarRingView } from "@/lib/rings";
+import type { PillarRingView, WorkoutKind } from "@/lib/rings";
 
 /** 640 -> "10h 40m". Time is shown as time — an abstract number would invite reading it
  *  as a score, which is the one thing this figure is not. */
@@ -25,27 +25,34 @@ const PILLAR_NAME: Record<PillarKey, string> = {
 const ORDER: PillarKey[] = ["social_capital", "physical", "portfolio"];
 const QUICK_ADD = [15, 30, 60];
 
+const WORKOUTS: { kind: WorkoutKind; label: string }[] = [
+  { kind: "strength", label: "Strength" },
+  { kind: "cardio", label: "Cardio" },
+  { kind: "misc", label: "Misc" },
+];
+
 export default function PillarSections({
   goals,
   skills,
   rings,
-  gymOn,
+  workoutsToday,
   onSubgoal,
   onLogTime,
   onUndoTime,
-  onToggleGym,
+  onToggleWorkout,
 }: {
   goals: GoalView[];
   skills: SkillView[];
   rings: PillarRingView[] | null;
-  gymOn: boolean;
+  workoutsToday: WorkoutKind[];
   onSubgoal: (id: number, done: boolean) => Promise<void>;
   onLogTime: (skillId: number, minutes: number) => Promise<void>;
   onUndoTime: (skillId: number) => Promise<void>;
-  onToggleGym: (on: boolean) => Promise<void>;
+  onToggleWorkout: (kind: WorkoutKind, on: boolean) => Promise<void>;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+  const [mins, setMins] = useState<Record<number, string>>({});
 
   // Relative to the largest FORTNIGHT figure, so the bars compare where time went
   // recently. No target and no full state — nothing here is completable.
@@ -85,36 +92,56 @@ export default function PillarSections({
             </div>
 
             {subrings.length > 0 && (
-              <div className="mt-4 flex gap-4">
-                {subrings.map((m) => (
-                  <div key={m.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-                    <Ring fill={m.fill} size={40} stroke={3} tone={pk} />
-                    <span className="text-[11px] text-[var(--color-muted)]">{m.label}</span>
-                    <span className="text-center text-[10px] leading-tight text-[var(--color-muted)]">
-                      {m.fact}
-                    </span>
-                  </div>
-                ))}
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-3">
+                {subrings.map((m) =>
+                  // Unscored metrics draw NO ring — there is nothing to fill toward. A
+                  // count and a plain statement that it isn't measured.
+                  m.state === "unscored" ? (
+                    <div key={m.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+                      <span className="text-[15px] tabular-nums">{m.count}</span>
+                      <span className="text-[11px] text-[var(--color-muted)]">{m.label}</span>
+                      <span className="text-center text-[10px] leading-tight text-[var(--color-muted)]">
+                        not scored
+                      </span>
+                    </div>
+                  ) : (
+                    <div key={m.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+                      <Ring fill={m.fill} overdrive={m.overdrive} size={40} stroke={3} tone={pk} />
+                      <span className="text-[11px] text-[var(--color-muted)]">{m.label}</span>
+                      <span className="text-center text-[10px] leading-tight text-[var(--color-muted)]">
+                        {m.fact}
+                      </span>
+                    </div>
+                  )
+                )}
               </div>
             )}
 
             {pk === "physical" && (
-              <button
-                onClick={() => run("gym", () => onToggleGym(!gymOn))}
-                aria-pressed={gymOn}
-                disabled={busy === "gym"}
-                className="mt-3 flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-[13px] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
-              >
-                <span
-                  aria-hidden
-                  className="h-4 w-4 shrink-0 rounded-md border transition-colors"
-                  style={{
-                    borderColor: gymOn ? "var(--color-physical)" : "var(--color-line-strong)",
-                    background: gymOn ? "var(--color-physical)" : "transparent",
-                  }}
-                />
-                <span className={gymOn ? "text-[var(--color-muted)]" : ""}>Went to the gym today</span>
-              </button>
+              <div className="mt-4">
+                <h3 className="text-[13px] font-semibold text-[var(--color-muted)]">Log workout</h3>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {WORKOUTS.map((w) => {
+                    const on = workoutsToday.includes(w.kind);
+                    return (
+                      <button
+                        key={w.kind}
+                        onClick={() => run(`w${w.kind}`, () => onToggleWorkout(w.kind, !on))}
+                        aria-pressed={on}
+                        disabled={busy === `w${w.kind}`}
+                        className="rounded-full border px-3 py-1.5 text-[12px] transition-colors disabled:opacity-40"
+                        style={{
+                          borderColor: on ? "var(--color-physical)" : "var(--color-line-strong)",
+                          background: on ? "var(--color-physical)" : "transparent",
+                          color: on ? "var(--color-panel)" : "inherit",
+                        }}
+                      >
+                        {w.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             {/* Goals keep their own heading so a ring-led section never makes goal
@@ -250,26 +277,60 @@ export default function PillarSections({
                       {/* Quick-add sits on its OWN line, not inline with the name —
                           inline it overflows a phone. */}
                       {open === s.id && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {QUICK_ADD.map((min) => (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          {/* Any duration, not just the three shortcuts — 45 minutes is a
+                              real number and used to be unloggable. */}
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const n = Math.round(Number(mins[s.id]));
+                              if (!Number.isFinite(n) || n < 1 || n > 600) return;
+                              setMins({ ...mins, [s.id]: "" });
+                              run(`st${s.id}`, () => onLogTime(s.id, n));
+                            }}
+                            className="flex items-center gap-1.5"
+                          >
+                            <input
+                              type="number"
+                              min={1}
+                              max={600}
+                              inputMode="numeric"
+                              placeholder="mins"
+                              aria-label={`Minutes on ${s.name}`}
+                              value={mins[s.id] ?? ""}
+                              onChange={(e) => setMins({ ...mins, [s.id]: e.target.value })}
+                              className="w-[4.5rem] rounded-full bg-[var(--color-panel-2)] px-3 py-1 text-[12px] tabular-nums outline-none"
+                            />
                             <button
-                              key={min}
-                              onClick={() => run(`st${s.id}`, () => onLogTime(s.id, min))}
-                              disabled={busy === `st${s.id}`}
-                              className="rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-[12px] tabular-nums transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+                              type="submit"
+                              disabled={busy === `st${s.id}` || !(mins[s.id] ?? "").trim()}
+                              className="rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-[12px] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
                             >
-                              +{min}m
+                              log
                             </button>
-                          ))}
-                          {s.sessions14 > 0 && (
-                            <button
-                              onClick={() => run(`st${s.id}`, () => onUndoTime(s.id))}
-                              disabled={busy === `st${s.id}`}
-                              className="rounded-full px-3 py-1 text-[12px] text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
-                            >
-                              undo
-                            </button>
-                          )}
+                            {s.sessions14 > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => run(`st${s.id}`, () => onUndoTime(s.id))}
+                                disabled={busy === `st${s.id}`}
+                                className="rounded-full px-3 py-1 text-[12px] text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+                              >
+                                undo
+                              </button>
+                            )}
+                          </form>
+                          <div className="flex flex-wrap gap-1.5">
+                            {QUICK_ADD.map((min) => (
+                              <button
+                                key={min}
+                                onClick={() => run(`st${s.id}`, () => onLogTime(s.id, min))}
+                                disabled={busy === `st${s.id}`}
+                                className="rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-[12px] tabular-nums transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+                              >
+                                +{min}m
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </li>

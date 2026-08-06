@@ -455,14 +455,33 @@ export async function undoSkillTime(db: Client, skillId: number, date: string): 
 // One row per gym DAY. The unique index on date carries the per-day cap: two visits in a
 // day is the same event, exactly as 15k steps is the same as 7k.
 
-export async function setGymSession(db: Client, date: string, on: boolean): Promise<void> {
+export type WorkoutKind = "strength" | "cardio" | "misc";
+
+export async function setGymSession(
+  db: Client,
+  date: string,
+  kind: WorkoutKind,
+  on: boolean
+): Promise<void> {
   if (on) {
-    await db.execute({ sql: "INSERT INTO gym_sessions (date) VALUES (?) ON CONFLICT(date) DO NOTHING", args: [date] });
+    await db.execute({
+      sql: "INSERT INTO gym_sessions (date,kind) VALUES (?,?) ON CONFLICT(date,kind) DO NOTHING",
+      args: [date, kind],
+    });
   } else {
     // Only removes a manually-toggled day. Imported rows carry a title; deleting one of
     // those would destroy rescued history, so they are left alone.
-    await db.execute({ sql: "DELETE FROM gym_sessions WHERE date=? AND title IS NULL", args: [date] });
+    await db.execute({
+      sql: "DELETE FROM gym_sessions WHERE date=? AND kind=? AND title IS NULL",
+      args: [date, kind],
+    });
   }
+}
+
+/** Which kinds are logged for a date — drives the Log workout toggles. */
+export async function workoutKindsOn(db: Client, date: string): Promise<WorkoutKind[]> {
+  const r = await db.execute({ sql: "SELECT DISTINCT kind FROM gym_sessions WHERE date=?", args: [date] });
+  return r.rows.map((x) => String(x.kind) as WorkoutKind);
 }
 
 // ---------------------------------------------------------------- streak

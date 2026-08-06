@@ -11,7 +11,7 @@ import PillarSections from "./PillarSections";
 import Ring from "./PillarRing";
 import { prettyDate } from "@/lib/dates";
 import type { DayView, GoalView, SkillView } from "@/lib/queries";
-import type { PillarRingView } from "@/lib/rings";
+import type { PillarRingView, WorkoutKind } from "@/lib/rings";
 
 type StripDay = { date: string; pct: number | null; isToday: boolean; isFuture: boolean };
 
@@ -39,7 +39,7 @@ export default function Today({
   const [goals, setGoals] = useState<GoalView[]>(initialGoals);
   const [skills, setSkills] = useState<SkillView[]>(initialSkills);
   const [rings, setRings] = useState<PillarRingView[] | null>(null);
-  const [gymToday, setGymToday] = useState(false);
+  const [workoutsToday, setWorkoutsToday] = useState<WorkoutKind[]>([]);
 
   // Centred on today: past days to the left, upcoming to the right.
   const loadStrip = useCallback(() => {
@@ -55,7 +55,7 @@ export default function Today({
       .then((s) => {
         if (s.error) return;
         setRings(s.pillars ?? []);
-        setGymToday(Boolean(s.gymToday));
+        setWorkoutsToday(s.workoutsToday ?? []);
       })
       .catch(() => {});
   }, [data.date]);
@@ -98,11 +98,11 @@ export default function Today({
     loadRings(); // a skill session feeds the Portfolio ring
   }
 
-  async function toggleGym(on: boolean) {
+  async function toggleWorkout(kind: WorkoutKind, on: boolean) {
     await fetch("/api/gym", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ date: data.date, on }),
+      body: JSON.stringify({ date: data.date, kind, on }),
     }).catch(() => {});
     loadRings();
   }
@@ -289,7 +289,7 @@ export default function Today({
             goals={goals}
             skills={skills}
             rings={rings}
-            gymOn={gymToday}
+            workoutsToday={workoutsToday}
             onSubgoal={(id, done) =>
               mutateGoals(`/api/subgoals/${id}`, { method: "PATCH", body: JSON.stringify({ done }) })
             }
@@ -302,7 +302,7 @@ export default function Today({
             onUndoTime={(skillId) =>
               mutateSkills(`/api/skills/${skillId}/time?date=${data.date}`, { method: "DELETE" })
             }
-            onToggleGym={toggleGym}
+            onToggleWorkout={toggleWorkout}
           />
         </div>
       </div>
