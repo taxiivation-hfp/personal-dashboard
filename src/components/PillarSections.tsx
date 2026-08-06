@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Ring from "./PillarRing";
+import Ring, { toneColor } from "./PillarRing";
 import type { GoalView, SkillView, PillarKey } from "@/lib/queries";
 import type { PillarRingView, WorkoutKind } from "@/lib/rings";
 
@@ -35,6 +35,7 @@ export default function PillarSections({
   goals,
   skills,
   rings,
+  colors,
   workoutsToday,
   onSubgoal,
   onLogTime,
@@ -44,6 +45,8 @@ export default function PillarSections({
   goals: GoalView[];
   skills: SkillView[];
   rings: PillarRingView[] | null;
+  /** Owner-chosen hue per pillar, from the curated palette. */
+  colors: Partial<Record<PillarKey, string | null>>;
   workoutsToday: WorkoutKind[];
   onSubgoal: (id: number, done: boolean) => Promise<void>;
   onLogTime: (skillId: number, minutes: number) => Promise<void>;
@@ -78,11 +81,12 @@ export default function PillarSections({
         // the subrings carry their own, because an averaged pillar has no single fact.
         const subrings = ring && ring.metrics.length > 1 ? ring.metrics : [];
         const soleFact = ring && ring.metrics.length === 1 ? ring.metrics[0].fact : null;
+        const hue = toneColor(pk, colors[pk]);
 
         return (
           <section key={pk}>
             <div className="flex items-center gap-3">
-              <Ring fill={ring?.fill ?? null} size={44} stroke={4} tone={pk} />
+              <Ring fill={ring?.fill ?? null} size={44} stroke={4} tone={pk} color={colors[pk]} />
               <div className="min-w-0">
                 <h2 className="text-[15px] font-semibold">{PILLAR_NAME[pk]}</h2>
                 {soleFact && (
@@ -106,7 +110,7 @@ export default function PillarSections({
                     </div>
                   ) : (
                     <div key={m.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-                      <Ring fill={m.fill} overdrive={m.overdrive} size={40} stroke={3} tone={pk} />
+                      <Ring fill={m.fill} overdrive={m.overdrive} size={40} stroke={3} tone={pk} color={colors[pk]} />
                       <span className="text-[11px] text-[var(--color-muted)]">{m.label}</span>
                       <span className="text-center text-[10px] leading-tight text-[var(--color-muted)]">
                         {m.fact}
@@ -131,8 +135,8 @@ export default function PillarSections({
                         disabled={busy === `w${w.kind}`}
                         className="rounded-full border px-3 py-1.5 text-[12px] transition-colors disabled:opacity-40"
                         style={{
-                          borderColor: on ? "var(--color-physical)" : "var(--color-line-strong)",
-                          background: on ? "var(--color-physical)" : "transparent",
+                          borderColor: on ? hue : "var(--color-line-strong)",
+                          background: on ? hue : "transparent",
                           color: on ? "var(--color-panel)" : "inherit",
                         }}
                       >
@@ -168,7 +172,10 @@ export default function PillarSections({
                       </span>
                     </div>
 
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-panel-2)]">
+                    <div
+                      className="mt-2 h-1.5 w-full overflow-hidden rounded-full"
+                      style={{ background: `color-mix(in srgb, ${hue} 14%, var(--color-panel-2))` }}
+                    >
                       <div
                         className="h-full rounded-full bg-[var(--color-accent)] transition-[width] duration-500"
                         style={{ width: `${Math.round(g.progress * 100)}%` }}
@@ -260,15 +267,15 @@ export default function PillarSections({
                       </button>
 
                       {anyRecent && (
-                        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-[var(--color-panel-2)]">
+                        <div
+                          className="mt-1.5 h-1 w-full overflow-hidden rounded-full"
+                          style={{ background: `color-mix(in srgb, ${hue} 12%, var(--color-panel-2))` }}
+                        >
                           <div
                             className="h-full rounded-full transition-[width] duration-500"
                             style={{
                               width: `${Math.round((s.minutes14 / maxMinutes) * 100)}%`,
-                              background:
-                                s.state === "parked"
-                                  ? "var(--color-line-strong)"
-                                  : "var(--color-accent)",
+                              background: s.state === "parked" ? "var(--color-line-strong)" : hue,
                             }}
                           />
                         </div>

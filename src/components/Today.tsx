@@ -8,10 +8,10 @@ import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
 import PillarSections from "./PillarSections";
-import Ring from "./PillarRing";
+import Ring, { toneColor } from "./PillarRing";
 import { PhoneTabBar, PhoneSwipe, type PhoneTab } from "./PhoneTabs";
 import { prettyDate } from "@/lib/dates";
-import type { DayView, GoalView, SkillView } from "@/lib/queries";
+import type { DayView, GoalView, SkillView, PillarKey } from "@/lib/queries";
 import type { PillarRingView, WorkoutKind } from "@/lib/rings";
 
 type StripDay = { date: string; pct: number | null; isToday: boolean; isFuture: boolean };
@@ -112,6 +112,10 @@ export default function Today({
   }
 
   const a = data.adherence;
+  // Straight off DayView.pillars — no extra request for something already loaded.
+  const colors = Object.fromEntries(data.pillars.map((p) => [p.key, p.color])) as Partial<
+    Record<PillarKey, string | null>
+  >;
 
   const middle = (
     <div className="flex flex-col gap-12">
@@ -153,13 +157,20 @@ export default function Today({
                   background: d.isToday ? "var(--color-accent-soft)" : "var(--color-panel-2)",
                   // Upcoming days are drawn but empty — they haven't happened, and an
                   // empty bar reads as "not yet" rather than as a zero.
-                  opacity: d.isFuture ? 0.5 : 1,
+                  opacity: d.isFuture ? 0.4 : 1,
                 }}
               >
                 {d.pct != null && (
                   <div
-                    className="w-full rounded-md bg-[var(--color-accent)] transition-[height] duration-300"
-                    style={{ height: `${Math.max(d.pct, 3)}%`, marginTop: `${100 - Math.max(d.pct, 3)}%` }}
+                    className="w-full rounded-md transition-[height] duration-300"
+                    style={{
+                      height: `${Math.max(d.pct, 3)}%`,
+                      marginTop: `${100 - Math.max(d.pct, 3)}%`,
+                      // Translucent, so a bar sits IN its track rather than on top of it
+                      // and the day's shape reads as depth. Today stays fully opaque.
+                      background: "var(--color-accent)",
+                      opacity: d.isToday ? 1 : 0.78,
+                    }}
                   />
                 )}
               </div>
@@ -220,8 +231,18 @@ export default function Today({
                   aria-hidden
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors"
                   style={{
-                    borderColor: h.done ? "var(--color-accent)" : "var(--color-line-strong)",
-                    background: h.done ? "var(--color-accent)" : "transparent",
+                    // Its pillar's hue, so the checklist reads as categorised rather than
+                    // as one undifferentiated list. Unassigned habits stay amber.
+                    borderColor: h.done
+                      ? h.pillar
+                        ? toneColor(h.pillar, colors[h.pillar])
+                        : "var(--color-accent)"
+                      : "var(--color-line-strong)",
+                    background: h.done
+                      ? h.pillar
+                        ? toneColor(h.pillar, colors[h.pillar])
+                        : "var(--color-accent)"
+                      : "transparent",
                   }}
                 >
                   {h.done && (
@@ -264,6 +285,7 @@ export default function Today({
       goals={goals}
       skills={skills}
       rings={rings}
+      colors={colors}
       workoutsToday={workoutsToday}
       onSubgoal={(id, done) =>
         mutateGoals(`/api/subgoals/${id}`, { method: "PATCH", body: JSON.stringify({ done }) })
@@ -293,6 +315,12 @@ export default function Today({
           <p className="text-[13px] uppercase tracking-[0.16em] text-[var(--color-muted)]">
             {prettyDate(data.date)}
           </p>
+          <Link
+            href="/colours"
+            className="text-[12px] text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+          >
+            colours
+          </Link>
         </header>
 
         {/* Source order is middle → left → right, which IS the stacked mobile order, so

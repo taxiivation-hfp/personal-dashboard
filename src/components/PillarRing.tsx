@@ -28,12 +28,18 @@ const TONE: Record<PillarKey | "accent", string> = {
   portfolio: "var(--color-portfolio)",
 };
 
+/** An owner-chosen hue wins over the default. `color` is always from the curated
+ *  palette — engine.setPillarColor refuses anything else. */
+export const toneColor = (tone: PillarKey | "accent", color?: string | null): string =>
+  color ?? TONE[tone];
+
 export default function Ring({
   fill,
   overdrive = null,
   size,
   stroke,
   tone,
+  color = null,
   children,
 }: {
   fill: number | null;
@@ -47,6 +53,8 @@ export default function Ring({
   size: number;
   stroke: number;
   tone: PillarKey | "accent";
+  /** Owner-chosen hue from the curated palette; falls back to the CSS default. */
+  color?: string | null;
   children?: ReactNode;
 }) {
   // Guard clause, not a fallback expression: null must never enter the arithmetic.
@@ -81,7 +89,7 @@ export default function Ring({
             cy={size / 2}
             r={r}
             fill="none"
-            stroke={TONE[tone]}
+            stroke={toneColor(tone, color)}
             strokeWidth={stroke}
             // BUTT, never round: round caps add half a stroke width at each end, which
             // makes the smallest non-zero fills read as roughly half again their true
@@ -101,7 +109,7 @@ export default function Ring({
             cy={size / 2}
             r={r}
             fill="none"
-            stroke={TONE[tone]}
+            stroke={toneColor(tone, color)}
             strokeWidth={Math.max(1, stroke * 0.42)}
             strokeLinecap="butt"
             strokeDasharray={`${over} ${c}`}

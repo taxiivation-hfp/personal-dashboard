@@ -11,6 +11,7 @@
 
 import type { Client } from "./db/client";
 import { addDays, todayISO } from "./dates";
+import { isPaletteHex } from "./rings";
 
 type Tx = Awaited<ReturnType<Client["transaction"]>>;
 type Exec = Pick<Tx, "execute">;
@@ -498,6 +499,23 @@ export async function setGymSession(
 export async function workoutKindsOn(db: Client, date: string): Promise<WorkoutKind[]> {
   const r = await db.execute({ sql: "SELECT DISTINCT kind FROM gym_sessions WHERE date=?", args: [date] });
   return r.rows.map((x) => String(x.kind) as WorkoutKind);
+}
+
+// ---------------------------------------------------------------- pillar colour
+
+/**
+ * Set a pillar's hue, or clear it back to the CSS default with null.
+ *
+ * Guarded to the curated palette on purpose. A free hex field could make the app
+ * unreadable, and the light-beige identity is a product decision rather than a
+ * preference — see CLAUDE.md. Only PILLAR colours are editable at all.
+ */
+export async function setPillarColor(db: Client, key: string, hex: string | null): Promise<void> {
+  if (hex !== null && !isPaletteHex(hex)) throw new Error("colour must come from the palette");
+  await db.execute({
+    sql: "UPDATE pillars SET color=?, updated_at=? WHERE key=?",
+    args: [hex, now(), key],
+  });
 }
 
 // ---------------------------------------------------------------- streak

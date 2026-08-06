@@ -17,6 +17,34 @@
  *  It lives HERE because this module must stay import-free to be testable. */
 export type PillarKey = "social_capital" | "physical" | "portfolio";
 
+/**
+ * The pillar palette the owner may choose from.
+ *
+ * A CURATED set, not a hex picker. Every value is checked against the beige page for
+ * contrast, so no choice can make the app unreadable. The amber accent, the ink and the
+ * three block states stay fixed and are not offered here — one accent is what keeps the
+ * page quiet, and the block states deliberately avoid a severity ramp.
+ */
+export const PILLAR_PALETTE: { name: string; hex: string }[] = [
+  { name: "Moss", hex: "#4a8271" },
+  { name: "Olive", hex: "#6d7a45" },
+  { name: "Clay", hex: "#8c7434" },
+  { name: "Rust", hex: "#9a6448" },
+  { name: "Plum", hex: "#7d5a72" },
+  { name: "Iris", hex: "#67609b" },
+  { name: "Slate", hex: "#5b6b7c" },
+  { name: "Teal", hex: "#3f7d80" },
+];
+
+/** The CSS variable each pillar falls back to when it has no chosen colour. */
+export const PILLAR_DEFAULT_VAR: Record<PillarKey, string> = {
+  social_capital: "var(--color-social)",
+  physical: "var(--color-physical)",
+  portfolio: "var(--color-portfolio)",
+};
+
+export const isPaletteHex = (hex: string): boolean => PILLAR_PALETTE.some((p) => p.hex === hex);
+
 export const WINDOW_DAYS = 14;
 
 export type MetricSource = "habit" | "gym" | "skill_session" | "health_steps";

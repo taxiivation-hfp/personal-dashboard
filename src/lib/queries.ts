@@ -25,7 +25,7 @@ export type { PillarKey };
 const num = (v: unknown) => (v == null ? 0 : Number(v));
 const str = (v: unknown) => (v == null ? null : String(v));
 
-export type PillarView = { key: PillarKey; name: string; priority: string };
+export type PillarView = { key: PillarKey; name: string; priority: string; color: string | null };
 
 export type HabitView = {
   id: number;
@@ -145,8 +145,13 @@ export async function pillarMaps(db: Client) {
 }
 
 export async function getPillars(db: Client): Promise<PillarView[]> {
-  const r = await db.execute("SELECT key,name,priority FROM pillars ORDER BY sort_order");
-  return r.rows.map((p) => ({ key: String(p.key) as PillarKey, name: String(p.name), priority: String(p.priority) }));
+  const r = await db.execute("SELECT key,name,priority,color FROM pillars ORDER BY sort_order");
+  return r.rows.map((p) => ({
+    key: String(p.key) as PillarKey,
+    name: String(p.name),
+    priority: String(p.priority),
+    color: str(p.color),
+  }));
 }
 
 async function loadMarks(db: Client, date: string) {
