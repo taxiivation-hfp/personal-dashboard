@@ -51,10 +51,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // The page background. Left over from the pre-pivot dark theme this was #0a0a0c, which
-  // painted the iPhone status bar near-black above a warm beige app — the one seam a
-  // home-screen web app cannot hide. Must track --color-bg.
-  themeColor: "#f2ede4",
+  // Must track the TOPMOST PAINTED SURFACE, which is now the masthead band rather than
+  // the page — the status bar abuts the band, not the ground behind it. Left over from the
+  // pre-pivot dark theme this was #0a0a0c, which painted the iPhone status bar near-black
+  // above a warm beige app: the one seam a home-screen web app cannot hide.
+  themeColor: "#ede7db", // --color-bar
+
   width: "device-width",
   initialScale: 1,
   // viewportFit=cover lets the layout reach under the home indicator, which is what the

@@ -55,6 +55,40 @@
    * --color-line-strong measures 1.47:1 and is for strokes only. */
   --color-placeholder: #6e675d;
 
+  /* THE SURFACE RAMP — a masthead band and three windows.
+   *
+   * --color-bg IS NOT MOVED, and that is the whole constraint. --color-muted needs a
+   * surface at or above oklch(0.9268) to hold 4.5:1, which is only 0.02 L below the
+   * current page. Darkening the page to open up range was measured and costs two
+   * certifications: at #e4dccd muted falls to 4.10:1 and skipped to 3.97:1. So the range
+   * is taken UPWARD from an unchanged page, with one step down for the band.
+   *
+   * --color-bar sits deliberately just above the muted floor (4.53:1), so every existing
+   * ink token stays usable on it without re-certification. ONE casualty: --color-skipped
+   * measures 4.39:1 there and FAILS. No block-state chip may render in the band.
+   *
+   * The three window tones differ by 1.03-1.07:1 — at or below the 1.04:1 the
+   * Legible-Empty Rule documents as invisible. THAT IS INTENDED. The 1px hairline and the
+   * page-ground gutter separate the windows; the tone only says which one you are in, and
+   * is meant to be felt rather than seen. See The Window Exception in DESIGN.md. */
+  --color-bar: #ede7db; /* masthead · muted 4.53:1 · skipped 4.39:1 FAILS, ink only */
+  --color-surface-1: #fdfbf8; /* TODAY    · the hero column, lightest */
+  --color-surface-2: #f9f7f3; /* CALENDAR · the days around it */
+  --color-surface-3: #f7f3ee; /* PILLARS  · the fortnight behind */
+
+  /* Recorded vs not-yet, in the calendar column and the strip.
+   *
+   * "Colder" WITHOUT A NEW HUE. Every neutral here carries chroma 0.013-0.028 at hue ~82,
+   * so a surface at the SAME hue with chroma driven to ~0.003 reads cool by simultaneous
+   * contrast against its warm neighbours — the page supplies the warmth it is measured
+   * against, so no second hue is introduced and The One Voice Rule holds.
+   *
+   * Lightness carries the same meaning a second time (a recorded day sits DOWN into the
+   * page, an upcoming one floats UP) and position carries it a third, so nothing rides on
+   * chroma alone. */
+  --color-recorded: #fdefdc; /* past & completed · ink 14.34:1 · muted 4.93:1 */
+  --color-ahead: #fcfbf9; /* upcoming · ink 15.69:1 · muted 5.40:1 */
+
   /* TYPE.
    * Two families from one superfamily. next/font sets --font-source-* on <html>; these
    * aliases are what Tailwind's `font-sans` / `font-serif` utilities resolve through, and
@@ -141,6 +175,8 @@ html {
 }
 
 body {
+  /* The page ground the three windows float on. It did NOT darken — see the ramp comment
+   * in @theme; darkening it costs two contrast certifications. */
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
@@ -187,6 +223,54 @@ b,
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   line-height: 0.92;
+}
+
+/* A WINDOW. Three of these, one per time horizon — see The Window Exception in DESIGN.md.
+ *
+ * The ruled-page vocabulary survives INSIDE them: rules, margins and hairline rows are
+ * unchanged. The card is a frame around a column, not a return to the card-per-section
+ * pattern the redesign removed. Nothing inside a window may take a second surface. */
+.window {
+  border-radius: 16px;
+  border: 1px solid var(--color-line);
+}
+
+/* THE ONE GRADIENT. Today, in the calendar column: a full accent stroke where the day
+ * began, dissolving to nothing where tomorrow starts. The column runs chronologically
+ * downward, so 180deg IS the direction of time.
+ *
+ * A masked pseudo-element rather than `border-image`, which ignores border-radius and
+ * would square the corners — disqualifying, since this is the rounded case. Not a layered
+ * background either: that would force the row to restate its own fill, and the fill is a
+ * token that changes underneath it.
+ *
+ * Composited and measured against the calendar surface: 4.39:1 at the top edge (clear of
+ * the 3:1 stroke floor), 1.46:1 at 70% down — exactly --color-line-strong's own weight —
+ * and gone at the bottom. Nothing animates, so there is no reduced-motion path to write. */
+.today-mark {
+  position: relative;
+}
+.today-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    180deg,
+    var(--color-accent) 0%,
+    color-mix(in oklab, var(--color-accent) 55%, transparent) 46%,
+    color-mix(in oklab, var(--color-accent) 0%, transparent) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 /* THE RULED PAGE.
