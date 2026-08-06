@@ -72,6 +72,16 @@ sit unticked once a week, and an item you are designed to fail teaches distrust 
 whole list. Workouts are logged separately, by kind: **Strength / Cardio / Misc**, one
 row per (date, kind), so a day can hold a lift and a run.
 
+Each kind opens **its own free-text document** — three separate notes per day, not one
+shared field. Saving IS logging; there is no second "did it" toggle to forget. The text is
+deliberately unstructured: a workout log is numbers scribbled between sets, and any form
+imposed here is a form to fight on a bad day.
+
+A non-negotiable may take a **number** instead of a tick (`habits.input = 'number'`, with
+`habits.unit`). Daily weight uses it. The value lives in `habit_entries.value`, which is
+already a REAL, so adherence and the rings need no special case — an entry exists or it
+does not. Clearing the field clears the day, exactly like unticking.
+
 ## Pillar rings — sufficiency, never score
 
 Three rings (Social / Physical / Portfolio) over a **rolling 14-day window**, defined in
@@ -142,8 +152,19 @@ Light beige, premium, clean.
   and the block states deliberately avoid a severity ramp. Do not add a free hex picker.
 - Generous whitespace. One clear visual hierarchy. Restrained colour.
 - Big, clean number treatment for the adherence stat.
-- **Two font weights only.**
-- Motion minimal and functional.
+- **Two font weights only** — 400 and 600. No 500, no `font-medium`. A third weight is a
+  bug, not a choice.
+- **Eight type steps, documented in `globals.css`.** 11 / 12 / 13 / 14 / 15 / 16 / 28 / 52.
+  If something needs to stand out, use weight or space, not a ninth size.
+- **Every colour is measured, not eyeballed.** Body text ≥4.5:1, strokes and large text
+  ≥3:1, and any hue used as a filled chip must also clear 4.5:1 with white on top. That
+  last one is what caught `--color-physical` at 4.45.
+- Motion minimal and functional, and it runs on tokens: `--ease-out`, `--dur-press` …
+  `--dur-data`, all capped at 280ms. **There is deliberately no ease-in token** — it
+  delays the first moment, which is exactly when the eye is watching.
+- Animate `transform` and `opacity` only. Bars use `scaleX`, never `width`.
+- `themeColor` in `layout.tsx` must track `--color-bg`, or the iPhone status bar contradicts
+  the app.
 
 ## In scope
 

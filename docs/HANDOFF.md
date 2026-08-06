@@ -1,6 +1,6 @@
 # Handoff — Personal Dashboard
 
-**Date:** 2026-08-06 · **Status:** MVP built locally, **visually verified in the browser**, not yet deployed. Goals/skills/rings complete, plus a second round: adherence v2, workout types, journal text, phone tabs and editable pillar colours. The app is a git repository.
+**Date:** 2026-08-06 (round three) · **Status:** MVP built locally, **visually verified in the browser**, not yet deployed. Goals/skills/rings complete, plus a second round: adherence v2, workout types, journal text, phone tabs and editable pillar colours. The app is a git repository.
 
 Read `CLAUDE.md` first — it is the constitution. This document is the *state of the build*, not the product philosophy. The one-line version: the app measures **adherence, not accomplishment**; output is deliberately never scored; honest logging outranks every other design goal.
 
@@ -33,6 +33,9 @@ Verified: `tsc --noEmit` exit 0, `next build` exit 0. Behavioural claims about t
 | **Overdrive** | Built, **visual only** — a second translucent lap past the threshold that never enters the pillar mean. A test asserts no amount of strength fills Physical alone. |
 | **Journal text** | Built. `kind` + `body`; a text page stores `image=''`. Both kinds share one ruled A4 (1:1.414) sheet. Deleting asks first. |
 | **Phone tabs** | Built. Three tabs below `lg` with a bottom bar and swipe, opening on the day's work. Only the active pane mounts. |
+| **Workout documents** | Built. Each kind opens its own free-text note; saving is logging. Imported Discord sessions carry a title and are not deletable from the UI. |
+| **Daily weight** | Built. `habits.input='number'` + `unit`; value in `habit_entries.value`, counts toward adherence like any tick. |
+| **Design system** | Built. Motion/duration/z-index tokens and an 8-step type spine in `globals.css`; `PRODUCT.md` carries the register and scene for design tooling. |
 | **Pillar colours** | Built. `/colours`, curated palette only; the engine refuses anything outside it. Applies to rings, goals, skills, workout chips and non-negotiables. |
 | **Pillar rings** | Built. Three sufficiency rings over a rolling 14 days, capped — see CLAUDE.md. Adherence is drawn as a large amber ring with the number inside; pillar rings are small, hued and thin, with the real count printed below. Physical carries gym (live) and steps (dashed ghost, no source). |
 | **Data migration** | Done and verified twice. Goals, habit history, gym sessions and Google tokens all preserved; row counts matched after each. Backups at `data/backups/dashboard.db.20260803-140723.bak` and `…20260805-133149.bak`. |
@@ -68,6 +71,7 @@ src/components/PillarSections.tsx   RIGHT column. Three pillar sections, each ri
 src/components/PillarRing.tsx      One SVG ring, both species. Guards fill===null before any arc
                                     maths. Draws overdrive as a second translucent lap.
 src/components/PhoneTabs.tsx       Bottom tab bar + swipe. Renders nothing above `lg`.
+src/components/WorkoutLog.tsx      One workout document per (date, kind).
 src/components/JournalText.tsx     Typed page, sharing the canvas's ruled geometry.
 src/components/ColourEditor.tsx    Used by /colours only.
 src/components/GoalEditor.tsx       Used by /goals only.
