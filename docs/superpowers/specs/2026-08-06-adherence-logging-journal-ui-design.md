@@ -147,11 +147,36 @@ back-filled to `'strength'` — they are `PUSH`, `UPPER` and `LEGS`, which they 
 | `misc` | Misc | **none** | tracked, never scored |
 | `steps` | Steps | 12 | unchanged, still `sourceReady: false` |
 
-**Physical = mean of Strength and Cardio only.** Misc and Steps are excluded, which the
-existing `live = metrics.filter(m => m.fill !== null)` already does for free.
+**Physical is a WEIGHTED mean: Strength 0.8, Cardio 0.2.** Misc and Steps carry weight 0
+and are excluded, which the existing `live = metrics.filter(m => m.fill !== null)` already
+does for free.
 
-Consequence to be clear about: eight strength days and no cardio reads **50%**. That is
-the balance rule turned inward on the pillar and it is intended.
+`Metric` gains `weight: number` (default 1). Pillar fill is
+`Σ(fill × weight) / Σ(weight)` over live metrics, so an unweighted pillar behaves exactly
+as it does today and nothing else needs changing.
+
+Eight strength days and no cardio now reads **80%**, not 50% — the ring reflects that the
+bulk of the intent was met, while the empty cardio sub-ring still shows what was skipped.
+
+### 2.2b Overdrive — visual only, never in the mean
+
+Beyond its threshold a metric ring may show **overdrive**: a second, subtler arc layered
+over the full one, indicating work past the minimum. It is capped at 2× and is a *fact*,
+not a reward — the fact line already says `11 of 8 days`, and this only makes that
+visible in the ring rather than only in the text.
+
+**Overdrive never reaches the pillar mean.** `metricFill` continues to return a value
+capped at 1, and that capped value is what the weighted mean consumes. A separate
+`overdrive: number | null` (0..1, the fraction of a second lap) drives the visual only.
+
+This is not decoration-versus-purity — it is load-bearing. With Strength weighted 0.8, an
+uncapped fill of 1.25 would give `0.8 × 1.25 + 0.2 × 0 = 100%`: ten strength days and zero
+cardio would fill Physical completely, and overdoing one thing would exactly cancel
+neglecting the other. That is the failure the cap exists to prevent. The cap therefore
+stays in the maths and the acknowledgement lives in the pixels.
+
+`CLAUDE.md` must be amended: it currently states the cap with no exception, and the code
+would otherwise contradict the constitution.
 
 ### 2.3 New metric state: tracked, not scored
 
@@ -215,10 +240,13 @@ ALTER TABLE journal_entries ADD COLUMN body TEXT;
 
 `image` is currently `NOT NULL`, which a text entry cannot satisfy. SQLite cannot drop a
 NOT NULL constraint without a table rebuild, and `journal_entries` holds **2 real rows**
-of irreplaceable handwriting. Rather than rebuild, **text entries store `image = ''`** and
-are identified by `kind = 'text'`. The API and reads must treat `kind`, never emptiness,
-as the discriminator. Document this in the schema comment — it is a deliberate compromise
-to avoid a rebuild, not an oversight.
+of irreplaceable handwriting.
+
+**Decided: no rebuild. Text entries store `image = ''`** and are identified by
+`kind = 'text'`. Two `ALTER TABLE ADD COLUMN` statements against real handwriting, versus
+a create-copy-drop-rename cycle — the cheap option is also by far the safer one here. The
+API and reads must treat `kind`, never emptiness, as the discriminator. Documented in the
+schema comment so it reads as a decision rather than an oversight.
 
 Three consumers must learn about `kind`, or a text entry will render as a broken image:
 
