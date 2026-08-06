@@ -75,7 +75,7 @@ export default function WorkoutLog({
       ref={dialogRef}
       onClose={onClose}
       onCancel={(e) => busy && e.preventDefault()}
-      className="w-[min(94vw,640px)] rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] p-5 text-[var(--color-ink)] backdrop:bg-black/25"
+      className="w-[min(94vw,640px)] rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] p-5 text-[var(--color-ink)]"
     >
       <div className="flex items-baseline justify-between gap-4">
         <div className="min-w-0">
@@ -107,7 +107,7 @@ export default function WorkoutLog({
         spellCheck={false}
         rows={14}
         aria-label={`${label} log`}
-        className="mt-4 w-full resize-y rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-3 text-[14px] leading-[1.7] outline-none placeholder:text-[var(--color-line-strong)] focus-visible:border-[var(--color-line-strong)] disabled:opacity-60"
+        className="mt-4 w-full resize-y rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-3 text-[14px] leading-[1.7] outline-none focus-visible:border-[var(--color-line-strong)] disabled:opacity-60"
         style={{ fontVariantNumeric: "tabular-nums" }}
       />
 

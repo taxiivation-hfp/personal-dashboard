@@ -45,7 +45,9 @@ export default function JournalCanvas({
     // hand drifts and lines wander. Drawn in device pixels before the DPR transform is
     // reapplied, so spacing is consistent on any display.
     const gap = 34 * dpr; // ~34 CSS px: comfortable for adult handwriting
-    ctx.strokeStyle = "#dfd6c4";
+    // Canvas cannot read CSS variables, so the paper palette is mirrored here. Keep these
+    // in step with globals.css: PAPER #fdfbf6, RULE --color-line, INK --color-ink.
+    ctx.strokeStyle = "#e2dbcd"; // --color-line
     ctx.lineWidth = 1;
     for (let y = gap * 1.5; y < canvas.height; y += gap) {
       ctx.beginPath();
@@ -53,8 +55,9 @@ export default function JournalCanvas({
       ctx.lineTo(canvas.width - 24 * dpr, y);
       ctx.stroke();
     }
-    // A single margin rule, the way a notebook has one.
-    ctx.strokeStyle = "#e8d3cc";
+    // A single margin rule, the way a notebook has one. Warm tan rather than the old
+    // pinkish red — this app has no red anywhere, deliberately.
+    ctx.strokeStyle = "#cfc5b2"; // --color-line-strong
     ctx.beginPath();
     ctx.moveTo(56 * dpr, 0);
     ctx.lineTo(56 * dpr, canvas.height);
@@ -63,7 +66,7 @@ export default function JournalCanvas({
 
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "#141418";
+    ctx.strokeStyle = "#23201b"; // --color-ink
     for (const stroke of strokes.current) {
       if (stroke.length < 2) {
         // A tap is a dot; without this a single point would leave no mark at all.
@@ -71,7 +74,7 @@ export default function JournalCanvas({
         if (!p) continue;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.w / 2, 0, Math.PI * 2);
-        ctx.fillStyle = "#141418";
+        ctx.fillStyle = "#23201b"; // --color-ink
         ctx.fill();
         continue;
       }
@@ -229,7 +232,7 @@ export default function JournalCanvas({
           <button
             onClick={save}
             disabled={!hasInk || busy}
-            className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-[14px] text-white transition-opacity disabled:opacity-40"
           >
             {busy ? "Saving…" : "Save page"}
           </button>

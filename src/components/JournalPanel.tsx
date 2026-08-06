@@ -71,10 +71,10 @@ export default function JournalPanel({
           <div key={e.id} className="group relative">
             {e.kind === "text" ? (
               <div
-                className="flex h-24 w-[68px] overflow-hidden rounded-lg border border-[var(--color-line)] p-1.5 text-[7px] leading-[1.5]"
+                className="flex h-24 w-[68px] overflow-hidden rounded-lg border border-[var(--color-line)] p-2 text-[9px] leading-[1.45]"
                 style={{ background: "#fdfbf6", color: "var(--color-muted)" }}
               >
-                <span className="line-clamp-[9]">{e.preview || "…"}</span>
+                <span className="line-clamp-6">{e.preview || "…"}</span>
               </div>
             ) : (
               <a href={`/api/journal/${e.id}/image`} target="_blank" rel="noreferrer">
@@ -97,7 +97,7 @@ export default function JournalPanel({
             {/* One stray tap used to destroy a page with no undo, against real
                 handwriting. It asks now. */}
             {confirming === e.id && (
-              <div className="absolute left-0 top-full z-10 mt-1.5 w-40 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] p-2.5 shadow-sm">
+              <div className="absolute left-0 top-full z-[var(--z-popover)] mt-1.5 w-40 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] p-2.5 shadow-sm">
                 <p className="text-[12px] leading-snug">Delete this page? It can&apos;t be undone.</p>
                 <div className="mt-2 flex gap-1.5">
                   <button
@@ -146,7 +146,7 @@ export default function JournalPanel({
         onCancel={(e) => {
           if (busy) e.preventDefault();
         }}
-        className="h-[92dvh] w-[min(94vw,900px)] rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] p-4 text-[var(--color-ink)] backdrop:bg-black/30"
+        className="h-[92dvh] w-[min(94vw,900px)] rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] p-4 text-[var(--color-ink)]"
       >
         {mode === "draw" && (
           <JournalCanvas

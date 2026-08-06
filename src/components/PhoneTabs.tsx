@@ -37,7 +37,7 @@ export function PhoneTabBar({
   return (
     <nav
       aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-line)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-[var(--z-sticky)] border-t border-[var(--color-line)] lg:hidden"
       style={{
         // Translucent so the page reads as continuing underneath rather than being cut
         // off by an opaque bar.
@@ -48,7 +48,7 @@ export function PhoneTabBar({
         paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
       }}
     >
-      <div className="mx-auto flex max-w-[30rem]">
+      <div className="relative mx-auto flex max-w-[30rem]">
         {ORDER.map((t) => {
           const on = t === tab;
           return (
@@ -56,21 +56,25 @@ export function PhoneTabBar({
               key={t}
               onClick={() => onTab(t)}
               aria-current={on ? "page" : undefined}
-              className="flex-1 px-2 pb-1 pt-2.5 text-[12px] transition-colors"
+              className="flex-1 px-2 pb-3 pt-2.5 text-[12px]"
               style={{ color: on ? "var(--color-ink)" : "var(--color-muted)" }}
             >
-              <span className="block">{LABEL[t]}</span>
-              <span
-                aria-hidden
-                className="mx-auto mt-1.5 block h-[2px] w-6 rounded-full transition-opacity"
-                style={{
-                  background: "var(--color-accent)",
-                  opacity: on ? 1 : 0,
-                }}
-              />
+              {LABEL[t]}
             </button>
           );
         })}
+        {/* One indicator that SLIDES between tabs rather than three that blink. The
+            movement is the thing that says "you moved sideways", which is exactly what
+            the swipe did. */}
+        <span
+          aria-hidden
+          className="absolute bottom-1.5 h-[2px] w-6 rounded-full"
+          style={{
+            background: "var(--color-accent)",
+            left: `calc(${(ORDER.indexOf(tab) + 0.5) * (100 / ORDER.length)}% - 0.75rem)`,
+            transition: "left var(--dur-fast) var(--ease-out)",
+          }}
+        />
       </div>
     </nav>
   );

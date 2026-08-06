@@ -7,10 +7,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0c",
+  // The page background. Left over from the pre-pivot dark theme this was #0a0a0c, which
+  // painted the iPhone status bar near-black above a warm beige app — the one seam a
+  // home-screen web app cannot hide. Must track --color-bg.
+  themeColor: "#f2ede4",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // viewportFit=cover lets the layout reach under the home indicator, which is what the
+  // tab bar's env(safe-area-inset-bottom) padding is written against.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

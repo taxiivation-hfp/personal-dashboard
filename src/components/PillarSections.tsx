@@ -91,40 +91,46 @@ export default function PillarSections({
 
         return (
           <section key={pk}>
-            <div className="flex items-center gap-3">
-              <Ring fill={ring?.fill ?? null} size={44} stroke={4} tone={pk} color={colors[pk]} />
+            <div className="flex items-center gap-3.5">
+              <Ring fill={ring?.fill ?? null} size={52} stroke={4.5} tone={pk} color={colors[pk]} />
               <div className="min-w-0">
                 <h2 className="text-[15px] font-semibold">{PILLAR_NAME[pk]}</h2>
-                {soleFact && (
-                  <p className="text-[12px] text-[var(--color-muted)]">{soleFact}</p>
-                )}
+                {soleFact && <p className="text-[12px] text-[var(--color-muted)]">{soleFact}</p>}
               </div>
             </div>
 
+            {/* A LIST, not a row of columns.
+                Four metrics across a 250px column gave each ~88px, so every fact line
+                wrapped to two ragged centred lines and the parent ring (44px) barely
+                outsized its children (40px). Reading down a left-aligned list also scales:
+                a fifth metric costs a row, not a relayout. */}
             {subrings.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-3">
-                {subrings.map((m) =>
-                  // Unscored metrics draw NO ring — there is nothing to fill toward. A
-                  // count and a plain statement that it isn't measured.
-                  m.state === "unscored" ? (
-                    <div key={m.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-                      <span className="text-[15px] tabular-nums">{m.count}</span>
-                      <span className="text-[11px] text-[var(--color-muted)]">{m.label}</span>
-                      <span className="text-center text-[10px] leading-tight text-[var(--color-muted)]">
-                        not scored
+              <ul className="mt-3.5 flex flex-col gap-2.5">
+                {subrings.map((m) => (
+                  <li key={m.key} className="flex items-center gap-3">
+                    {m.state === "unscored" ? (
+                      // No ring — there is nothing to fill toward. The count sits where a
+                      // ring would, so the row still scans, but it is plainly not a gauge.
+                      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center text-[14px] tabular-nums text-[var(--color-muted)]">
+                        {m.count}
                       </span>
-                    </div>
-                  ) : (
-                    <div key={m.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-                      <Ring fill={m.fill} overdrive={m.overdrive} size={40} stroke={3} tone={pk} color={colors[pk]} />
-                      <span className="text-[11px] text-[var(--color-muted)]">{m.label}</span>
-                      <span className="text-center text-[10px] leading-tight text-[var(--color-muted)]">
-                        {m.fact}
-                      </span>
-                    </div>
-                  )
-                )}
-              </div>
+                    ) : (
+                      <Ring
+                        fill={m.fill}
+                        overdrive={m.overdrive}
+                        size={30}
+                        stroke={3}
+                        tone={pk}
+                        color={colors[pk]}
+                      />
+                    )}
+                    <span className="min-w-0 flex-1 text-[13px]">{m.label}</span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-[var(--color-muted)]">
+                      {m.fact}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
 
             {pk === "physical" && (
@@ -192,11 +198,17 @@ export default function PillarSections({
 
                     <div
                       className="mt-2 h-1.5 w-full overflow-hidden rounded-full"
-                      style={{ background: `color-mix(in srgb, ${hue} 14%, var(--color-panel-2))` }}
+                      style={{ background: `color-mix(in srgb, ${hue} 7%, var(--color-panel-2))` }}
                     >
                       <div
-                        className="h-full rounded-full bg-[var(--color-accent)] transition-[width] duration-500"
-                        style={{ width: `${Math.round(g.progress * 100)}%` }}
+                        className="h-full w-full origin-left rounded-full bg-[var(--color-accent)]"
+                        style={{
+                          // scaleX, not width: transform is composited and skips layout
+                          // entirely. At 1.5px tall the rounded caps distort by a fraction
+                          // of a pixel, which is invisible and worth the free frame.
+                          transform: `scaleX(${g.progress})`,
+                          transition: "transform var(--dur-data) var(--ease-out)",
+                        }}
                       />
                     </div>
 
@@ -234,7 +246,7 @@ export default function PillarSections({
                     </ul>
 
                     {g.subgoals.length === 0 && (
-                      <p className="mt-2 text-[12px] text-[var(--color-muted)]">No subgoals yet.</p>
+                      <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-muted)]">No subgoals yet — add a few and this bar starts filling.</p>
                     )}
                     {/* Fires only when explicit overrides exceed 100% — an all-auto goal
                         is well-formed and must never warn. */}
@@ -246,7 +258,13 @@ export default function PillarSections({
                   </li>
                 ))}
                 {mine.length === 0 && (
-                  <li className="text-[13px] text-[var(--color-muted)]">No goals here yet.</li>
+                  <li className="text-[13px] leading-relaxed text-[var(--color-muted)]">
+                    Nothing here yet — add one from{" "}
+                    <Link href="/goals" className="underline underline-offset-4 hover:text-[var(--color-ink)]">
+                      the goals screen
+                    </Link>
+                    . Subgoals split it evenly, and ticking them fills the bar.
+                  </li>
                 )}
               </ul>
             </div>
@@ -287,13 +305,14 @@ export default function PillarSections({
                       {anyRecent && (
                         <div
                           className="mt-1.5 h-1 w-full overflow-hidden rounded-full"
-                          style={{ background: `color-mix(in srgb, ${hue} 12%, var(--color-panel-2))` }}
+                          style={{ background: `color-mix(in srgb, ${hue} 7%, var(--color-panel-2))` }}
                         >
                           <div
-                            className="h-full rounded-full transition-[width] duration-500"
+                            className="h-full w-full origin-left rounded-full"
                             style={{
-                              width: `${Math.round((s.minutes14 / maxMinutes) * 100)}%`,
+                              transform: `scaleX(${s.minutes14 / maxMinutes})`,
                               background: s.state === "parked" ? "var(--color-line-strong)" : hue,
+                              transition: "transform var(--dur-data) var(--ease-out)",
                             }}
                           />
                         </div>

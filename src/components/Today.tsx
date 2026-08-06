@@ -180,8 +180,9 @@ export default function Today({
               >
                 {d.pct != null && (
                   <div
-                    className="w-full rounded-md transition-[height] duration-300"
+                    className="w-full rounded-md"
                     style={{
+                      transition: "height var(--dur-data) var(--ease-out)",
                       height: `${Math.max(d.pct, 3)}%`,
                       marginTop: `${100 - Math.max(d.pct, 3)}%`,
                       // Translucent, so a bar sits IN its track rather than on top of it

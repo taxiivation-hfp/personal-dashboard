@@ -25,8 +25,11 @@ export type PillarKey = "social_capital" | "physical" | "portfolio";
  * three block states stay fixed and are not offered here — one accent is what keeps the
  * page quiet, and the block states deliberately avoid a severity ramp.
  */
+// Every value is verified at >=3:1 against the page (it is drawn as a ring stroke) AND
+// >=4.5:1 with white on top (it is also a filled chip with white text). Moss was #4a8271,
+// which measured 4.45 with white — a real fail, darkened to #467c6c.
 export const PILLAR_PALETTE: { name: string; hex: string }[] = [
-  { name: "Moss", hex: "#4a8271" },
+  { name: "Moss", hex: "#467c6c" },
   { name: "Olive", hex: "#6d7a45" },
   { name: "Clay", hex: "#8c7434" },
   { name: "Rust", hex: "#9a6448" },

@@ -97,7 +97,7 @@ export default function Ring({
             strokeLinecap="butt"
             strokeDasharray={`${dash} ${c}`}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            style={{ transition: "stroke-dasharray 400ms ease" }}
+            style={{ transition: "stroke-dasharray var(--dur-data) var(--ease-out)" }}
           />
         )}
         {/* A second lap, translucent and inset, over an already-full ring. Reads as
@@ -114,7 +114,7 @@ export default function Ring({
             strokeLinecap="butt"
             strokeDasharray={`${over} ${c}`}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            style={{ opacity: 0.45, transition: "stroke-dasharray 400ms ease" }}
+            style={{ opacity: 0.45, transition: "stroke-dasharray var(--dur-data) var(--ease-out)" }}
           />
         )}
       </svg>

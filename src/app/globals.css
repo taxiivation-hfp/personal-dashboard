@@ -35,11 +35,54 @@
   --color-drifted: #8a8378; /* 3.6:1 warm grey. Information, not alarm. */
   --color-skipped: #8f8676; /* 3.4:1, used as an outline + label, never as a fill */
 
-  /* pillars: categorisation only, desaturated for a light ground */
-  --color-social: #8c7434;
-  --color-physical: #4a8271;
-  --color-portfolio: #67609b;
+  /* pillars: categorisation only, desaturated for a light ground.
+   * All three are verified at >=3:1 against the page as ring strokes AND >=4.5:1 with
+   * white on top, because each is also used as a filled chip with white text.
+   * physical was #4a8271, which measured 4.45:1 with white — a real fail, darkened. */
+  --color-social: #8c7434; /* 3.86 on bg · 4.50 with white */
+  --color-physical: #467c6c; /* 4.02 on bg · 4.68 with white */
+  --color-portfolio: #67609b; /* 4.84 on bg · 5.64 with white */
+
+  /* Placeholder text is TEXT: it needs the same 4.5:1 as body, not a hairline colour.
+   * --color-line-strong measures 1.47:1 and is for strokes only. */
+  --color-placeholder: #6e675d;
+
+  /* MOTION.
+   * The built-in CSS easings are too weak to read as intentional. These are the strong
+   * variants: --ease-out for anything entering or responding (starts fast, so the UI
+   * feels like it heard you), --ease-in-out for something moving on screen.
+   * There is deliberately no ease-in token — it delays the first moment, which is
+   * exactly when the eye is watching, and makes the whole app feel sluggish. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Durations. This app is opened many times a day; nothing may make the owner wait to
+   * read a number. Everything interactive stays under 300ms. */
+  --dur-press: 140ms; /* button feedback */
+  --dur-fast: 180ms; /* hovers, small state */
+  --dur-modal: 240ms; /* dialogs */
+  --dur-data: 280ms; /* a ring or bar moving to a new value */
+
+  /* Semantic z-index. Never arbitrary 999s. */
+  --z-sticky: 30;
+  --z-backdrop: 40;
+  --z-modal: 50;
+  --z-popover: 60;
 }
+
+/* TYPE SPINE — product register: one family, fixed rem-equivalent steps, no fluid type.
+ *
+ *   11px  micro     ring captions, fact lines, meta
+ *   12px  small     secondary labels, inline links
+ *   13px  compact   dense list rows
+ *   14px  control   values and control labels
+ *   15px  body      the default
+ *   16px  emphasis  dialog titles
+ *   28px  title     deeper-screen page headings
+ *   52px  hero      the adherence numeral, and nothing else
+ *
+ * Eight steps for a surface this dense is already generous. Do not add a ninth; if
+ * something needs to stand out, use weight or space, not a new size. */
 
 html {
   color-scheme: light;
@@ -87,16 +130,114 @@ b,
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+  border-radius: 6px;
 }
 
+/* PRESSABLE FEEDBACK.
+ * A button that doesn't move on press leaves you unsure the tap registered — and this is
+ * an app whose entire value depends on marking things quickly, dozens of times a day. The
+ * scale is deliberately small: felt, not watched.
+ *
+ * Gated on a real pointer. A touch device fires :hover on tap, so an ungated hover state
+ * sticks after your finger lifts and the row looks selected when it isn't. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    opacity var(--dur-fast) ease;
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.97);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-placeholder);
+}
+
+/* DIALOGS.
+ * Modals keep transform-origin at centre — they are not anchored to a trigger, unlike a
+ * popover. Entry starts at 0.97 rather than 0: nothing in the real world appears out of
+ * nothing, and a scale(0) entrance reads as a pop rather than an arrival.
+ * Exit is faster than entry — the system responding should always outpace the system
+ * presenting. */
+/* Tailwind's preflight sets `margin: 0` on everything, which silently kills the UA
+ * stylesheet's `margin: auto` — the thing that centres a modal <dialog>. Without this
+ * every dialog renders hard against the top-left corner. */
+dialog:modal {
+  margin: auto;
+  max-width: 94vw;
+  max-height: 92dvh;
+}
+
+dialog {
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    overlay var(--dur-fast) allow-discrete,
+    display var(--dur-fast) allow-discrete;
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+dialog[open] {
+  opacity: 1;
+  transform: scale(1);
+  transition-duration: var(--dur-modal);
+}
+
+@starting-style {
+  dialog[open] {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+dialog::backdrop {
+  background: rgb(35 32 27 / 0.28);
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    overlay var(--dur-fast) allow-discrete,
+    display var(--dur-fast) allow-discrete;
+}
+
+dialog[open]::backdrop {
+  opacity: 1;
+  transition-duration: var(--dur-modal);
+}
+
+@starting-style {
+  dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion means gentler, not none: colour and opacity still carry meaning, so
+ * only movement is removed. A hard 0.01ms on everything would also kill the dialog's
+ * allow-discrete transitions and make them pop. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: none;
+  }
+
+  dialog,
+  dialog[open] {
+    transform: none;
   }
 }
 
