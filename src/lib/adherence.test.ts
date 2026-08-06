@@ -11,6 +11,12 @@ const block = (state: BlockState | null, due = true): Block => ({
   state,
   reason: null,
   due,
+  // Adherence is blind to both of these — a block counts as one item whatever colour it
+  // is and however long it runs. They exist for productivity.ts, which is a separate,
+  // quarantined system. Fixed values here so nothing in this file can start depending
+  // on them.
+  colorId: null,
+  minutes: 60,
 });
 
 // 21:00 Melbourne on 2026-08-06 as an epoch — the caller computes this via rfc3339.

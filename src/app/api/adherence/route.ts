@@ -99,9 +99,19 @@ export async function GET(req: Request) {
         ...adherenceFor(blocks, tally),
         // A compact summary so the calendar column can show what the day actually
         // held, not just a percentage — enough to read the pattern at a glance.
+        //
+        // `colorId` travels so each event can carry its projected accent; `minutes`
+        // deliberately does NOT. The column shows the allocated span as written and never
+        // a duration, and the surest way to keep it that way is not to send one.
         blocks: blocks
           .filter((b) => b.state !== "dismissed")
-          .map((b) => ({ time: b.time_start, timeEnd: b.time_end, title: b.title, state: b.state })),
+          .map((b) => ({
+            time: b.time_start,
+            timeEnd: b.time_end,
+            title: b.title,
+            state: b.state,
+            colorId: b.colorId,
+          })),
       });
     }
     return Response.json({ days: out });

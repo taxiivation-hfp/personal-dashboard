@@ -18,7 +18,24 @@ const redirectUri = () => process.env.GOOGLE_REDIRECT_URI || "http://localhost:3
 
 export const googleConfigured = () => Boolean(clientId() && clientSecret());
 
-export type CalEvent = { id: string; summary: string; start: string | null; end: string | null; allDay: boolean };
+export type CalEvent = {
+  id: string;
+  summary: string;
+  start: string | null;
+  end: string | null;
+  allDay: boolean;
+  /**
+   * Google's palette id for the event.
+   *
+   * NULL when the event uses the calendar's DEFAULT colour — Google omits the field
+   * entirely for those rather than sending an id, and "default" is a real tier in
+   * src/lib/productivity.ts, not an absence. Do not collapse it to a string.
+   *
+   * It costs nothing to ask for: neither request sends a `fields=` mask, so this has
+   * always been in the response and was simply being dropped by the map below.
+   */
+  colorId: string | null;
+};
 
 // ---- OAuth ----
 
@@ -148,6 +165,7 @@ export async function listEvents(db: Client, date: string): Promise<CalEvent[]> 
       start: start?.dateTime ?? start?.date ?? null,
       end: end?.dateTime ?? end?.date ?? null,
       allDay: Boolean(start?.date && !start?.dateTime),
+      colorId: e.colorId == null ? null : String(e.colorId),
     };
   });
 }
@@ -185,6 +203,7 @@ export async function listEventsRange(db: Client, fromDate: string, toDate: stri
       start: startsAt,
       end: end?.dateTime ?? end?.date ?? null,
       allDay: Boolean(start?.date && !start?.dateTime),
+      colorId: e.colorId == null ? null : String(e.colorId),
     };
     const list = byDate.get(localDate) ?? [];
     list.push(ev);

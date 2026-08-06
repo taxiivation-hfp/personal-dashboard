@@ -32,6 +32,18 @@ export type Block = {
   reason: string | null;
   /** Its time has passed, so it counts toward today's rate. */
   due: boolean;
+  /** Google's palette id, or null for the calendar default. Categorisation only — it
+   *  must never be read as status. See The Foreign Hue Rule in DESIGN.md. */
+  colorId: string | null;
+  /**
+   * Scheduled length in minutes, or null when the event has no usable end.
+   *
+   * FOR SCORING ONLY. The calendar column shows the allocated span as written
+   * ("10am–12pm") and never a duration — no "2h", no "3h left". This field exists so
+   * productivity.ts can weigh an hour, and it is deliberately withheld from the API's
+   * block summary so the frontend cannot render it by accident.
+   */
+  minutes: number | null;
 };
 
 export type Adherence = {
@@ -101,6 +113,16 @@ const hhmm = (iso: string | null): string | null =>
         timeZone: APP_TZ,
       }).format(new Date(iso));
 
+/** Scheduled length, for scoring. Null rather than 0 when either end is missing or
+ *  unparseable — an unknown duration is not a zero-length block. */
+const durationMinutes = (start: string | null, end: string | null): number | null => {
+  if (!start || !end) return null;
+  const a = Date.parse(start);
+  const b = Date.parse(end);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.max(0, Math.round((b - a) / 60000));
+};
+
 /** Merge live calendar events with stored marks into the day's block list. */
 export function buildBlocks(
   dateISO: string,
@@ -121,6 +143,8 @@ export function buildBlocks(
         state: m?.state ?? null,
         reason: m?.reason ?? null,
         due: isDue(e, dateISO, nowMs),
+        colorId: e.colorId,
+        minutes: durationMinutes(e.start, e.end),
       };
     });
 }
