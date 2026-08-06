@@ -89,6 +89,9 @@ const TABLES = [
   "xp_log",
   "coach_messages",
   "health_logs",
+  // The day's calories, as a log. Not in INTENTIONALLY_SKIPPED like `meals` — this one is
+  // live, and the assertion below hard-fails if a present table is in neither list.
+  "calorie_entries",
   "journal_entries",
   "block_marks",
   "skills",

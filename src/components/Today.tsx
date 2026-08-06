@@ -398,7 +398,12 @@ export default function Today({
       </section>
 
       <section>
-        <CalorieInput date={data.date} calories={data.calories} onChanged={refresh} />
+        <CalorieInput
+          date={data.date}
+          calories={data.calories}
+          entries={data.calorieEntries}
+          onChanged={refresh}
+        />
       </section>
     </div>
   );

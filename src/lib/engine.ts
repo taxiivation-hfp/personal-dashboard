@@ -245,14 +245,36 @@ export async function deleteJournalEntry(db: Client, id: number): Promise<void> 
 }
 
 // ---------------------------------------------------------------- calories
+//
+// A LOG, not a total. 400 in the morning and 800 later reads 1200, and the total is
+// derived on read so it can never drift out of step with the entries that define it.
+//
+// Kept as entries rather than a running number for the same reason skill_time is: a
+// mistyped 2000 is removed rather than corrected by arithmetic. In an ADDITIVE field that
+// matters more than it did before — without a way back, a field you are afraid to touch
+// is a field you stop using, which is the honest-logging failure the whole app avoids.
+//
+// Still no food database, no barcode, no estimation: an entry is one number.
 
-/** One manual number per day. No database, no barcode, no estimation. */
-export async function setDailyCalories(db: Client, date: string, calories: number | null): Promise<void> {
-  await db.execute({
-    sql: `INSERT INTO health_logs (date,calories,updated_at) VALUES (?,?,?)
-          ON CONFLICT(date) DO UPDATE SET calories=excluded.calories, updated_at=excluded.updated_at`,
-    args: [date, calories, now()],
+/** Add to the day's running total. Returns the new entry's id so the caller can undo it. */
+export async function addCalories(
+  db: Client,
+  date: string,
+  kcal: number,
+  note?: string | null
+): Promise<number> {
+  const r = await db.execute({
+    sql: "INSERT INTO calorie_entries (date,kcal,note) VALUES (?,?,?)",
+    args: [date, Math.round(kcal), note?.trim() || null],
   });
+  return Number(r.lastInsertRowid);
+}
+
+/** Remove ONE entry. False when nothing matched, so the caller can hide the control
+ *  rather than pretend it did something — matching undoSkillTime. */
+export async function deleteCalorieEntry(db: Client, id: number): Promise<boolean> {
+  const r = await db.execute({ sql: "DELETE FROM calorie_entries WHERE id=?", args: [id] });
+  return r.rowsAffected > 0;
 }
 
 // ---------------------------------------------------------------- skills

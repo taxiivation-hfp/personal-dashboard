@@ -279,7 +279,35 @@ CREATE TABLE IF NOT EXISTS health_logs (
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
--- Nutrition. kcal is deliberately NULLABLE: the rule is to reward consistency and
+-- Calories through the day. A LOG, not a total: 400 in the morning and 800 later reads
+-- 1200, and a mistyped entry is REMOVED rather than retyped. The total is derived on
+-- read, so a stored total can never drift out of step with the entries that define it —
+-- the same rule that already governs goal progress.
+--
+-- Deliberately NOT health_logs.calories. That table is the phone's idempotent per-day
+-- snapshot, where re-posting a day must REVISE it; a table where one column accumulates
+-- while its siblings overwrite is a trap for whoever eventually writes /api/health.
+-- Deliberately not `meals` either — that was dropped by the adherence_v1 migration when a
+-- single manual total replaced food logging, and its NOT NULL name would force a fake
+-- value on every entry.
+--
+-- Still no food database, no barcode, no API: an entry is one number.
+CREATE TABLE IF NOT EXISTS calorie_entries (
+  id         INTEGER PRIMARY KEY,
+  date       TEXT NOT NULL CHECK (date GLOB '????-??-??'),
+  kcal       INTEGER NOT NULL CHECK (kcal > 0),
+  note       TEXT,
+  -- No CHECK, deliberately: an iOS push later should be a one-line addition rather than a
+  -- table rebuild. Same reasoning as tasks.kind.
+  source     TEXT NOT NULL DEFAULT 'manual',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_calorie_entries_date ON calorie_entries(date);
+
+-- DEAD. Nutrition from the pre-pivot app, dropped by the adherence_v1 migration and only
+-- recreated here so a fresh DB stays byte-compatible with the migrated one. Nothing reads
+-- or writes it. Calories live in calorie_entries above; do not revive this.
+-- kcal is deliberately NULLABLE: the rule was to reward consistency and
 -- awareness of logging, not hitting exact numbers, and Open Food Facts genuinely
 -- lacks energy data for many real products. A meal with no number still counts.
 CREATE TABLE IF NOT EXISTS meals (

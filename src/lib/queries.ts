@@ -98,9 +98,38 @@ export type DayView = {
   streak: number;
   habits: HabitView[];
   journal: JournalView[];
+  /** The day's running total, derived from calorieEntries. null when nothing is logged,
+   *  so the screen can render "—" rather than a zero nobody entered. */
   calories: number | null;
+  /** The individual additions, so a mistyped one can be removed rather than retyped. */
+  calorieEntries: CalorieEntry[];
   pillars: PillarView[];
 };
+
+export type CalorieEntry = { id: number; kcal: number };
+
+/**
+ * The day's calories, total and entries, from one place.
+ *
+ * Shared by getDayView and /api/calories deliberately: two readers deriving the same total
+ * independently is how a total and its parts start disagreeing on screen.
+ */
+export async function caloriesForDate(
+  db: Client,
+  date: string
+): Promise<{ total: number | null; entries: CalorieEntry[] }> {
+  const r = await db.execute({
+    sql: "SELECT id,kcal FROM calorie_entries WHERE date=? ORDER BY id",
+    args: [date],
+  });
+  const entries = r.rows.map((x) => ({ id: Number(x.id), kcal: num(x.kcal) }));
+  // Summed in JS rather than by SQL SUM(): the rows are already loaded, and it keeps the
+  // BigInt conversion in exactly one place.
+  return {
+    total: entries.length ? entries.reduce((s, e) => s + e.kcal, 0) : null,
+    entries,
+  };
+}
 
 // ---------------------------------------------------------------- adherence config
 
@@ -238,7 +267,7 @@ export async function getDayView(
     sql: "SELECT id, kind, substr(COALESCE(body,''),1,140) AS preview FROM journal_entries WHERE date=? ORDER BY id",
     args: [date],
   });
-  const cal = await db.execute({ sql: "SELECT calories FROM health_logs WHERE date=?", args: [date] });
+  const cal = await caloriesForDate(db, date);
   const { count } = await getStreak(db, date);
 
   return {
@@ -253,7 +282,8 @@ export async function getDayView(
       kind: String(j.kind ?? "drawing"),
       preview: j.kind === "text" ? String(j.preview ?? "") : null,
     })),
-    calories: cal.rows[0]?.calories == null ? null : num(cal.rows[0].calories),
+    calories: cal.total,
+    calorieEntries: cal.entries,
     pillars,
   };
 }

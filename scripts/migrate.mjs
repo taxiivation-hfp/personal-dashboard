@@ -377,6 +377,40 @@ async function main() {
     console.log("round three: numeric non-negotiables + daily weight");
   }
 
+  // ---- round four: sessions, not days · calories as a log -------------------------
+  const r4 = await client.execute("SELECT value FROM app_meta WHERE key='round4_v1'");
+  if (!r4.rows.length) {
+    // SESSIONS, not days. The owner's ruling: two lifts on a Tuesday are two things that
+    // happened, and the Physical ring gets easier on purpose. Dropping the index IS the
+    // change — every row already carries its own id, so no data moves.
+    //
+    // src/lib/db/client.ts drops this too, and must: ensure() runs on every app boot, so
+    // leaving the CREATE there would silently re-add the constraint and the second save
+    // of the day would start failing.
+    await client.execute("DROP INDEX IF EXISTS idx_gym_sessions_date_kind");
+    await client.execute("DROP INDEX IF EXISTS idx_gym_sessions_date");
+    await client.execute("CREATE INDEX IF NOT EXISTS idx_gym_sessions_date ON gym_sessions(date)");
+
+    // Calories become a log. Existing daily totals carry across as one entry each, so no
+    // day loses its number. health_logs is left EXACTLY as it is — nothing is dropped,
+    // and its calories column simply stops being read.
+    await client.execute(
+      `INSERT INTO calorie_entries (date,kcal,source,note)
+       SELECT date, calories, 'migrated', 'carried over from the daily total'
+       FROM health_logs
+       WHERE calories IS NOT NULL AND calories > 0
+         AND NOT EXISTS (SELECT 1 FROM calorie_entries ce WHERE ce.date = health_logs.date)`
+    );
+
+    await client.execute("INSERT INTO app_meta (key,value) VALUES ('round4_v1','1')");
+    const g = await client.execute("SELECT COUNT(*) AS n FROM gym_sessions");
+    const c = await client.execute("SELECT COUNT(*) AS n FROM calorie_entries");
+    console.log(
+      `round four: gym counts SESSIONS (${Number(g.rows[0].n)} rows kept), ` +
+        `${Number(c.rows[0].n)} calorie entries`
+    );
+  }
+
   console.log("migration complete:", url);
   client.close();
 }
