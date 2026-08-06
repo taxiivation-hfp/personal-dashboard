@@ -64,20 +64,43 @@ export default function CalendarColumn({ date }: { date: string }) {
 
   return (
     <section>
-      <h2 className="text-body font-semibold">Calendar</h2>
-      <ul className="mt-4 flex flex-col gap-3">
+      <div className="section-head">
+        <h2 className="text-small font-semibold">Calendar</h2>
+      </div>
+
+      {/* Nine rounded panels made nine identical objects out of nine different days, and a
+          stack of them read as a dashboard rather than a page. Days are separated by the
+          hairline now, and every number — the day's percentage and each block's time —
+          hangs off the one margin rail, so the column scans vertically as a ledger. */}
+      <ul className="mt-1 divide-y divide-[var(--color-line)]">
         {days.map((d) => (
           <li
             key={d.date}
-            className="rounded-2xl px-4 py-3"
+            className="py-3"
             style={{
-              background: d.isToday ? "var(--color-accent-soft)" : "var(--color-panel)",
               // Upcoming days are visibly quieter — they haven't happened yet.
               opacity: d.isFuture ? 0.65 : 1,
             }}
           >
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-small">
+            {/* Today is found by weight and by a rule under its line, the way a section
+                heading sits on one. A filled card would make one of nine days look like a
+                control and the other eight look switched off. */}
+            <div
+              className={`page-margin items-baseline ${
+                d.isToday ? "border-b border-[var(--color-line-strong)] pb-1.5" : ""
+              }`}
+            >
+              {/* Same conditional the blocks below use, so the whole nine-day rail agrees
+                  about its own colour. Future rows inherit ink because the 0.65 veil on
+                  them composites muted down to ~2.5:1; muted everywhere else. */}
+              <span
+                className={`justify-self-end text-right text-micro tabular-nums ${
+                  d.isFuture ? "" : "text-[var(--color-muted)]"
+                }`}
+              >
+                {d.pct == null ? "—" : `${d.pct}%`}
+              </span>
+              <p className={`text-small ${d.isToday ? "font-semibold" : ""}`}>
                 {d.isToday
                   ? "Today"
                   : new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", {
@@ -86,32 +109,40 @@ export default function CalendarColumn({ date }: { date: string }) {
                       month: "short",
                     })}
               </p>
-              <span className="shrink-0 text-small tabular-nums text-[var(--color-muted)]">
-                {d.pct == null ? "—" : `${d.pct}%`}
-              </span>
             </div>
 
+            {/* Muted sets the recorded days' blocks behind their percentage. Future rows
+                inherit the ink instead: the 0.65 veil is already doing that job, and muted
+                underneath it composites to 2.5:1 — quiet is not worth unreadable. */}
             {d.blocks.length > 0 ? (
-              <ul className="mt-2 flex flex-col gap-1">
+              <ul className={`mt-2 flex flex-col gap-1 ${d.isFuture ? "" : "text-[var(--color-muted)]"}`}>
                 {d.blocks.slice(0, 4).map((b, i) => (
-                  <li key={i} className="flex items-baseline gap-2">
-                    <span aria-hidden className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-full" style={dot(b.state)} />
-                    <span className="min-w-0 flex-1 truncate text-small font-serif text-[var(--color-muted)]">{b.title}</span>
-                    <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                  <li key={i} className="page-margin items-baseline">
+                    <span className="justify-self-end text-right text-micro tabular-nums">
                       {span(b.time, b.timeEnd)}
+                    </span>
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span aria-hidden className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-full" style={dot(b.state)} />
+                      <span className="min-w-0 flex-1 truncate text-small font-serif">{b.title}</span>
                     </span>
                   </li>
                 ))}
                 {d.blocks.length > 4 && (
-                  <li className="pl-4 text-micro text-[var(--color-muted)]">+{d.blocks.length - 4} more</li>
+                  <li className="pl-[calc(var(--page-margin)+0.875rem)] text-micro">+{d.blocks.length - 4} more</li>
                 )}
               </ul>
             ) : (
-              <p className="mt-1.5 text-small text-[var(--color-muted)]">Nothing scheduled.</p>
+              <p
+                className={`mt-2 pl-[calc(var(--page-margin)+0.875rem)] text-micro ${
+                  d.isFuture ? "" : "text-[var(--color-muted)]"
+                }`}
+              >
+                Nothing scheduled.
+              </p>
             )}
           </li>
         ))}
-        {days.length === 0 && <li className="text-small text-[var(--color-muted)]">No calendar data.</li>}
+        {days.length === 0 && <li className="py-3 text-small text-[var(--color-muted)]">No calendar data.</li>}
       </ul>
     </section>
   );

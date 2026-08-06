@@ -68,13 +68,17 @@ export default function JournalPanel({
     <>
       <div className="flex flex-wrap items-start gap-3">
         {entries.map((e) => (
-          <div key={e.id} className="group relative">
+          <div key={e.id} className="relative">
             {e.kind === "text" ? (
+              // Paper, not panel. The colour is the same one baked into a drawn page's PNG,
+              // so a typed page and a handwritten one sit on the shelf as one artefact
+              // rather than reading as two features — and the preview takes the serif
+              // because the words in it are the owner's.
               <div
-                className="flex h-24 w-[68px] overflow-hidden rounded-lg border border-[var(--color-line)] p-2 text-[9px] leading-[1.45]"
-                style={{ background: "#fdfbf6", color: "var(--color-muted)" }}
+                className="flex h-[119px] w-[84px] overflow-hidden rounded-lg border border-[var(--color-line)] p-2"
+                style={{ background: "#fdfbf6" }}
               >
-                <span className="line-clamp-6">{e.preview || "…"}</span>
+                <span className="line-clamp-6 font-serif text-micro text-[var(--color-ink)]">{e.preview || "…"}</span>
               </div>
             ) : (
               <a href={`/api/journal/${e.id}/image`} target="_blank" rel="noreferrer">
@@ -82,33 +86,42 @@ export default function JournalPanel({
                 <img
                   src={`/api/journal/${e.id}/image`}
                   alt="Today's handwritten page"
-                  className="h-24 w-[68px] rounded-lg border border-[var(--color-line)] object-cover object-top"
+                  className="h-[119px] w-[84px] rounded-lg border border-[var(--color-line)] object-cover object-top"
                 />
               </a>
             )}
+            {/* Always present rather than revealed on hover: this app is opened from a phone
+                home screen, where hover never fires and a hidden control is an absent one.
+                Quiet enough that the eye isn't drawn to the one destructive thing here. */}
             <button
               onClick={() => setConfirming(e.id)}
               aria-label="Delete this page"
-              className="absolute -right-2 -top-2 rounded-full bg-[var(--color-panel)] px-1.5 text-[var(--color-muted)] opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100"
+              className="absolute -right-2 -top-2 rounded-full p-1 text-micro leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
             >
               ×
             </button>
 
             {/* One stray tap used to destroy a page with no undo, against real
-                handwriting. It asks now. */}
+                handwriting. It asks now.
+
+                No shadow, despite genuinely floating. It was the last one left in the
+                codebase after this pass, and a single unexplained lift reads as an
+                oversight rather than a system. The panel surface against the page, the
+                hairline and the z-index already say "above"; that is the whole depth
+                model, and it is enough. */}
             {confirming === e.id && (
-              <div className="absolute left-0 top-full z-[var(--z-popover)] mt-1.5 w-40 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] p-2.5 shadow-sm">
-                <p className="text-micro leading-snug">Delete this page? It can&apos;t be undone.</p>
-                <div className="mt-2 flex gap-1.5">
+              <div className="absolute left-0 top-full z-[var(--z-popover)] mt-1.5 w-48 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] p-3">
+                <p className="text-small leading-snug">Delete this page? It can&apos;t be undone.</p>
+                <div className="mt-3 flex items-center gap-3">
                   <button
                     onClick={() => remove(e.id)}
-                    className="rounded-lg bg-[var(--color-accent)] px-2.5 py-1 text-micro text-white"
+                    className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90"
                   >
                     Delete
                   </button>
                   <button
                     onClick={() => setConfirming(null)}
-                    className="rounded-lg px-2.5 py-1 text-micro text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                    className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
                   >
                     Keep
                   </button>
@@ -118,28 +131,36 @@ export default function JournalPanel({
           </div>
         ))}
 
-        <div className="flex flex-col gap-2">
+        {/* Sitting on the same bottom edge as the pages beside it, so the shelf has one
+            line rather than controls hovering at the top of tall thumbnails. */}
+        <div className="flex items-center gap-3 self-end">
           <button
             onClick={() => setMode("draw")}
-            className="rounded-xl border border-[var(--color-line-strong)] px-4 py-2.5 text-body transition-colors hover:bg-[var(--color-panel)]"
+            className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-panel)]"
           >
             {entries.length ? "Write another page" : "Write today's page"}
           </button>
           <button
             onClick={() => setMode("type")}
-            className="rounded-xl px-4 py-1.5 text-small text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
+            className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
           >
             or type it
           </button>
         </div>
       </div>
 
+      {/* Ink at weight 600, not the accent. The accent is certified at 4.7:1 with WHITE ON
+          TOP — as a fill. As text on the beige page it measures 4.02:1 and fails the body
+          floor, and it also made error-ness ride on hue alone. Same treatment as the login
+          screen: there is no red in this system, so an error stands out by weight. */}
       {error && (
-        <p role="alert" className="mt-2 text-small text-[var(--color-accent)]">
+        <p role="alert" className="mt-3 text-small font-semibold">
           {error}
         </p>
       )}
 
+      {/* One of the few surfaces still allowed a panel: a modal really does leave the page
+          plane, so the lift is true rather than decoration. */}
       <dialog
         ref={dialogRef}
         onClose={() => setMode(null)}

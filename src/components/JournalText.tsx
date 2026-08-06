@@ -30,9 +30,13 @@ export default function JournalText({
 
   return (
     <div className="flex h-full flex-col gap-3">
+      {/* The same chrome as the drawing surface, down to the rule under the title: two ways
+          in to one artefact must not look like two products. */}
       <div className="min-w-0">
-        <h2 className="text-small font-semibold tracking-wide">Tonight&apos;s page</h2>
-        <p className="mt-0.5 text-micro text-[var(--color-muted)]">
+        <div className="section-head">
+          <h2 className="text-small font-semibold">Tonight&apos;s page</h2>
+        </div>
+        <p className="mt-2 text-micro text-[var(--color-muted)]">
           Typed, on the same page. Saved as words — nothing reads it back or summarises it.
         </p>
       </div>
@@ -83,18 +87,18 @@ export default function JournalText({
         <span className="text-micro text-[var(--color-muted)]">
           {busy ? "Saving…" : hasWords ? "Ready to save." : "Empty page."}
         </span>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-3">
           <button
             onClick={onCancel}
             disabled={busy}
-            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+            className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-panel-2)] disabled:opacity-40"
           >
             Cancel
           </button>
           <button
             onClick={() => hasWords && onSave(body)}
             disabled={!hasWords || busy}
-            className="rounded-xl bg-[var(--color-accent)] px-4 py-1.5 text-micro text-white transition-opacity disabled:opacity-40"
+            className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             Save page
           </button>

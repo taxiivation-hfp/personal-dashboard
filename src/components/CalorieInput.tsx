@@ -39,10 +39,18 @@ export default function CalorieInput({
   }
 
   return (
-    <div className="flex items-center gap-3">
+    // A row, not a card. One number a day never warranted a panel of its own, and the top
+    // hairline is what stops a lone field floating below the sections above it — the same
+    // rule that separates every other row on this screen.
+    <div className="flex items-baseline gap-3 border-t border-[var(--color-line)] py-3">
       <label htmlFor="kcal" className="text-body text-[var(--color-muted)]">
         Calories
       </label>
+      {/* Confirmation sits LEFT of the number. Appearing after the field would shove the
+          value sideways on every save, which is a twitch you'd notice a hundred times. */}
+      {saved && <span className="text-micro text-[var(--color-muted)]">saved</span>}
+      {/* Written on a line, not typed into a chip: the underline is the field, and it
+          darkens to the accent on focus rather than growing a box. */}
       <input
         id="kcal"
         value={value}
@@ -51,9 +59,8 @@ export default function CalorieInput({
         onKeyDown={(e) => e.key === "Enter" && save()}
         inputMode="numeric"
         placeholder="—"
-        className="w-28 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-body tabular-nums outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-line-strong)]"
+        className="ml-auto w-[4.5rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-body tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
       />
-      {saved && <span className="text-small text-[var(--color-muted)]">saved</span>}
     </div>
   );
 }

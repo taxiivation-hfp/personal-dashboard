@@ -184,9 +184,20 @@ export default function Today({
             {strip.map((d) => (
               <div
                 key={d.date}
-                className="h-14 flex-1 overflow-hidden rounded-t-[3px]"
+                className="h-14 flex-1 overflow-hidden rounded-t-[3px] border-x border-t"
                 style={{
-                  background: d.isToday ? "var(--color-accent-soft)" : "var(--color-panel-2)",
+                  // OUTLINED, not filled. --color-panel-2 measures 1.04:1 against the page,
+                  // so a day with no bar vanished completely and the strip read as five
+                  // days instead of seven — the same trap PillarRing documents for an
+                  // unfilled ring. Filling the track with --color-line-strong fixed the
+                  // legibility but put seven solid slabs under the hero, which is far more
+                  // mass than a secondary element earns.
+                  //
+                  // An outline is the system's existing answer to exactly this: it is how
+                  // "skipped" stays legible without becoming a third weight of fill. The
+                  // day reads as present, the bar reads as its value, and neither shouts.
+                  borderColor: "var(--color-line-strong)",
+                  background: d.isToday ? "var(--color-accent-soft)" : "transparent",
                   // Upcoming days are drawn but empty — they haven't happened, and an
                   // empty bar reads as "not yet" rather than as a zero.
                   opacity: d.isFuture ? 0.45 : 1,

@@ -40,7 +40,7 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
         <h1 className="text-heading font-serif font-semibold">Colours</h1>
         <Link
           href="/"
-          className="text-small text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+          className="text-small text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
         >
           ← Today
         </Link>
@@ -52,34 +52,45 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
         what keeps the page quiet.
       </p>
 
-      <div className="mt-10 flex flex-col gap-8">
+      <div className="mt-10 flex flex-col gap-10">
         {pillars.map((p) => (
           <section key={p.key}>
-            <div className="flex items-center gap-3">
-              <Ring fill={0.68} size={36} stroke={3.5} tone={p.key as PillarKey} color={p.color} />
-              <div className="min-w-0">
-                <h2 className="text-body font-semibold">{p.name}</h2>
-                <p className="text-micro text-[var(--color-muted)]">
-                  {p.color
-                    ? PILLAR_PALETTE.find((x) => x.hex === p.color)?.name ?? p.color
-                    : "Default"}
-                </p>
-              </div>
+            {/* The pillar name sits on its rule and the chosen hue's NAME sits at the end of
+                it — the same shape a settings row takes, and the reason no meaning here
+                rides on hue alone. Someone who cannot separate Moss from Olive still reads
+                which one is set. */}
+            <div className="section-head">
+              <h2 className="text-small font-semibold">{p.name}</h2>
+              <span className="text-micro text-[var(--color-muted)]">
+                {p.color
+                  ? PILLAR_PALETTE.find((x) => x.hex === p.color)?.name ?? p.color
+                  : "Default"}
+              </span>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            {/* The sample ring hangs below the rule at the section's left edge, exactly as a
+                real pillar ring does on Today — the preview is worth nothing if it is not
+                the thing it previews. */}
+            <div className="mt-4">
+              <Ring fill={0.68} size={36} stroke={3.5} tone={p.key as PillarKey} color={p.color} />
+            </div>
+
+            {/* A curated row, not a picker. Selection is carried by the ink rim — form, not
+                hue — and by aria-pressed; the hairline divider keeps the default apart from
+                the eight so "no colour chosen" never reads as a ninth colour. */}
+            <div className="mt-4 flex flex-wrap items-center gap-2.5">
               <button
                 onClick={() => set(p.key, null)}
                 disabled={busy}
                 aria-pressed={p.color == null}
                 aria-label="Default colour"
-                className="h-7 w-7 rounded-full border-2 transition-transform disabled:opacity-40"
+                className="h-7 w-7 rounded-full border-2 transition-colors disabled:opacity-40"
                 style={{
                   background: PILLAR_DEFAULT_VAR[p.key as PillarKey],
                   borderColor: p.color == null ? "var(--color-ink)" : "transparent",
                 }}
               />
-              <span aria-hidden className="mx-1 h-5 w-px bg-[var(--color-line)]" />
+              <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--color-line)]" />
               {PILLAR_PALETTE.map((c) => (
                 <button
                   key={c.hex}
@@ -88,7 +99,7 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
                   aria-pressed={p.color === c.hex}
                   aria-label={c.name}
                   title={c.name}
-                  className="h-7 w-7 rounded-full border-2 transition-transform disabled:opacity-40"
+                  className="h-7 w-7 rounded-full border-2 transition-colors disabled:opacity-40"
                   style={{
                     background: c.hex,
                     borderColor: p.color === c.hex ? "var(--color-ink)" : "transparent",

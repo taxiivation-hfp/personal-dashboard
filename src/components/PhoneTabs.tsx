@@ -52,11 +52,14 @@ export function PhoneTabBar({
         {ORDER.map((t) => {
           const on = t === tab;
           return (
+            // Ink vs muted marks the active tab, never a weight change: bolding the label
+            // would re-measure the text and nudge the other two sideways on every tap. The
+            // padding is what makes the row a thumb-sized target at 12px.
             <button
               key={t}
               onClick={() => onTab(t)}
               aria-current={on ? "page" : undefined}
-              className="flex-1 px-2 pb-3 pt-2.5 text-micro"
+              className="flex-1 px-2 pb-4 pt-3 text-micro transition-colors"
               style={{ color: on ? "var(--color-ink)" : "var(--color-muted)" }}
             >
               {LABEL[t]}
@@ -73,7 +76,7 @@ export function PhoneTabBar({
             span is the 24px rule, centred by flex. */}
         <span
           aria-hidden
-          className="motion-slide pointer-events-none absolute bottom-1.5 left-0 flex justify-center"
+          className="motion-slide pointer-events-none absolute bottom-2.5 left-0 flex justify-center"
           style={{
             width: `${100 / ORDER.length}%`,
             transform: `translateX(${ORDER.indexOf(tab) * 100}%)`,

@@ -71,33 +71,41 @@ export default function WorkoutLog({
   });
 
   return (
+    // A dialog is the one thing genuinely lifted off the page, so it keeps a panel where
+    // the sections lost theirs.
     <dialog
       ref={dialogRef}
       onClose={onClose}
       onCancel={(e) => busy && e.preventDefault()}
       className="w-[min(94vw,640px)] rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] p-5 text-[var(--color-ink)]"
     >
-      <div className="flex items-baseline justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="flex items-center gap-2 text-body font-semibold">
-            <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: hue }} />
-            {label}
-          </h2>
-          <p className="mt-0.5 text-micro text-[var(--color-muted)]">{pretty}</p>
-        </div>
+      <div className="section-head">
+        {/* The hue is the pillar's, not this kind's — it categorises, so the label beside
+            it carries the meaning and the dot only tints it. */}
+        <h2 className="flex min-w-0 items-center gap-2 text-small font-semibold">
+          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: hue }} />
+          {label}
+        </h2>
         <button
           onClick={onClose}
           disabled={busy}
-          className="shrink-0 text-small text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+          className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
         >
           Close
         </button>
       </div>
 
+      <p className="pt-2 text-micro text-[var(--color-muted)]">{pretty}</p>
+
+      {/* An imported title is rescued Discord history — the owner's words, so serif, but
+          muted because it is context rather than the document being written. */}
       {workout?.title && (
-        <p className="mt-3 text-small text-[var(--color-muted)]">{workout.title}</p>
+        <p className="mt-3 font-serif text-body text-[var(--color-muted)]">{workout.title}</p>
       )}
 
+      {/* A writing surface, not a field: it keeps its bordered sheet where the app's other
+          inputs became lines. Recessed inside the lifted dialog, and tabular so a column
+          of weights lines up the way it would on paper. */}
       <textarea
         ref={areaRef}
         value={note}
@@ -107,29 +115,30 @@ export default function WorkoutLog({
         spellCheck={false}
         rows={14}
         aria-label={`${label} log`}
-        className="mt-4 w-full resize-y rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-3 font-serif text-body leading-[1.7] outline-none focus-visible:border-[var(--color-line-strong)] disabled:opacity-60"
-        style={{ fontVariantNumeric: "tabular-nums" }}
+        className="mt-4 w-full resize-y rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3.5 py-3 font-serif text-body leading-[1.7] tabular-nums outline-none focus-visible:border-[var(--color-line-strong)] disabled:opacity-60"
       />
 
-      <div className="mt-4 flex items-center justify-between gap-3">
+      <div className="mt-5 flex items-center justify-between gap-3">
         {/* Imported sessions carry a title — that is rescued Discord history and must not
             be deletable from a passing tap. */}
         {workout && !workout.title ? (
           <button
             onClick={() => run(onDelete)}
             disabled={busy}
-            className="text-small text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
+            className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
           >
             Remove this session
           </button>
         ) : (
           <span />
         )}
+        {/* The accent, not the pillar hue: the same hue arrives here for all three kinds,
+            so filling the action with it would categorise nothing and give the app a
+            second accent. */}
         <button
           onClick={() => run(() => onSave(note))}
           disabled={busy}
-          className="rounded-xl px-4 py-2 text-small text-white transition-opacity disabled:opacity-40"
-          style={{ background: hue }}
+          className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           {busy ? "Saving…" : workout ? "Save" : "Log it"}
         </button>

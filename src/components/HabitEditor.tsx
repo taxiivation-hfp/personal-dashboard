@@ -50,7 +50,7 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
         <h1 className="text-heading font-serif font-semibold">Non-negotiables</h1>
         <Link
           href="/"
-          className="text-small text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+          className="text-small text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
         >
           ← Today
         </Link>
@@ -61,24 +61,33 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
         point of the contrast. Pick which days each one applies to.
       </p>
 
-      <ul className="mt-8 flex flex-col gap-2">
+      {/* A ruled list, not a stack of cards. The whole promise of this screen is that these
+          are small plain things; a rounded panel around each one dressed a checklist up as a
+          dashboard and made four items look like four features. */}
+      <ul className="mt-8 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
         {habits.map((h) => (
-          <li key={h.id} className="rounded-2xl bg-[var(--color-panel)] px-4 py-3.5">
+          <li key={h.id} className="py-4">
             <div className="flex items-center justify-between gap-3">
+              {/* The owner named it, so the field keeps the serif. The rule under it appears
+                  on focus only — a resting underline on every row would read as a form to be
+                  filled in rather than a list to be glanced at. */}
               <input
                 defaultValue={h.name}
                 onBlur={(e) => e.target.value.trim() && e.target.value !== h.name && patch({ id: h.id, name: e.target.value })}
-                className="min-w-0 flex-1 bg-transparent font-serif text-body outline-none"
+                className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)]"
                 aria-label={`Rename ${h.name}`}
               />
               <button
                 onClick={() => patch({ id: h.id, remove: true })}
-                className="shrink-0 text-small text-[var(--color-muted)] underline-offset-4 hover:underline"
+                className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
               >
                 remove
               </button>
             </div>
-            <div className="mt-2.5 flex gap-1">
+            {/* Filled vs outlined, not dark vs pale: an off day has to look deliberately
+                empty rather than switched off or unavailable, since most items legitimately
+                run on a few days. Shape carries the state; the accent only confirms it. */}
+            <div className="mt-3 flex gap-1.5">
               {DAYS.map((d, i) => {
                 const on = Boolean(h.days_mask & (1 << i));
                 return (
@@ -87,12 +96,11 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
                     onClick={() => toggleDay(h, i)}
                     aria-label={`${d} ${on ? "on" : "off"}`}
                     aria-pressed={on}
-                    className="h-7 w-7 rounded-lg text-micro transition-colors"
-                    style={{
-                      background: on ? "var(--color-accent)" : "transparent",
-                      color: on ? "#fff" : "var(--color-muted)",
-                      border: on ? "1px solid var(--color-accent)" : "1px solid var(--color-line-strong)",
-                    }}
+                    className={`h-7 w-7 rounded-full border text-micro transition-colors ${
+                      on
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                        : "border-[var(--color-line-strong)] text-[var(--color-muted)]"
+                    }`}
                   >
                     {d}
                   </button>
@@ -103,18 +111,21 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
         ))}
       </ul>
 
-      <div className="mt-6 flex items-center gap-2">
+      <div className="mt-8 flex items-end gap-4">
+        {/* Written on a line rather than into a box: what goes in here is the owner's own
+            wording, and a bordered field asks for data where the page is asking for a
+            sentence. Serif for the same reason. */}
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()}
           placeholder="Add a non-negotiable…"
-          className="min-w-0 flex-1 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-panel)] px-3.5 py-2.5 font-serif text-body outline-none placeholder:text-[var(--color-muted)]"
+          className="min-w-0 flex-1 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 font-serif text-body outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
         />
         <button
           onClick={add}
           disabled={!name.trim()}
-          className="shrink-0 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-body text-white disabled:opacity-40"
+          className="shrink-0 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           Add
         </button>

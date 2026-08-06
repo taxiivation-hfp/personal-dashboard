@@ -116,6 +116,13 @@
  * than about operating the app: the adherence numeral and page headings. The sans renders
  * everything the APP says: labels, chips, buttons, units, counts, captions, the tab bar.
  *
+ * The coach's one note a day is the deliberate edge case, and it takes the SERIF. Read
+ * strictly by authorship it should not — the coach is the app talking. But the line the
+ * eye actually needs is prose versus chrome: the note is a sentence you read, not a
+ * control you operate, and setting the only paragraph on the screen in the label face
+ * would make it look like a system message. Prose is the test; authorship is how prose
+ * usually gets decided.
+ *
  * Your words on one side, the ruled lines on the other. That split is why there are two
  * families rather than one; it is not decoration, and a serif applied anywhere else is a
  * bug. Sans is the default, so serif is always opt-in via `font-serif`.
@@ -231,6 +238,15 @@ b,
  * rather than a datum settling on a new value. */
 .motion-slide {
   transition: transform var(--dur-fast) var(--ease-out);
+}
+
+/* A ring arc growing to its value. stroke-dasharray is the one animated property in the
+ * app that is neither transform nor opacity, and it is unavoidable — it is how an SVG arc
+ * is drawn at all. It lives here rather than inline on the circle so that reduced motion
+ * can actually reach it: an inline style would need !important to override, and the
+ * blanket reduced-motion rule only nulls animation-*, never transition. */
+.motion-arc {
+  transition: stroke-dasharray var(--dur-data) var(--ease-out);
 }
 
 * {
@@ -353,7 +369,8 @@ dialog[open]::backdrop {
   /* The bar, arc or indicator lands on its new position immediately. The value is the
    * information; the travel was only ever a nicety. */
   .motion-data,
-  .motion-slide {
+  .motion-slide,
+  .motion-arc {
     transition: none;
   }
 }

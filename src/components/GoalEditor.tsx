@@ -46,7 +46,7 @@ export default function GoalEditor({
         <h1 className="text-heading font-serif font-semibold">Goals</h1>
         <Link
           href="/"
-          className="text-small text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+          className="text-small text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
         >
           ← Today
         </Link>
@@ -58,117 +58,147 @@ export default function GoalEditor({
         ticked — there&apos;s nothing to set by hand.
       </p>
 
-      <div className="mt-10 flex flex-col gap-6">
+      {/* Ruled rows, not cards. Every goal used to be its own rounded panel, which made the
+          list look like a board of tiles waiting to be filled — exactly the reading this app
+          refuses. A hairline is enough to say where one goal ends. */}
+      <div className="mt-10 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
         {goals.map((g) => (
-          <section key={g.id} className="rounded-2xl bg-[var(--color-panel)] px-4 py-4">
-            <div className="flex items-baseline justify-between gap-3">
-              <input
-                defaultValue={g.title}
-                aria-label="Goal title"
-                onBlur={(e) =>
-                  e.target.value.trim() &&
-                  e.target.value.trim() !== g.title &&
-                  call(`/api/goals/${g.id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify({ title: e.target.value }),
-                  })
-                }
-                className="min-w-0 flex-1 bg-transparent font-serif text-body outline-none focus-visible:underline"
-              />
-              <span className="shrink-0 text-small tabular-nums text-[var(--color-muted)]">
-                {Math.round(g.progress * 100)}%
-              </span>
-              <button
-                onClick={() =>
-                  confirm(`Drop "${g.title}"? Its subgoals are kept.`) &&
-                  call(`/api/goals/${g.id}`, { method: "DELETE" })
-                }
-                disabled={busy}
-                className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
-              >
-                drop
-              </button>
+          // The percentage hangs in the page margin, where it sits on Today too, so one goal
+          // reads as one object across both screens instead of two different layouts.
+          <section key={g.id} className="page-margin py-5">
+            <div className="pt-1.5 text-right text-micro tabular-nums text-[var(--color-muted)]">
+              {Math.round(g.progress * 100)}%
             </div>
 
-            <ul className="mt-3 flex flex-col gap-1.5">
-              {g.subgoals.map((s) => (
-                <li key={s.id} className="flex items-center gap-2">
-                  <input
-                    defaultValue={s.title}
-                    aria-label="Subgoal title"
-                    onBlur={(e) =>
-                      e.target.value.trim() &&
-                      e.target.value.trim() !== s.title &&
-                      call(`/api/subgoals/${s.id}`, {
-                        method: "PATCH",
-                        body: JSON.stringify({ title: e.target.value }),
-                      })
-                    }
-                    className="min-w-0 flex-1 bg-transparent font-serif text-small outline-none focus-visible:underline"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    placeholder="auto"
-                    aria-label={`Weight for ${s.title}, blank for auto`}
-                    defaultValue={s.weight > 0 ? Math.round(s.weight * 100) : ""}
-                    onBlur={(e) =>
-                      call(`/api/subgoals/${s.id}`, {
-                        method: "PATCH",
-                        body: JSON.stringify({
-                          weight: e.target.value === "" ? 0 : Number(e.target.value) / 100,
-                        }),
-                      })
-                    }
-                    className="w-[4.5rem] shrink-0 rounded-lg bg-[var(--color-panel-2)] px-2 py-1 text-right text-micro tabular-nums outline-none"
-                  />
-                  <button
-                    onClick={() =>
-                      confirm(`Delete "${s.title}"?`) &&
-                      call(`/api/subgoals/${s.id}`, { method: "DELETE" })
-                    }
-                    disabled={busy}
-                    aria-label={`Delete ${s.title}`}
-                    className="shrink-0 px-1 text-body leading-none text-[var(--color-muted)] hover:text-[var(--color-ink)] disabled:opacity-40"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-3">
+                {/* The owner's own title, so it keeps the serif inside the field it is edited
+                    in — one string must not render serif on Today and sans here. The rule is
+                    invisible until focus, because eight resting underlines would turn a list
+                    of goals back into a form. */}
+                <input
+                  defaultValue={g.title}
+                  aria-label="Goal title"
+                  onBlur={(e) =>
+                    e.target.value.trim() &&
+                    e.target.value.trim() !== g.title &&
+                    call(`/api/goals/${g.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({ title: e.target.value }),
+                    })
+                  }
+                  className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)]"
+                />
+                <button
+                  onClick={() =>
+                    confirm(`Drop "${g.title}"? Its subgoals are kept.`) &&
+                    call(`/api/goals/${g.id}`, { method: "DELETE" })
+                  }
+                  disabled={busy}
+                  className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
+                >
+                  drop
+                </button>
+              </div>
 
-            {g.overAllocated && (
-              <p className="mt-2 text-micro text-[var(--color-muted)]">
-                Set weights total more than 100%, so the auto ones have nothing left.
-              </p>
-            )}
+              {/* The same bar as Today, drawn the same way, so ticking a subgoal here and
+                  seeing it there is plainly the one number. The track is a rule rather than a
+                  recessed slab: with the cards gone, --color-panel-2 sits two points off the
+                  page and the bar loses its ground.
+                  scaleX, not width — transform is composited and skips layout entirely. */}
+              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-line)]">
+                <div
+                  className="motion-data h-full w-full origin-left rounded-full bg-[var(--color-accent)]"
+                  style={{ transform: `scaleX(${g.progress})` }}
+                />
+              </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const t = (newSub[g.id] ?? "").trim();
-                if (!t) return;
-                setNewSub({ ...newSub, [g.id]: "" });
-                call("/api/subgoals", {
-                  method: "POST",
-                  body: JSON.stringify({ goal_id: g.id, title: t }),
-                });
-              }}
-              className="mt-3"
-            >
-              <input
-                value={newSub[g.id] ?? ""}
-                onChange={(e) => setNewSub({ ...newSub, [g.id]: e.target.value })}
-                placeholder="Add a subgoal"
-                className="w-full rounded-lg bg-[var(--color-panel-2)] px-3 py-2 font-serif text-small outline-none"
-              />
-            </form>
+              <ul className="mt-3 divide-y divide-[var(--color-line)]">
+                {g.subgoals.map((s) => (
+                  <li key={s.id} className="flex items-center gap-3 py-2">
+                    <input
+                      defaultValue={s.title}
+                      aria-label="Subgoal title"
+                      onBlur={(e) =>
+                        e.target.value.trim() &&
+                        e.target.value.trim() !== s.title &&
+                        call(`/api/subgoals/${s.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ title: e.target.value }),
+                        })
+                      }
+                      className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-small outline-none transition-colors focus:border-[var(--color-accent)]"
+                    />
+                    {/* A setting, not writing: sans and tabular so a column of weights stays
+                        a column. Written on a line rather than in a filled chip — the chip
+                        read as a value the app had decided, when blank is the normal state. */}
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="auto"
+                      aria-label={`Weight for ${s.title}, blank for auto`}
+                      defaultValue={s.weight > 0 ? Math.round(s.weight * 100) : ""}
+                      onBlur={(e) =>
+                        call(`/api/subgoals/${s.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            weight: e.target.value === "" ? 0 : Number(e.target.value) / 100,
+                          }),
+                        })
+                      }
+                      className="w-14 shrink-0 border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-micro tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+                    />
+                    <button
+                      onClick={() =>
+                        confirm(`Delete "${s.title}"?`) &&
+                        call(`/api/subgoals/${s.id}`, { method: "DELETE" })
+                      }
+                      disabled={busy}
+                      aria-label={`Delete ${s.title}`}
+                      className="shrink-0 px-1 text-body leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Fires only when explicit overrides exceed 100% — an all-auto goal is
+                  well-formed and must never warn. Muted and plain: it is a fact about the
+                  arithmetic, not a fault. */}
+              {g.overAllocated && (
+                <p className="mt-2 text-micro text-[var(--color-muted)]">
+                  Set weights total more than 100%, so the auto ones have nothing left.
+                </p>
+              )}
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const t = (newSub[g.id] ?? "").trim();
+                  if (!t) return;
+                  setNewSub({ ...newSub, [g.id]: "" });
+                  call("/api/subgoals", {
+                    method: "POST",
+                    body: JSON.stringify({ goal_id: g.id, title: t }),
+                  });
+                }}
+                className="mt-3"
+              >
+                <input
+                  value={newSub[g.id] ?? ""}
+                  onChange={(e) => setNewSub({ ...newSub, [g.id]: e.target.value })}
+                  placeholder="Add a subgoal"
+                  className="w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-small outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+                />
+              </form>
+            </div>
           </section>
         ))}
 
         {goals.length === 0 && (
-          <p className="text-body text-[var(--color-muted)]">No goals yet.</p>
+          <p className="py-5 text-body text-[var(--color-muted)]">No goals yet.</p>
         )}
       </div>
 
@@ -185,19 +215,22 @@ export default function GoalEditor({
             body: JSON.stringify({ title: t, pillar: newPillar }),
           });
         }}
-        className="mt-10 flex gap-2"
+        className="mt-10 flex items-end gap-4"
       >
+        {/* Serif, because what gets typed here is a goal title — the same words that render
+            serif everywhere else the moment it is saved. The pillar beside it is the app's
+            own vocabulary, so it stays sans. */}
         <input
           value={newGoal}
           onChange={(e) => setNewGoal(e.target.value)}
           placeholder="New goal"
-          className="min-w-0 flex-1 rounded-lg bg-[var(--color-panel)] px-3 py-2.5 text-body outline-none"
+          className="min-w-0 flex-1 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 font-serif text-body outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
         />
         <select
           value={newPillar}
           onChange={(e) => setNewPillar(e.target.value)}
           aria-label="Pillar"
-          className="shrink-0 rounded-lg bg-[var(--color-panel)] px-2 py-2.5 text-small outline-none"
+          className="shrink-0 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 text-small outline-none transition-colors focus:border-[var(--color-accent)]"
         >
           {pillars.map((p) => (
             <option key={p.key} value={p.key}>

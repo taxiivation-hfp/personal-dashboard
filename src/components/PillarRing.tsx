@@ -8,8 +8,14 @@ import type { PillarKey } from "@/lib/queries";
  * adherence reads as one more quota to fill, and the quota rings borrow adherence's
  * authority:
  *
- *   adherence — large, amber, thick stroke, number INSIDE
- *   pillar    — small, pillar-hued, thin stroke, fact line BELOW (never a percentage)
+ *   adherence — 176px, amber, a fine 8px stroke, the numeral INSIDE
+ *   pillar    — 48px and 28px, pillar-hued, thinner still, fact line BESIDE or BELOW
+ *               (never a percentage)
+ *
+ * Size and hue separate them, not stroke weight: both are drawn as a line around
+ * something rather than as a gauge, because a thick arc reads as a dashboard dial and
+ * this app is emphatically not that. The strokes are caller-set, so the two species stay
+ * one component and cannot drift apart in behaviour.
  *
  * Three ring states, and the third is what stops a first load reading as total failure:
  *   filled          fill > 0        a hued arc
@@ -97,7 +103,7 @@ export default function Ring({
             strokeLinecap="butt"
             strokeDasharray={`${dash} ${c}`}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            style={{ transition: "stroke-dasharray var(--dur-data) var(--ease-out)" }}
+            className="motion-arc"
           />
         )}
         {/* A second lap, translucent and inset, over an already-full ring. Reads as
@@ -114,7 +120,8 @@ export default function Ring({
             strokeLinecap="butt"
             strokeDasharray={`${over} ${c}`}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            style={{ opacity: 0.45, transition: "stroke-dasharray var(--dur-data) var(--ease-out)" }}
+            className="motion-arc"
+            style={{ opacity: 0.45 }}
           />
         )}
       </svg>

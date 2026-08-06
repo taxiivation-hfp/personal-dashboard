@@ -174,31 +174,35 @@ export default function JournalCanvas({
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-small font-semibold tracking-wide">Tonight&apos;s page</h2>
-          <p className="mt-0.5 text-micro text-[var(--color-muted)]">
-            {penType === "pen"
-              ? "Stylus detected — pressure is shaping the line."
-              : "Write with a stylus, finger, or mouse. It gets saved as handwriting, not text."}
-          </p>
+      {/* The same chrome as the typed page, down to the rule under the title: two ways in to
+          one artefact must not look like two products. The pen tools sit on the rule; the
+          line about what the pen is doing sits under it, where a change of wording can't
+          shove the buttons around. */}
+      <div className="min-w-0">
+        <div className="section-head">
+          <h2 className="text-small font-semibold">Tonight&apos;s page</h2>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={undo}
+              disabled={!hasInk || busy}
+              className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-panel-2)] disabled:opacity-40"
+            >
+              Undo
+            </button>
+            <button
+              onClick={clear}
+              disabled={!hasInk || busy}
+              className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-panel-2)] disabled:opacity-40"
+            >
+              Clear
+            </button>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            onClick={undo}
-            disabled={!hasInk || busy}
-            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
-          >
-            Undo
-          </button>
-          <button
-            onClick={clear}
-            disabled={!hasInk || busy}
-            className="rounded-xl border border-[var(--color-line)] px-3 py-1.5 text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
-          >
-            Clear
-          </button>
-        </div>
+        <p className="mt-2 text-micro text-[var(--color-muted)]">
+          {penType === "pen"
+            ? "Stylus detected — pressure is shaping the line."
+            : "Write with a stylus, finger, or mouse. It gets saved as handwriting, not text."}
+        </p>
       </div>
 
       {/* A4 PORTRAIT, 1:1.414. The page used to be whatever shape the dialog happened to
@@ -221,18 +225,18 @@ export default function JournalCanvas({
         <span className="text-micro text-[var(--color-muted)]">
           {busy ? "Saving and reading it…" : hasInk ? "Ready to save." : "Empty page."}
         </span>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-3">
           <button
             onClick={onCancel}
             disabled={busy}
-            className="rounded-xl border border-[var(--color-line)] px-3.5 py-2 text-small text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+            className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-panel-2)] disabled:opacity-40"
           >
             Close
           </button>
           <button
             onClick={save}
             disabled={!hasInk || busy}
-            className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity disabled:opacity-40"
+            className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             {busy ? "Saving…" : "Save page"}
           </button>

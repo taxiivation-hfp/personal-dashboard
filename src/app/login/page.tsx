@@ -45,6 +45,11 @@ export default function LoginPage() {
         <h1 className="text-heading font-serif font-semibold">Today</h1>
         <p className="mt-1 text-small text-[var(--color-muted)]">This one&apos;s just for you.</p>
 
+        {/* A line, not a box. This is the whole screen, so the one filled rectangle on it
+            used to read as a demand; a rule reads as somewhere to write.
+            16px rather than the 14px controls take elsewhere: under 16px iOS zooms the page
+            the instant the field takes focus, and this field is autofocused — the app's
+            first frame would lurch. */}
         <input
           type="password"
           value={passcode}
@@ -53,13 +58,13 @@ export default function LoginPage() {
           autoFocus
           autoComplete="current-password"
           aria-label="Passcode"
-          className="mt-6 w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] px-3.5 py-2.5 text-small outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-muted)]"
+          className="mt-8 w-full border-b border-[var(--color-line-strong)] bg-transparent pb-2 text-body outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
         />
 
         <button
           type="submit"
           disabled={busy || !passcode}
-          className="mt-3 w-full rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-small font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          className="mt-6 w-full rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           {busy ? "Checking…" : "Enter"}
         </button>
