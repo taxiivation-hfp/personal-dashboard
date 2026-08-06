@@ -286,6 +286,22 @@ export async function syncTaskEvent(db: Client, taskId: number): Promise<void> {
   } catch {}
 }
 
+/**
+ * A calendar failure must never take the whole app down.
+ *
+ * Google rejecting the token — revoked access, changed password, a consent screen still
+ * in Testing mode expiring it — is a BROKEN CONNECTION, not a server error. Treated as
+ * such, the day still renders with adherence, rings, goals, skills, non-negotiables and
+ * the journal intact, and the screen offers to reconnect. Treated as a throw, a dashboard
+ * whose entire point is daily use goes blank because one integration hiccuped.
+ *
+ * 403 counts too: that is what a revoked scope looks like.
+ */
+function isAuthFailure(e: unknown): boolean {
+  const status = (e as { status?: number } | null)?.status;
+  return String(e).includes("not_connected") || status === 401 || status === 403;
+}
+
 /** Convenience for routes/coach: ready-to-use db + connected check. */
 export async function getCalendarForDate(date: string): Promise<{ connected: boolean; configured: boolean; events: CalEvent[] }> {
   if (!googleConfigured()) return { connected: false, configured: false, events: [] };
@@ -294,7 +310,10 @@ export async function getCalendarForDate(date: string): Promise<{ connected: boo
   try {
     return { connected: true, configured: true, events: await listEvents(db, date) };
   } catch (e) {
-    if (String(e).includes("not_connected")) return { connected: false, configured: true, events: [] };
+    if (isAuthFailure(e)) {
+      console.error("[google] calendar auth failed — reconnect at /api/google/connect:", String(e).slice(0, 160));
+      return { connected: false, configured: true, events: [] };
+    }
     throw e;
   }
 }
