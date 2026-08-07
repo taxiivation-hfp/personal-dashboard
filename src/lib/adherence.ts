@@ -208,3 +208,38 @@ export function adherenceFor(
     habitsScheduled,
   };
 }
+
+/**
+ * The next block that has not started, or null once the day's last one has.
+ *
+ * Lives here rather than in the component because it is the only interesting thing that
+ * component does, and a filter with four clauses is worth a test. All four earn their place:
+ *
+ *   - ALL-DAY events are excluded. They are not a next thing, they are a condition of the
+ *     whole day, and putting "Semester 2" where the next lecture should be is useless.
+ *   - DISMISSED blocks are excluded, because dismissing one is saying it is not part of the
+ *     day.
+ *   - A block with no start time cannot be placed, so it cannot be next.
+ *   - Strictly AFTER now. The block you are currently inside is not next, it is now.
+ *
+ * `nowMinutes` is minutes since local midnight, passed in rather than read, so this is
+ * testable and so the caller owns what "now" means.
+ */
+export function nextBlockAfter(
+  blocks: Block[],
+  nowMinutes: number,
+): Block | null {
+  const at = (hhmm: string | null): number | null => {
+    if (!hhmm) return null;
+    const [h, m] = hhmm.split(":").map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+  };
+  let best: { b: Block; at: number } | null = null;
+  for (const b of blocks) {
+    if (b.allDay || b.state === "dismissed") continue;
+    const t = at(b.time_start);
+    if (t == null || t <= nowMinutes) continue;
+    if (!best || t < best.at) best = { b, at: t };
+  }
+  return best ? best.b : null;
+}

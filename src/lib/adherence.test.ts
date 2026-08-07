@@ -6,6 +6,7 @@ import {
   HABIT_SHARE,
   type Block,
   type BlockState,
+  nextBlockAfter,
 } from "./adherence.ts";
 
 /** A block of `hours`, marked or not. `due` only affects the unmarked call-to-action. */
@@ -142,4 +143,67 @@ test("the counts are still reported for the call to action", () => {
   assert.equal(a.unmarked, 1, "only a block whose time has passed is a call to action");
   assert.equal(a.habitsDone, 2);
   assert.equal(a.habitsScheduled, 4);
+});
+
+// --- what is next ---------------------------------------------------------------------
+
+const blk = (
+  time_start: string | null,
+  over: Partial<Block> = {},
+): Block => ({
+  event_id: `e${time_start}`,
+  title: `at ${time_start}`,
+  time_start,
+  time_end: null,
+  allDay: false,
+  state: null,
+  reason: null,
+  due: false,
+  colorId: null,
+  minutes: 60,
+  ...over,
+});
+
+test("the next block is the earliest one that has not started", () => {
+  const day = [blk("08:00"), blk("14:00"), blk("16:00")];
+  assert.equal(nextBlockAfter(day, 7 * 60)!.time_start, "08:00");
+  assert.equal(nextBlockAfter(day, 9 * 60)!.time_start, "14:00");
+  assert.equal(nextBlockAfter(day, 14 * 60 + 30)!.time_start, "16:00");
+});
+
+// The block you are inside is NOW, not next. Strictly after, or the answer to "what's next"
+// is the thing you are already doing.
+test("a block that has started is not next, including at its exact start", () => {
+  const day = [blk("09:00")];
+  assert.equal(nextBlockAfter(day, 9 * 60), null);
+  assert.equal(nextBlockAfter(day, 9 * 60 - 1)!.time_start, "09:00");
+});
+
+test("nothing left once the last block has started", () => {
+  assert.equal(nextBlockAfter([blk("08:00"), blk("18:00")], 19 * 60), null);
+  assert.equal(nextBlockAfter([], 9 * 60), null);
+});
+
+// An all-day event is a condition of the day, not a thing that happens at a time. Putting
+// "Semester 2" where the next lecture should be is worse than showing nothing.
+test("all-day events are never next", () => {
+  const day = [blk(null, { allDay: true }), blk("15:00")];
+  assert.equal(nextBlockAfter(day, 9 * 60)!.time_start, "15:00");
+  assert.equal(nextBlockAfter([blk("00:00", { allDay: true })], 0), null);
+});
+
+test("a dismissed block is not next — dismissing it says it is not part of the day", () => {
+  const day = [blk("10:00", { state: "dismissed" }), blk("11:00")];
+  assert.equal(nextBlockAfter(day, 9 * 60)!.time_start, "11:00");
+});
+
+test("a block with no start time cannot be placed, so it cannot be next", () => {
+  assert.equal(nextBlockAfter([blk(null)], 9 * 60), null);
+});
+
+// Order out of the calendar is not guaranteed, and "the first one in the array that is
+// later" is a different function from "the earliest one that is later".
+test("out-of-order input still yields the earliest", () => {
+  const day = [blk("16:00"), blk("10:00"), blk("13:00")];
+  assert.equal(nextBlockAfter(day, 9 * 60)!.time_start, "10:00");
 });

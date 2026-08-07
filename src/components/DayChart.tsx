@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { brokenRuns, runPoints } from "@/lib/chart";
 
 /**
  * One series over a run of days. The only chart primitive on /stats.
@@ -102,25 +103,17 @@ export default function DayChart({
   const x = (i: number) => (n === 1 ? 50 : (i / (n - 1)) * 100);
 
   /**
-   * The line, BROKEN at every gap. One polyline through the present days would join Monday
-   * to Friday with a straight segment reading as three days of steady change nobody
-   * measured. A run of ONE emits its point twice — a single-point polyline draws nothing at
-   * all, which would leave the commonest first-week state as an empty box.
+   * The line, BROKEN at every gap — see src/lib/chart.ts, which owns both rules and is
+   * tested. They were inline here and they are exactly the kind of thing that looks fine
+   * until it is someone's first week: a single-point polyline draws nothing at all, and a
+   * line drawn through a gap invents data in the one place there is none.
    */
-  const runs: string[] = [];
-  if (form === "line") {
-    let run: string[] = [];
-    const flush = () => {
-      if (!run.length) return;
-      runs.push((run.length === 1 ? [run[0]!, run[0]!] : run).join(" "));
-      run = [];
-    };
-    points.forEach((p, i) => {
-      if (p.value == null) return flush();
-      run.push(`${x(i).toFixed(2)},${y(p.value).toFixed(2)}`);
-    });
-    flush();
-  }
+  const runs =
+    form === "line"
+      ? brokenRuns(points.map((p) => p.value)).map((run) =>
+          runPoints(run, (i) => [x(i), y(points[i]!.value!)]),
+        )
+      : [];
 
   const latest = [...points].reverse().find((p) => p.value != null);
 
