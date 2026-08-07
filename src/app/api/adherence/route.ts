@@ -22,9 +22,12 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
+    // 366, not 62. /stats asks for a year, and the ceiling is what stops a stray query
+    // walking the whole table. The calendar is fetched as ONE ranged request whatever the
+    // span, so a long window costs a longer loop rather than more API calls.
     const days = Math.min(
       Math.max(Number(url.searchParams.get("days") ?? 7), 1),
-      62,
+      366,
     );
 
     // `center` puts a given day in the MIDDLE of the window — past to its left,

@@ -20,14 +20,11 @@ export default function CalorieInput({
   calories,
   entries,
   onChanged,
-  onTrend,
 }: {
   date: string;
   calories: number | null;
   entries: CalorieEntry[];
   onChanged: () => void;
-  /** Open the day-by-day history. Omitted where there is nowhere to open it. */
-  onTrend?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -63,58 +60,56 @@ export default function CalorieInput({
   }
 
   return (
-    // A row, not a card. The top hairline is what stops a lone field floating below the
-    // sections above it — the same rule that separates every other row on this screen.
-    <div className="flex items-baseline gap-3 border-t border-[var(--color-line)] py-3">
-      <label htmlFor="kcal" className="text-body text-[var(--color-muted)]">
-        Calories
-      </label>
+    // A ROW OF THE CHECKLIST, and it has to survive a 170px column. The history that used
+    // to hang off the end of this row lives on /stats now; what is left is the total, which
+    // is the state, and the field, which is the only control.
+    //
+    // Undo drops to its own line rather than competing for the row, and appears only once
+    // there is something to undo — so the row is one line on a fresh day and two only after
+    // you have typed. It is not a nicety: in an additive field a mistyped 20000 is otherwise
+    // unrecoverable, and a field you are afraid to touch is a field you stop using.
+    <div className="py-2.5">
+      <div className="flex items-center gap-2.5">
+        <label
+          htmlFor="kcal"
+          className="min-w-0 flex-1 font-serif text-small leading-snug text-[var(--color-muted)]"
+        >
+          Calories
+        </label>
 
-      {/* The total is the value now, so it takes ink — the field beside it is only an
-          increment. Tabular so it doesn't jitter as it climbs through the day. */}
-      <span className="ml-auto text-body tabular-nums">
-        {calories == null ? (
-          <span className="text-[var(--color-muted)]">—</span>
-        ) : (
-          calories
-        )}
-      </span>
+        {/* The total is the value — the field beside it is only an increment. Tabular so it
+            doesn't jitter as it climbs through the day. */}
+        <span className="shrink-0 text-small tabular-nums">
+          {calories == null ? (
+            <span className="text-[var(--color-muted)]">—</span>
+          ) : (
+            calories
+          )}
+        </span>
+
+        {/* Written on a line, not typed into a chip: the underline is the field, and it
+            darkens to the accent on focus rather than growing a box. */}
+        <input
+          id="kcal"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={add}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          disabled={busy}
+          inputMode="numeric"
+          placeholder="+"
+          aria-label="Add calories"
+          className="w-[2.75rem] shrink-0 border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-small tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+        />
+      </div>
 
       {entries.length > 0 && (
         <button
           onClick={undo}
           disabled={busy}
-          className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
+          className="mt-1 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
         >
-          undo
-        </button>
-      )}
-
-      {/* Written on a line, not typed into a chip: the underline is the field, and it
-          darkens to the accent on focus rather than growing a box. */}
-      <input
-        id="kcal"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={add}
-        onKeyDown={(e) => e.key === "Enter" && add()}
-        disabled={busy}
-        inputMode="numeric"
-        placeholder="+"
-        aria-label="Add calories"
-        className="w-[3.5rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-body tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
-      />
-
-      {/* Quiet type at the end of the row, never a fourth control competing with the
-          field. What is logged today is the row's job; the history is one tap behind it. */}
-      {onTrend && (
-        <button
-          type="button"
-          onClick={onTrend}
-          aria-haspopup="dialog"
-          className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-        >
-          trend
+          undo last
         </button>
       )}
     </div>

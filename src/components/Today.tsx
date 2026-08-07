@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
-import TrendPopup, { type TrendKind } from "./TrendPopup";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
@@ -61,6 +60,20 @@ const colScroll = "lg:h-full lg:overflow-y-auto lg:[scrollbar-gutter:stable]";
 /** Hours to one decimal, with no trailing ".0" — "3.5 of 8h" reads; "3.50 of 8.00h" does not. */
 const round1 = (n: number) => String(Math.round(n * 10) / 10);
 
+/**
+ * One row of the day's checklist.
+ *
+ * A top rule on EVERY row rather than `divide-y` on the list. divide-y draws between
+ * siblings in DOM order, which in a two-column grid puts a rule between the last item of
+ * the left column and the first of the right — a line across a column break. Ruling each
+ * row from the top gives both columns a matching top edge and costs nothing.
+ */
+const CHECK_ROW = "border-t border-[var(--color-line)]";
+
+/** The one numeric field shape, so the weight row and the calorie row cannot drift apart. */
+const NUM_FIELD =
+  "w-[3rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-small tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]";
+
 export default function Today({
   initial,
   goals: initialGoals,
@@ -72,9 +85,6 @@ export default function Today({
 }) {
   const [data, setData] = useState<DayView>(initial);
   const [strip, setStrip] = useState<StripDay[]>([]);
-  /** Which history is open, if any. Weight and calories are the two numbers on this screen
-   *  whose value means something as a series rather than only today. */
-  const [trend, setTrend] = useState<TrendKind | null>(null);
   // Goals, skills and rings are OWNED here rather than left as server props. page.tsx
   // renders once per request, so every new control (subgoal tick, +15/+30/+60, gym
   // toggle) would otherwise mutate data the screen could not re-read without a full
@@ -340,17 +350,41 @@ export default function Today({
           </p>
         </div>
 
-        {/* The checklist, beside the ring rather than below it. Five items is the settled
-            size of this list, so it fits without scrolling or shrinking the ring. */}
+        {/* THE CHECKLIST, in TWO COLUMNS.
+
+            One column ran the block well past the bottom of the 176px ring and left the row
+            looking like a ring with a list falling off it. Two columns halve the height and
+            put the whole day's list inside the ring's own bounds, which is what makes the
+            row read as one object rather than two stacked ones.
+
+            Calories and Steps live IN here, as rows of the list. The owner's ruling — they
+            are things you do each day, and a second block underneath for two numbers was a
+            second block to look at. The weight and calorie history that used to hang off
+            these rows has moved to /stats; nothing here is a link any more.
+
+            auto-fit rather than a breakpoint: the column this sits in is 178px wide beside
+            the ring on a wide screen and the full 390px below it when it wraps, and neither
+            of those is a viewport width. minmax lets the grid answer for itself — two
+            columns when there is room for two, one when there is not. */}
         <div className="min-w-[15rem] flex-1">
-          <ul className="divide-y divide-[var(--color-line)]">
+          {/* 9rem and a 20px gutter, which is what makes two columns land at 308px — the
+              width this block actually gets beside the ring. At 10.5rem it needed 364px and
+              silently stayed one column, which is the failure mode of auto-fit: it does not
+              warn, it just gives you back what you already had. Below ~308px it drops to one
+              column on its own, which is the right answer on a narrow phone. */}
+          <ul
+            className="grid gap-x-5"
+            style={{
+              gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))",
+            }}
+          >
             {data.habits.map((h) =>
               h.input === "number" ? (
                 // A NUMERIC non-negotiable — weight. Typing the number IS the tick: the
                 // entry exists or it does not, so adherence needs no special case, and
                 // clearing the field clears the day exactly like unticking.
-                <li key={h.id}>
-                  <div className="flex w-full items-center gap-3 py-2.5">
+                <li key={h.id} className={CHECK_ROW}>
+                  <div className="flex w-full items-center gap-2.5 py-2.5">
                     <span
                       aria-hidden
                       className="h-[18px] w-[18px] shrink-0 rounded-[5px] border transition-colors"
@@ -365,11 +399,13 @@ export default function Today({
                     />
                     <label
                       htmlFor={`h${h.id}`}
-                      className={`font-serif text-body ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                      className={`min-w-0 flex-1 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
                     >
                       {h.name}
                     </label>
-                    <span className="ml-auto flex items-baseline gap-1.5">
+                    {/* A value written on a line, not typed into a chip. The underline is
+                        the field; it darkens on focus rather than growing a box. */}
+                    <span className="flex shrink-0 items-baseline gap-1">
                       <input
                         id={`h${h.id}`}
                         type="number"
@@ -383,32 +419,18 @@ export default function Today({
                           e.key === "Enter" &&
                           (e.target as HTMLInputElement).blur()
                         }
-                        className="w-[3.5rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-body tabular-nums outline-none transition-colors focus:border-[var(--color-accent)]"
+                        className={NUM_FIELD}
                       />
                       {h.unit && (
                         <span className="text-micro text-[var(--color-muted)]">
                           {h.unit}
                         </span>
                       )}
-                      {/* Weight is the one non-negotiable whose VALUE means something
-                          over time — a tick is only ever a tick, but 78.4 is a reading in
-                          a series. Quiet type at the end of the row, the same affordance
-                          calories gets. */}
-                      {h.system_key === "weight" && (
-                        <button
-                          type="button"
-                          onClick={() => setTrend("weight")}
-                          aria-haspopup="dialog"
-                          className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                        >
-                          trend
-                        </button>
-                      )}
                     </span>
                   </div>
                 </li>
               ) : (
-                <li key={h.id}>
+                <li key={h.id} className={CHECK_ROW}>
                   <button
                     onClick={() =>
                       // The journal is not a thing you tick, it is a thing you write. Its
@@ -421,7 +443,7 @@ export default function Today({
                     aria-pressed={
                       h.system_key === "journal" ? undefined : h.done
                     }
-                    className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+                    className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
                   >
                     <span
                       aria-hidden
@@ -456,7 +478,7 @@ export default function Today({
                       )}
                     </span>
                     <span
-                      className={`font-serif text-body ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                      className={`min-w-0 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
                     >
                       {h.name}
                     </span>
@@ -464,8 +486,40 @@ export default function Today({
                 </li>
               ),
             )}
+
+            {/* CALORIES. A row of the checklist like any other, with the running total
+                where a tick would be — because a total IS the state here, and a box you
+                tick would be a second thing to remember once the number is already in. */}
+            <li className={CHECK_ROW}>
+              <CalorieInput
+                date={data.date}
+                calories={data.calories}
+                entries={data.calorieEntries}
+                onChanged={refresh}
+              />
+            </li>
+
+            {/* STEPS. No writer exists for this yet — an iOS Shortcut posting one number is
+                separate, unstarted work — so it is a dashed placeholder rather than a zero.
+                A zero would be a failure no behaviour could fix; a dashed rule says plainly
+                that nothing is wired up, which is the same language the ghost rings use. */}
+            <li className={CHECK_ROW}>
+              <div className="flex items-center gap-2.5 py-2.5">
+                <span
+                  aria-hidden
+                  className="h-[18px] w-[18px] shrink-0 rounded-[5px] border border-dashed border-[var(--color-line-strong)]"
+                />
+                <span className="min-w-0 flex-1 font-serif text-small leading-snug text-[var(--color-muted)]">
+                  Steps
+                </span>
+                <span className="shrink-0 text-micro text-[var(--color-muted)]">
+                  soon
+                </span>
+              </div>
+            </li>
+
             {data.habits.length === 0 && (
-              <li className="py-2.5 text-body text-[var(--color-muted)]">
+              <li className="py-2.5 text-small leading-relaxed text-[var(--color-muted)]">
                 Nothing set for today.{" "}
                 <Link
                   href="/habits"
@@ -477,29 +531,6 @@ export default function Today({
               </li>
             )}
           </ul>
-
-          <CalorieInput
-            date={data.date}
-            calories={data.calories}
-            entries={data.calorieEntries}
-            onChanged={refresh}
-            onTrend={() => setTrend("calories")}
-          />
-
-          {/* STEPS. No writer exists for this yet — an iOS Shortcut posting one number is
-              separate, unstarted work — so it is a dashed placeholder rather than a zero. A
-              zero would be a failure no behaviour could fix; a dashed rule says plainly
-              that nothing is wired up, which is the same language the ghost rings use. */}
-          <div className="flex items-baseline gap-3 border-t border-[var(--color-line)] py-3">
-            <span className="text-body text-[var(--color-muted)]">Steps</span>
-            <span
-              aria-hidden
-              className="ml-auto w-14 border-b border-dashed border-[var(--color-line-strong)]"
-            />
-            <span className="text-micro text-[var(--color-muted)]">
-              from your phone, soon
-            </span>
-          </div>
         </div>
       </section>
 
@@ -516,8 +547,11 @@ export default function Today({
           columns for it was spending a third of its width on nothing. */}
       <section>
         <div className="mb-2.5 flex items-baseline justify-between gap-3">
+          {/* "adherence" has left this line: it prints its own number above its own bar
+              now, and a caption naming it as well would be the third time. What is left is
+              the one scale a reader cannot infer — the columns, which are uncapped. */}
           <span className="text-micro text-[var(--color-muted)]">
-            adherence · hours to this week&apos;s high
+            seven days to today · hours to this week&apos;s high
           </span>
           {data.streak > 0 && (
             // A count, deliberately undramatised — no flame, no badge, no "don't break it".
@@ -551,17 +585,23 @@ export default function Today({
           {strip.map((d) => (
             <div
               key={d.date}
-              className="h-1 min-w-0 flex-1 overflow-hidden rounded-full"
-              style={{ background: "var(--color-line)" }}
+              className="h-[3px] min-w-0 flex-1 overflow-hidden"
+              // --color-line-strong, not --color-line: a 0% day must still draw a bar. Against
+              // the column's #fffdf9 surface, line-strong measures 1.68:1 and line only 1.36:1,
+              // which at 3px tall is the difference between an empty bar and no bar. It is the
+              // same swap the ring track already made, for the same reason.
+              style={{ background: "var(--color-line-strong)" }}
             >
-              {/* scaleX from the left edge, never width: transform is composited and skips
-                  layout entirely. At 4px tall the rounded caps distort by a fraction of a
-                  pixel under the scale, which is invisible and worth the free frame.
-                  A floor of 2%, so a day that earned something never reads as a day that
-                  earned nothing. A true 0 draws nothing at all. */}
+              {/* SQUARE ends, no rounding — the butt-cap rule, applied to a bar. A 1.5px cap at
+                  each end of a 40px phone column overstates a small figure by about four points,
+                  and the low end is exactly where honesty matters most.
+
+                  scaleX from the left edge, never width: transform is composited and skips
+                  layout. A floor of 2%, so a day that earned something never reads as a day that
+                  earned nothing; a true 0 draws nothing at all and the track carries the day. */}
               {d.pct > 0 && (
                 <div
-                  className="motion-data h-full w-full origin-left rounded-full"
+                  className="h-full w-full origin-left"
                   style={{
                     transform: `scaleX(${Math.max(d.pct, 2) / 100})`,
                     background: "var(--color-accent)",
@@ -818,17 +858,6 @@ export default function Today({
 
       <PhoneTabBar tab={tab} onTab={setTab} />
 
-      {/* Mounted at the shell rather than inside the row that opened it: the middle column
-          is its own scroller, and a dialog nested in a scroller is a dialog that can be
-          scrolled off the thing it is covering. */}
-      {trend && (
-        <TrendPopup
-          kind={trend}
-          date={data.date}
-          unit={trend === "weight" ? "kg" : "kcal"}
-          onClose={() => setTrend(null)}
-        />
-      )}
     </PhoneSwipe>
   );
 }
