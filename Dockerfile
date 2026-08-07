@@ -35,7 +35,11 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/.next ./.next
+# .next-build, not .next: scripts/build.mjs writes there so a local build can never
+# collide with a running dev server, and scripts/start.mjs reads the same place. Copying
+# `.next` here would copy a directory the build never wrote — an image that boots and 404s
+# everything, with nothing in the build output to say so.
+COPY --from=build /app/.next-build ./.next-build
 # NOTE: no `COPY /app/public` — this project has no public/ directory, and Docker COPY
 # aborts the build on a missing source. Add it back if a public/ is ever created.
 COPY --from=build /app/package.json ./package.json
