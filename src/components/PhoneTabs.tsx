@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 
 /**
@@ -15,11 +16,23 @@ import { useRef, useState, type ReactNode } from "react";
 
 export type PhoneTab = "calendar" | "today" | "pillars";
 
+/**
+ * The three PANES, which is what the swipe moves between.
+ *
+ * Stats is deliberately not in here. It is a route, not a pane — a swipe that navigated the
+ * browser would be a gesture you cannot undo with the same gesture, which is a different and
+ * worse contract than the one the other three have.
+ */
 const ORDER: PhoneTab[] = ["calendar", "today", "pillars"];
-const LABEL: Record<PhoneTab, string> = {
+
+/** What the BAR shows, which is the three panes plus the way out to /stats. */
+export type TabBarKey = PhoneTab | "stats";
+const BAR: TabBarKey[] = ["calendar", "today", "pillars", "stats"];
+const LABEL: Record<TabBarKey, string> = {
   calendar: "Calendar",
   today: "Today",
   pillars: "Pillars",
+  stats: "Stats",
 };
 
 /** Below this, a horizontal drag is a swipe rather than a scroll. */
@@ -31,8 +44,11 @@ export function PhoneTabBar({
   tab,
   onTab,
 }: {
-  tab: PhoneTab;
-  onTab: (t: PhoneTab) => void;
+  /** "stats" when the bar is rendered on /stats, where none of the panes is showing. */
+  tab: TabBarKey;
+  /** Only ever called for the three panes. Omitted on /stats, where each pane label is a
+   *  link home rather than a switch. */
+  onTab?: (t: PhoneTab) => void;
 }) {
   return (
     <nav
@@ -49,18 +65,36 @@ export function PhoneTabBar({
       }}
     >
       <div className="relative mx-auto flex max-w-[30rem]">
-        {ORDER.map((t) => {
+        {BAR.map((t) => {
           const on = t === tab;
-          return (
-            // Ink vs muted marks the active tab, never a weight change: bolding the label
-            // would re-measure the text and nudge the other two sideways on every tap. The
-            // padding is what makes the row a thumb-sized target at 12px.
+          // Ink vs muted marks the active tab, never a weight change: bolding the label
+          // would re-measure the text and nudge the others sideways on every tap. The
+          // padding is what makes the row a thumb-sized target at 12px.
+          const cls =
+            "block flex-1 px-2 pb-4 pt-3 text-center text-micro transition-colors";
+          const style = {
+            color: on ? "var(--color-ink)" : "var(--color-muted)",
+          };
+          // A pane switch is state; anything crossing a route boundary is a link. Rendering
+          // both as <button> would have cost the back button, the long-press menu and the
+          // prefetch — three things the platform gives away free.
+          return t === "stats" || !onTab ? (
+            <Link
+              key={t}
+              href={t === "stats" ? "/stats" : "/"}
+              aria-current={on ? "page" : undefined}
+              className={cls}
+              style={style}
+            >
+              {LABEL[t]}
+            </Link>
+          ) : (
             <button
               key={t}
-              onClick={() => onTab(t)}
+              onClick={() => onTab(t as PhoneTab)}
               aria-current={on ? "page" : undefined}
-              className="flex-1 px-2 pb-4 pt-3 text-micro transition-colors"
-              style={{ color: on ? "var(--color-ink)" : "var(--color-muted)" }}
+              className={cls}
+              style={style}
             >
               {LABEL[t]}
             </button>
@@ -78,8 +112,8 @@ export function PhoneTabBar({
           aria-hidden
           className="motion-slide pointer-events-none absolute bottom-2.5 left-0 flex justify-center"
           style={{
-            width: `${100 / ORDER.length}%`,
-            transform: `translateX(${ORDER.indexOf(tab) * 100}%)`,
+            width: `${100 / BAR.length}%`,
+            transform: `translateX(${Math.max(0, BAR.indexOf(tab)) * 100}%)`,
           }}
         >
           <span

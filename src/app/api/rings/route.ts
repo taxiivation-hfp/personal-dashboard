@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/client";
-import { getRingCounts, getObservedDays } from "@/lib/queries";
+import { getRingCounts, getObservedDays, getPillarFacts } from "@/lib/queries";
 import { workoutsOn } from "@/lib/engine";
 import { getCalendarRange } from "@/lib/google";
 import { buildRings, WINDOW_DAYS } from "@/lib/rings";
@@ -41,12 +41,13 @@ export async function GET(req: Request) {
       }
     }
 
-    const [counts, observedDays, workouts] = await Promise.all([
+    const [counts, observedDays, workouts, facts] = await Promise.all([
       getRingCounts(db, from, anchor, { social_events: socialEvents }),
       getObservedDays(db, anchor),
       // The workout metrics are 14-day counts, so they cannot tell the toggles what is
       // logged TODAY. One extra lookup rather than a second round trip from the client.
       workoutsOn(db, anchor),
+      getPillarFacts(db, from, anchor),
     ]);
 
     return Response.json({
@@ -54,6 +55,11 @@ export async function GET(req: Request) {
       from,
       observedDays,
       workouts,
+      // The plain-words fortnight printed under each pillar's name. socialEvents rides
+      // along from the calendar count above rather than being re-derived — and stays
+      // UNDEFINED on a Google failure, so the caption can say "events unavailable" rather
+      // than claim a zero.
+      facts: { ...facts, socialEvents },
       pillars: buildRings(counts, observedDays),
     });
   } catch (e) {

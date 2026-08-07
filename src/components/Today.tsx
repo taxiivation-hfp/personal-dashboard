@@ -34,9 +34,11 @@ type StripDay = {
 /**
  * The gap between the week's columns, as a PERCENTAGE of the row.
  *
- * A percentage rather than a Tailwind px gap because the line drawn over the bars has to
- * land on their centres, and it is drawn in a 0-100 viewBox stretched to whatever width
- * the column happens to be. In px the two would only agree at one width.
+ * Four separate rows have to line up over each other — the percentages, the adherence bars,
+ * the productivity columns and the weekday letters. A percentage gap keeps them aligned at
+ * every width by construction; a px gap only agrees with itself, which is fine, but it made
+ * the earlier SVG overlay drift because that was drawn in a stretched 0-100 box. The overlay
+ * is gone and the percentage stayed: it costs nothing and removes a whole class of drift.
  */
 const STRIP_GAP_PCT = 2;
 
@@ -84,16 +86,19 @@ export default function Today({
   // Phone only: which of the three panes is showing. Opens on the day's work, and a
   // reload returns there rather than wherever you last wandered.
   const [tab, setTab] = useState<PhoneTab>("today");
-  // Naming the day. `editingTitle` is today's; `editingDay` is a date in the strip.
+  // Naming TODAY. The days ahead used to be nameable inline on the strip; the strip now
+  // ends on today and holds none of them, so only today's intention is set from this screen.
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
-  const [editingDay, setEditingDay] = useState<string | null>(null);
   // Raised by the Journal row in the checklist — the journal is written, not ticked.
   const [journalPrompt, setJournalPrompt] = useState(false);
 
-  // Centred on today: past days to the left, upcoming to the right.
+  // ENDS on the day being viewed. There is no future half: the calendar column says what
+  // tomorrow holds, and a strip that reserved three columns for it spent a third of its
+  // width on days that had not happened. A consequence worth knowing — no day on this strip
+  // is ever `isFuture`, which is why nothing below branches on it.
   const loadStrip = useCallback(() => {
-    fetch(`/api/adherence?days=7&center=${data.date}`)
+    fetch(`/api/adherence?days=7&to=${data.date}`)
       .then((r) => r.json())
       .then((s) => !s.error && setStrip(s.days ?? []))
       .catch(() => {});
@@ -190,7 +195,6 @@ export default function Today({
   /** Name a day, or clear it with an empty string. An intention, so rewriting is normal. */
   async function saveDayTitle(date: string, title: string) {
     setEditingTitle(false);
-    setEditingDay(null);
     await fetch("/api/day-title", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -202,57 +206,18 @@ export default function Today({
   const a = data.adherence;
 
   /**
-   * The week: two quantities in one box, on two different scales.
+   * The week's one piece of arithmetic: how tall the tallest column is.
    *
-   *   BARS  productivity — hours spent, stacked by what produced them. UNCAPPED, so there
-   *         is no ceiling to scale against and it is scaled to the week's own high. No
-   *         number is printed: the height is the whole statement, and a figure with no
-   *         ceiling printed beside it is a figure inviting comparison it cannot support.
-   *   LINE  adherence — a percentage, so its scale is fixed 0..100 and needs no caption.
-   *         Thicker than the bars' hairlines and drawn in the accent, which is the same
-   *         amber as the ring above it: one quantity, one colour, said twice.
+   * Productivity is UNCAPPED, so there is no ceiling to scale against and it is scaled to
+   * the week's own high — the caption says so out loud, since a shape whose scale is
+   * unstated is a shape that lies.
    *
-   * Sharing a box is the standard combo shape and the honest one here — the two are
-   * genuinely about the same days. What makes it readable is that neither is decoration:
-   * the bars carry composition, the line carries trend.
-   *
-   * Column centres account for the GAP. The old version cut the row into n equal parts and
-   * put each point at the centre of one, which is only right when the columns touch; with
-   * a gap every point drifted, worst at the ends. The gap is a PERCENTAGE so the same
-   * arithmetic holds at any width.
+   * Adherence needs nothing here. It is a percentage, so its scale is fixed 0..100 and its
+   * bar is just the number drawn. That asymmetry is the reason the two are no longer sharing
+   * a box: one of them has an axis and the other cannot have one.
    */
-  const week = (() => {
-    const n = strip.length;
-    if (!n) return null;
-    const colW = (100 - STRIP_GAP_PCT * (n - 1)) / n;
-    const centre = (i: number) => i * (colW + STRIP_GAP_PCT) + colW / 2;
-
-    const peak = Math.max(
-      1,
-      ...strip.map((d) => d.productivity?.points ?? 0),
-    );
-
-    // Stops at today. A line drawn through days that have not happened would be a
-    // prediction, and this app does not make those.
-    const past = strip
-      .map((d, i) => ({ d, i }))
-      .filter((x) => !x.d.isFuture);
-    const points =
-      past.length < 2
-        ? null
-        : past
-            // 6% headroom at the top so a 100% day never rides on the frame.
-            .map(
-              ({ d, i }) =>
-                `${centre(i).toFixed(2)},${(100 - d.pct * 0.94).toFixed(2)}`,
-            )
-            .join(" ");
-
-    return { peak, points };
-  })();
-  /** Uncapped, so the bars have no fixed ceiling — 1 keeps the maths safe before the
-   *  fetch lands, when there are no bars to draw anyway. */
-  const peak = week?.peak ?? 1;
+  /** 1 keeps the maths safe before the fetch lands, when there are no bars to draw. */
+  const peak = Math.max(1, ...strip.map((d) => d.productivity?.points ?? 0));
 
   /**
    * A key for the stack, built from what the visible week actually contains.
@@ -538,15 +503,19 @@ export default function Today({
         </div>
       </section>
 
-      {/* THE WEEK. Bars are PRODUCTIVITY, stacked in the colours the hours had in the
-          calendar; the line is ADHERENCE, a percentage, in the ring's own amber.
+      {/* THE WEEK — two measurements, two rows, and deliberately no shared axis.
 
-          The reversal is deliberate. Productivity carries the most ink because it is the
-          thing with composition to show — where the hours went. Adherence stays the
-          measurement, so it keeps the accent and the printed figure, and it is drawn ON TOP
-          of everything: the app's question is still "did I do what I said I'd do". */}
+          Adherence is a thin horizontal bar per day, filling left to right in the accent.
+          Productivity is the column beneath it, stacked in the colours those hours had in
+          the calendar. They used to share one box with adherence drawn as a line over the
+          bars; separating them says plainly that they are two different questions, and it
+          stops a reader trying to compare a percentage against an uncapped score.
+
+          The window ENDS ON TODAY. There is no future half any more — the calendar column
+          is what says what tomorrow holds, and a week strip that reserved three empty
+          columns for it was spending a third of its width on nothing. */}
       <section>
-        <div className="mb-2 flex items-baseline justify-between gap-3">
+        <div className="mb-2.5 flex items-baseline justify-between gap-3">
           <span className="text-micro text-[var(--color-muted)]">
             adherence · hours to this week&apos;s high
           </span>
@@ -559,9 +528,11 @@ export default function Today({
           )}
         </div>
 
-        {/* The percentages belong to the LINE. Productivity gets no number at all — its
-            height is the entire claim, and printing an uncapped score invites a comparison
-            it cannot support. */}
+        {/* ADHERENCE. The number and its bar are one unit — the bar is the number drawn,
+            not a second measurement — so they sit together above the rule with the columns
+            below it. Productivity gets no number at all: its height is the whole claim, and
+            an uncapped score printed with no ceiling beside it invites a comparison it
+            cannot support. */}
         <div className="flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
           {strip.map((d) => (
             <span
@@ -571,104 +542,86 @@ export default function Today({
                 color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
               }}
             >
-              {d.isFuture ? "" : `${d.pct}%`}
+              {d.pct}%
             </span>
           ))}
         </div>
 
-        <div className="relative mt-1.5">
-          <div
-            className="flex items-end"
-            style={{ gap: `${STRIP_GAP_PCT}%` }}
-          >
-            {strip.map((d) => (
-              <div
-                key={d.date}
-                className="relative h-20 min-w-0 flex-1 overflow-hidden rounded-t-[3px] border-x border-t"
-                style={{
-                  // OUTLINED, not filled. --color-panel-2 measures 1.04:1 against the page,
-                  // so a day with no bar vanished entirely and the strip read as five days
-                  // instead of seven. An outline is the system's existing answer: it is how
-                  // "skipped" stays legible without becoming a third weight of fill.
-                  //
-                  // Today is marked by a STRONGER OUTLINE rather than the amber wash it used
-                  // to get. The wash sat behind the slabs and tinted every colour in the
-                  // stack, which is the one thing a chart of colours cannot afford.
-                  borderColor: d.isToday
-                    ? "var(--color-ink)"
-                    : "var(--color-line-strong)",
-                  opacity: d.isFuture ? 0.45 : 1,
-                }}
-              >
-                {/* Each slab sized against the WEEK'S PEAK directly, bottom-aligned.
-                    Deliberately un-transformed and un-animated: a scaleY on the stack would
-                    have been composited and free, but it scales the separators with it, so
-                    the hairlines that make two slabs read as two would thin toward nothing
-                    on exactly the short days that need them most. The strip renders once
-                    when the fetch lands, and the motion in this screen belongs to the ring
-                    above it. */}
-                {d.productivity && d.productivity.points > 0 && (
-                  <div className="absolute inset-0 flex flex-col justify-end">
-                    {/* Drawn bottom-up, so the largest slab sits at the base and the day
-                        reads as a foundation with the extras on top. `segments` arrives
-                        largest first — see scoreDay. */}
-                    {[...d.productivity.segments].reverse().map((s, i) => (
-                      <div
-                        key={`${s.kind}-${s.colorId ?? "d"}-${i}`}
-                        style={{
-                          height: `${(s.points / peak) * 100}%`,
-                          background: slabFill(s),
-                          // A hairline in the column's own surface, so two slabs of a
-                          // similar tone still read as two things.
-                          borderTop:
-                            i === 0
-                              ? undefined
-                              : "1px solid var(--color-surface-1)",
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Adherence, over the bars. Drawn twice: a wide stroke in the column's own
-              surface first, so the line stays legible where it crosses a dark slab, then
-              the line itself. A halo, not a shadow — it is the page colour, it has no
-              offset, and it implies no light source.
-
-              Not animated: `points` is neither transform nor opacity, so the
-              Transform-Only Rule forbids it, and stroke-dasharray is reserved for ring
-              arcs — using it here would make the line look like it was being drawn, which
-              is to say celebrated. */}
-          {week?.points && (
-            <svg
-              className="pointer-events-none absolute inset-0 h-full w-full"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              aria-hidden
+        <div className="mt-1 flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
+          {strip.map((d) => (
+            <div
+              key={d.date}
+              className="h-1 min-w-0 flex-1 overflow-hidden rounded-full"
+              style={{ background: "var(--color-line)" }}
             >
-              <polyline
-                points={week.points}
-                fill="none"
-                stroke="var(--color-surface-1)"
-                strokeWidth="5"
-                vectorEffect="non-scaling-stroke"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-              <polyline
-                points={week.points}
-                fill="none"
-                stroke="var(--color-accent)"
-                strokeWidth="2.5"
-                vectorEffect="non-scaling-stroke"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            </svg>
-          )}
+              {/* scaleX from the left edge, never width: transform is composited and skips
+                  layout entirely. At 4px tall the rounded caps distort by a fraction of a
+                  pixel under the scale, which is invisible and worth the free frame.
+                  A floor of 2%, so a day that earned something never reads as a day that
+                  earned nothing. A true 0 draws nothing at all. */}
+              {d.pct > 0 && (
+                <div
+                  className="motion-data h-full w-full origin-left rounded-full"
+                  style={{
+                    transform: `scaleX(${Math.max(d.pct, 2) / 100})`,
+                    background: "var(--color-accent)",
+                    opacity: d.isToday ? 1 : 0.75,
+                  }}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* PRODUCTIVITY. */}
+        <div className="mt-2.5 flex items-end" style={{ gap: `${STRIP_GAP_PCT}%` }}>
+          {strip.map((d) => (
+            <div
+              key={d.date}
+              className="relative h-20 min-w-0 flex-1 overflow-hidden rounded-t-[3px] border-x border-t"
+              style={{
+                // OUTLINED, not filled. --color-panel-2 measures 1.04:1 against the page,
+                // so a day with no bar vanished entirely and the strip read as five days
+                // instead of seven. An outline is the system's existing answer: it is how
+                // "skipped" stays legible without becoming a third weight of fill.
+                //
+                // Today is marked by a STRONGER OUTLINE rather than an amber wash. The wash
+                // sat behind the slabs and tinted every colour in the stack, which is the
+                // one thing a chart made of colours cannot afford.
+                borderColor: d.isToday
+                  ? "var(--color-ink)"
+                  : "var(--color-line-strong)",
+              }}
+            >
+              {/* Each slab sized against the WEEK'S PEAK directly, bottom-aligned.
+                  Deliberately un-transformed: a scaleY on the stack would have been
+                  composited and free, but it scales the separators with it, so the
+                  hairlines that make two slabs read as two would thin toward nothing on
+                  exactly the short days that need them most. */}
+              {d.productivity && d.productivity.points > 0 && (
+                <div className="absolute inset-0 flex flex-col justify-end">
+                  {/* Drawn bottom-up, so the largest slab sits at the base and the day
+                      reads as a foundation with the extras on top. `segments` arrives
+                      largest first — see scoreDay. */}
+                  {[...d.productivity.segments].reverse().map((s, i) => (
+                    <div
+                      key={`${s.kind}-${s.colorId ?? "d"}-${i}`}
+                      style={{
+                        height: `${(s.points / peak) * 100}%`,
+                        background: slabFill(s),
+                        // A hairline in the column's own surface, so two slabs of a similar
+                        // tone still read as two things.
+                        borderTop:
+                          i === 0
+                            ? undefined
+                            : "1px solid var(--color-surface-1)",
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
 
         <div className="h-px w-full bg-[var(--color-line-strong)]" />
@@ -689,9 +642,9 @@ export default function Today({
           ))}
         </div>
 
-        {/* Swatches, not a boxed legend. Four small marks on one line under the chart read
-            in a glance and cost a line; a bordered key would cost a block and turn the
-            strip into a figure with an apparatus. */}
+        {/* Swatches, not a boxed legend. A few small marks on one line under the chart read
+            in a glance and cost a line; a bordered key would cost a block and turn the strip
+            into a figure with an apparatus. */}
         {stackKey.length > 0 && (
           <ul className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1">
             {stackKey.map((k) => (
@@ -709,42 +662,8 @@ export default function Today({
             ))}
           </ul>
         )}
-
-        {/* Naming the days ahead. The strip already holds the next three, so they are named
-            where they are read rather than on a screen of their own. */}
-        <div className="mt-2 flex gap-2">
-          {strip.map((d) =>
-            d.isFuture ? (
-              <div key={d.date} className="min-w-0 flex-1">
-                {editingDay === d.date ? (
-                  <input
-                    autoFocus
-                    defaultValue={d.title ?? ""}
-                    onBlur={(e) => saveDayTitle(d.date, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter")
-                        (e.target as HTMLInputElement).blur();
-                      if (e.key === "Escape") setEditingDay(null);
-                    }}
-                    maxLength={80}
-                    aria-label={`Name ${d.date}`}
-                    className="w-full border-b border-[var(--color-accent)] bg-transparent text-center font-serif text-micro outline-none"
-                  />
-                ) : (
-                  <button
-                    onClick={() => setEditingDay(d.date)}
-                    className="block w-full truncate text-center font-serif text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
-                  >
-                    {d.title ?? "+"}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div key={d.date} className="min-w-0 flex-1" />
-            ),
-          )}
-        </div>
       </section>
+
 
       <CoachNote date={data.date} />
 

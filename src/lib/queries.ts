@@ -413,6 +413,58 @@ export async function listSkills(
  * in the window is a real, meaningful zero and must stay distinguishable from a metric
  * that has no source at all, or a first day reads as a fortnight of neglect.
  */
+/**
+ * The plain-words fortnight, one line per pillar.
+ *
+ * Separate from getRingCounts on purpose. That function answers "how full is the ring",
+ * which is a capped, weighted, sufficiency question; this answers "what actually happened",
+ * which is a raw count and must never cap. Deriving one from the other would have meant the
+ * caption inheriting the ring's cap and printing "8 sessions" on a fortnight of twenty.
+ *
+ * Grape calendar events are deliberately NOT counted here. The owner logs sessions by hand
+ * and does not want them counted twice; the caption follows the ring's rule.
+ */
+export type PillarFacts = {
+  /** Portfolio: total minutes across every skill in the window. */
+  skillMinutes: number;
+  /** Physical: gym_sessions ROWS in the window, all three kinds. Sessions, not days. */
+  workoutSessions: number;
+  /** Social: outreach non-negotiable ticks in the window. */
+  outreach: number;
+};
+
+export async function getPillarFacts(
+  db: Client,
+  from: string,
+  to: string,
+): Promise<PillarFacts> {
+  const [mins, sessions, out] = await Promise.all([
+    db.execute({
+      sql: "SELECT COALESCE(SUM(minutes),0) AS n FROM skill_time WHERE date BETWEEN ? AND ?",
+      args: [from, to],
+    }),
+    db.execute({
+      sql: "SELECT COUNT(*) AS n FROM gym_sessions WHERE date BETWEEN ? AND ?",
+      args: [from, to],
+    }),
+    db.execute({
+      sql: `SELECT COUNT(DISTINCT e.date) AS n
+              FROM habit_entries e
+              JOIN habits h ON h.id = e.habit_id
+             WHERE h.system_key = 'outreach' AND e.value > 0
+               AND e.date BETWEEN ? AND ?`,
+      args: [from, to],
+    }),
+  ]);
+  // num() at the boundary, every time: libSQL returns aggregates as BigInt and
+  // `bigint / number` throws.
+  return {
+    skillMinutes: num(mins.rows[0].n),
+    workoutSessions: num(sessions.rows[0].n),
+    outreach: num(out.rows[0].n),
+  };
+}
+
 export async function getRingCounts(
   db: Client,
   from: string,
