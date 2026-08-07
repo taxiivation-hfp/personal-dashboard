@@ -68,6 +68,9 @@ export type GoalView = {
   subgoals: SubgoalView[];
   /** True ONLY when explicit overrides exceed 100%. An all-auto goal is well-formed. */
   overAllocated: boolean;
+  /** When it was marked done, or null. A finished goal with no date is a fact with no
+   *  place in a sequence — see updateGoal. */
+  completedAt: string | null;
 };
 
 export type SkillView = {
@@ -322,7 +325,7 @@ export async function getDayView(
 
 export async function listGoals(db: Client): Promise<GoalView[]> {
   const r = await db.execute(
-    "SELECT g.id,g.title,g.target,g.status,p.key AS pk FROM goals g JOIN pillars p ON g.pillar_id=p.id WHERE g.status != 'dropped' ORDER BY p.sort_order, g.id",
+    "SELECT g.id,g.title,g.target,g.status,g.completed_at,p.key AS pk FROM goals g JOIN pillars p ON g.pillar_id=p.id WHERE g.status != 'dropped' ORDER BY p.sort_order, g.id",
   );
   const subs = await db.execute(
     "SELECT id,goal_id,title,weight,done FROM subgoals ORDER BY goal_id, sort_order, id",
@@ -357,6 +360,7 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
       status: String(g.status),
       subgoals: raw.map((s, i) => ({ ...s, effectiveWeight: w.effective[i] })),
       overAllocated: w.overAllocated,
+      completedAt: str(g.completed_at),
     };
   });
 }

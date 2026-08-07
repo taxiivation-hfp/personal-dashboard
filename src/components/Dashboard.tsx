@@ -6,6 +6,7 @@ import WeightEntry from "./WeightEntry";
 import { SegmentedRing, toneColor, type RingSegment } from "./PillarRing";
 import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
 import type { ProductivitySegment } from "@/lib/productivity";
+import type { GoalView } from "@/lib/queries";
 import {
   pillarCaption,
   type MetricRing,
@@ -86,6 +87,7 @@ export default function Dashboard({
   const [facts, setFacts] = useState<PillarFactInput | null>(null);
   const [colors, setColors] = useState<Partial<Record<PillarKey, string | null>>>({});
   const [streak, setStreak] = useState<number | null>(null);
+  const [goals, setGoals] = useState<GoalView[] | null>(null);
 
   // The fortnight is fixed — it is what the rings mean — so it loads once and does not
   // move when the window control does. Only the two time series below answer to that.
@@ -98,6 +100,10 @@ export default function Dashboard({
         setRings(d.pillars ?? []);
         setFacts(d.facts ?? null);
       })
+      .catch(() => {});
+    fetch("/api/goals")
+      .then((r) => r.json())
+      .then((d) => alive && !d.error && setGoals(d.goals ?? []))
       .catch(() => {});
     fetch(`/api/today?date=${date}`)
       .then((r) => r.json())
@@ -174,6 +180,18 @@ export default function Dashboard({
   const weekHours = week.reduce((s, d) => s + (d.productivity?.minutes ?? 0), 0);
   const todayPct = (strip ?? []).find((d) => d.isToday)?.pct ?? null;
   const daysLogged = (strip ?? []).filter((d) => d.pct > 0).length;
+
+  /**
+   * Finished goals, newest first.
+   *
+   * Goals completed before this app started stamping completed_at have no date. They are
+   * still listed — the achievement is real and the missing date is the app's fault, not the
+   * owner's — and they sort last, because an undated thing cannot claim a place in a
+   * sequence.
+   */
+  const done = (goals ?? [])
+    .filter((g) => g.status === "done")
+    .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
 
   const loading = strip == null || trends == null || rings == null;
 
@@ -423,6 +441,57 @@ export default function Dashboard({
               </Panel>
             </div>
           )}
+
+          {/* WHAT HAS BEEN ACHIEVED.
+
+              A finished goal used to disappear: every screen filters status !== 'done', so
+              the moment you completed something it left the app entirely. That is exactly
+              backwards for someone who wants a clear view of what they have achieved and
+              what is next — the achievements were the one thing being thrown away.
+
+              Newest first, with the date it was finished. No count, no rate, no "3 this
+              quarter": a list of things you have done is not a productivity figure, and
+              turning it into one is how an archive becomes a quota. */}
+          <section className="mt-10">
+            <div className="section-head">
+              <h2 className="text-small font-semibold">Achieved</h2>
+              <span className="text-micro text-[var(--color-muted)]">
+                goals you have marked done
+              </span>
+            </div>
+            {done.length === 0 ? (
+              <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
+                Nothing marked done yet. A goal moves here when you say it is
+                finished — never automatically at 100%, because deciding a thing
+                is done is the owner&apos;s call and not a threshold&apos;s.
+              </p>
+            ) : (
+              <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                {done.map((g) => (
+                  <li
+                    key={g.id}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
+                  >
+                    <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
+                      {PILLAR_NAME[g.pillar]}
+                    </span>
+                    <span className="min-w-0 flex-1 font-serif text-body">
+                      {g.title}
+                    </span>
+                    <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                      {g.completedAt
+                        ? new Date(g.completedAt).toLocaleDateString("en-AU", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "date not recorded"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <p className="mt-10 max-w-[62ch] border-t border-[var(--color-line)] pt-4 text-micro leading-relaxed text-[var(--color-muted)]">
             {daysLogged} of the last {days} days have something marked on them.

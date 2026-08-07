@@ -474,8 +474,24 @@ export async function updateGoal(
     (sets.push("title=?"), args.push(patch.title.trim()));
   if (patch.target !== undefined)
     (sets.push("target=?"), args.push(patch.target?.trim() || null));
-  if (patch.status !== undefined)
-    (sets.push("status=?"), args.push(patch.status));
+  if (patch.status !== undefined) {
+    sets.push("status=?");
+    args.push(patch.status);
+    /**
+     * WHEN it was finished, stamped here and nowhere else.
+     *
+     * The column has existed since the first schema and nothing has ever written to it, so
+     * every goal ever completed lost its date. That is the wrong way round for an app whose
+     * owner wants "a clear plan on what I have achieved": a finished goal with no date is a
+     * fact with no place in a sequence.
+     *
+     * CLEARED on the way back out. Un-completing a goal and leaving the stamp behind would
+     * leave a live goal claiming a completion date, which is worse than no date at all —
+     * the archive would list something still in progress.
+     */
+    sets.push("completed_at=?");
+    args.push(patch.status === "done" ? now() : null);
+  }
   if (!sets.length) return;
   sets.push("updated_at=?");
   args.push(now(), id);
