@@ -162,6 +162,7 @@ test("the printed noun and the counting rule are allowed to disagree, but not by
   // misc read "sessions" while being counted by date for its whole life. The two fields
   // are separate on purpose; this pins the intended pairing so a drift is loud.
   const expected: Record<string, boolean> = {
+    social_events: false,
     outreach: true,
     strength: false,
     cardio: false,
@@ -258,15 +259,30 @@ test("no amount of strength reaches 100 without cardio", () => {
 
 // ---------------------------------------------------------------- unscored
 
-test("misc is tracked but not scored: a count, no ring, no lie about the source", () => {
+test("misc has a floor of its own but never enters the Physical mean", () => {
   const m = find(
     buildRings(counts({ misc: ok(3) }), WINDOW_DAYS),
     "physical",
     "misc",
   );
-  assert.equal(m.state, "unscored");
-  assert.equal(m.fill, null);
-  assert.equal(m.fact, "3 sessions · not scored");
+  // A threshold, so it fills its own mark — drawn as a thin outer lap, not a slice.
+  assert.equal(m.state, "scored");
+  assert.equal(m.fill, 1);
+  assert.equal(m.fact, "3 of 1 sessions");
+  // Weight 0 is what keeps it out of the average: bouldering is visible, never a quota.
+  assert.equal(m.weight, 0);
+});
+
+test("no amount of misc moves Physical", () => {
+  const none = find(buildRings(counts({ strength: ok(4) }), WINDOW_DAYS), "physical", "strength");
+  const withMisc = buildRings(counts({ strength: ok(4), misc: ok(9) }), WINDOW_DAYS).find(
+    (p) => p.pillar === "physical",
+  )!;
+  const withoutMisc = buildRings(counts({ strength: ok(4) }), WINDOW_DAYS).find(
+    (p) => p.pillar === "physical",
+  )!;
+  assert.equal(withMisc.fill, withoutMisc.fill);
+  assert.ok(none.fill !== null);
 });
 
 test("misc is excluded from the Physical mean entirely", () => {
@@ -281,6 +297,29 @@ test("misc is excluded from the Physical mean entirely", () => {
   assert.equal(withMisc.fill, without.fill);
 });
 
+// The lap is what lets Misc have a floor without having a share. If a metric that carries
+// weight ever ended up out here, its work would stop counting toward its own pillar while
+// still looking like it was being drawn — the ring would be lying by omission.
+test("only a floor-without-weight is drawn as an outer lap", () => {
+  const all = buildRings(
+    counts({ strength: ok(8), cardio: ok(2), misc: ok(1) }),
+    WINDOW_DAYS,
+  ).flatMap((p) => p.metrics);
+
+  assert.deepEqual(
+    all.filter((m) => m.lap).map((m) => m.key),
+    ["misc"],
+  );
+  // Nothing that counts is ever moved off the donut.
+  assert.ok(all.every((m) => !m.lap || m.weight === 0));
+});
+
+test("a ghost is never a lap — no source belongs on the ring, not around it", () => {
+  const steps = find(buildRings(counts(), WINDOW_DAYS), "physical", "steps");
+  assert.equal(steps.weight, 0);
+  assert.equal(steps.lap, false);
+});
+
 test("steps stays a GHOST, not unscored — !sourceReady is checked first", () => {
   const s = find(buildRings(counts(), WINDOW_DAYS), "physical", "steps");
   assert.equal(s.state, "ghost");
@@ -291,5 +330,6 @@ test("thresholds match the owner's stated minimums", () => {
   const by = Object.fromEntries(METRICS.map((m) => [m.key, m.required]));
   assert.equal(by.strength, 8);
   assert.equal(by.cardio, 2);
-  assert.equal(by.misc, null);
+  assert.equal(by.misc, 1); // one a fortnight, as an outer lap rather than a slice
+  assert.equal(by.social_events, 2); // graphite in the calendar
 });

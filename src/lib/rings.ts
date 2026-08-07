@@ -57,7 +57,12 @@ export const isPaletteHex = (hex: string): boolean =>
 
 export const WINDOW_DAYS = 14;
 
-export type MetricSource = "habit" | "gym" | "skill_session" | "health_steps";
+export type MetricSource =
+  | "habit"
+  | "gym"
+  | "skill_session"
+  | "health_steps"
+  | "calendar_social";
 
 /** Workout kinds. Misc is deliberately unscored — see METRICS. */
 export type WorkoutKind = "strength" | "cardio" | "misc";
@@ -159,9 +164,11 @@ export const METRICS: Metric[] = [
     label: "Misc",
     source: "gym",
     workoutKind: "misc",
-    // TRACKED BUT NOT SCORED. Bouldering and calisthenic skills get recorded without ever
-    // becoming a target — the constitution's "output is not scored" made literal.
-    required: null,
+    // A FLOOR, and a VISUAL one. Misc has a threshold now — one session a fortnight — but
+    // keeps weight 0, so it fills its own mark without ever entering the Physical mean.
+    // It draws as a thin outer lap on the donut rather than a slice of it: bouldering and
+    // calisthenic skills should be visible and should never become a quota.
+    required: 1,
     unit: "sessions",
     // Was counted by DATE while declaring "sessions" — the label and the counter
     // disagreed. Fixed for free by the perDayCapped split.
@@ -183,6 +190,20 @@ export const METRICS: Metric[] = [
     // day a source lands; until then this renders as a GHOST (not unscored — !sourceReady
     // is checked first) and is excluded from the Physical mean.
     sourceReady: false,
+  },
+  {
+    key: "social_events",
+    pillar: "social_capital",
+    label: "Social events",
+    source: "calendar_social",
+    // Graphite in the calendar means a social event — Church, a night out. Counted from
+    // the calendar rather than ticked, because they are already scheduled there and a
+    // second place to record them is a second place to forget.
+    required: 2,
+    unit: "sessions",
+    perDayCapped: false,
+    weight: 1,
+    sourceReady: true,
   },
   {
     key: "skills",
@@ -247,6 +268,19 @@ export type MetricRing = {
    * It is the WEIGHT, not the value: what a metric is worth, never how well it went.
    */
   weight: number;
+  /**
+   * Draw this one as a thin lap OUTSIDE the donut instead of a slice of it.
+   *
+   * True for a metric with a floor of its own that must never move the pillar's average —
+   * Misc, at one session a fortnight. Derived here rather than in the view so the registry
+   * stays the only place that knows what a weight of 0 means; the alternative was the UI
+   * re-importing METRICS and matching on key.
+   *
+   * A weight-0 metric with NO floor is not a lap — it has nothing to fill toward, so it
+   * stays an unscored slice. Neither is a ghost: "no source yet" is a statement about the
+   * app, and it belongs on the ring where the missing metric would have been.
+   */
+  lap: boolean;
 };
 
 export type PillarRingView = {
@@ -333,6 +367,7 @@ export function buildRings(
         window: windowLine(state, observedDays),
         workoutKind: m.workoutKind,
         weight: m.weight,
+        lap: state === "scored" && m.weight <= 0,
       };
     });
 

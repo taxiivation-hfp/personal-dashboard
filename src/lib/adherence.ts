@@ -47,48 +47,42 @@ export type Block = {
 };
 
 export type Adherence = {
-  /** 0-100, or null when nothing is due yet — which is NOT the same as 0%. */
-  pct: number | null;
+  /**
+   * 0-100. Always a number, and it only ever CLIMBS through the day.
+   *
+   * This replaced a ratio of adhered-to-due, which fell every time a block came due
+   * unmarked and dropped again at the habit cutoff. Watching a number you were trying to
+   * earn slide backwards all afternoon is demotivating in a way that makes people stop
+   * looking, and a number nobody looks at cannot do its job. Now every hour worked and
+   * every non-negotiable ticked ADDS, and nothing ever subtracts.
+   *
+   * Drift is not punished here — it simply does not add. The three-state mark still
+   * records what happened, and the coach still reads it; the hero figure just stops being
+   * the place that holds it against you.
+   */
+  pct: number;
+  /** Blocked hours actually worked. */
+  adheredHours: number;
+  /** Blocked hours in the day, worked or not — the denominator for the 70. */
+  totalHours: number;
   adhered: number;
   drifted: number;
   skipped: number;
-  /** Due but not yet marked. These count against pct and are the call to action. */
+  /** Marked nothing yet, and their time has passed. The call to action. */
   unmarked: number;
   due: number;
-  /** Scheduled non-negotiables not yet in the denominator, so the UI can say so rather
-   *  than leaving the number looking unexplained. 0 once the cutoff passes. */
-  habitsPending: number;
+  /** Non-negotiables ticked, and how many apply today. */
+  habitsDone: number;
+  habitsScheduled: number;
 };
 
-/**
- * The day's non-negotiable tally.
- *
- * `scheduled` is how many applied that weekday; `done` how many were ticked. When `due`
- * is false only `done` counts — see habitsDueOn.
- */
-export type HabitTally = { due: boolean; scheduled: number; done: number };
+/** The day's non-negotiable tally. `scheduled` is how many applied that weekday. */
+export type HabitTally = { scheduled: number; done: number };
 
-/**
- * Have the day's non-negotiables had their chance?
- *
- * A block becomes due when its end time passes. A habit has no end time, so it becomes
- * due at an evening cutoff. Before that an UNTICKED habit is not in the denominator at
- * all — not missed, not pending — which preserves the rule that the number must not look
- * bad at lunchtime for no reason.
- *
- * Pure: the caller computes the cutoff instant (rfc3339(date, '21:00', APP_TZ)), so this
- * needs no timezone machinery and is trivially testable.
- */
-export function habitsDueOn(
-  dateISO: string,
-  todayISO: string,
-  nowMs: number,
-  cutoffInstantMs: number,
-): boolean {
-  if (dateISO < todayISO) return true; // the day is over
-  if (dateISO > todayISO) return false; // hasn't happened
-  return nowMs >= cutoffInstantMs;
-}
+/** Share of the day's figure that blocked time can earn. */
+export const BLOCK_SHARE = 70;
+/** Share the non-negotiables can earn, split evenly between them. */
+export const HABIT_SHARE = 30;
 
 const localDateTime = (iso: string): number => new Date(iso).getTime();
 
@@ -157,53 +151,60 @@ export function buildBlocks(
 }
 
 /**
- * The day's rate over BLOCKS AND NON-NEGOTIABLES, weighted equally — one item is one
- * item. A 15-minute habit and a 3-hour block count the same, which is the same logic that
- * makes working a block badly identical to working it brilliantly.
+ * The day's figure: 70 parts blocked time, 30 parts non-negotiables, climbing from zero.
  *
- * `habits` omitted (or null) = blocks only. That is how days before
- * app_meta['adherence_habits_since'] stay exactly as they were lived: counting habits
- * retroactively would hold four untouched non-negotiables against every past day.
+ * BLOCKED TIME IS WEIGHTED BY THE HOUR, not by the item. A three-hour block is worth three
+ * times a one-hour block, which is a deliberate reversal of the old one-item-one-item rule
+ * — the owner's call, on the grounds that the day is made of hours and an afternoon spent
+ * as planned is simply more of the day than a fifteen-minute errand. Every hour of the
+ * day's blocked total is worth BLOCK_SHARE/totalHours.
  *
- * Before the cutoff the rate is deliberately OPTIMISTIC — a ticked habit counts in both
- * numerator and denominator, an unticked one is in neither. Ticking has to visibly do
- * something or tap-as-you-go becomes pointless until 21:00, and that outranks tidiness.
- * The number settles when the cutoff passes and the rest join the denominator.
+ * NON-NEGOTIABLES SPLIT HABIT_SHARE EVENLY — five of them and each is worth six. They have
+ * no duration, so there is nothing to weight them by, and a checklist where some items
+ * quietly matter more than others is a checklist you start gaming.
+ *
+ * THE DENOMINATOR IS THE WHOLE DAY, not the part of it that has elapsed. That is what makes
+ * the figure climb: at 8am nothing is worked yet so it reads 0, and it rises as the day is
+ * lived rather than starting at 100 and eroding.
  */
 export function adherenceFor(
   blocks: Block[],
   habits?: HabitTally | null,
 ): Adherence {
-  const counted = blocks.filter((b) => b.state !== "dismissed" && b.due);
+  const counted = blocks.filter((b) => b.state !== "dismissed");
+  // An unknown duration cannot be weighed, so it is left out of both sides rather than
+  // silently counted as zero hours — which would make the block unearnable.
+  const hoursOf = (b: Block) => (b.minutes ?? 0) / 60;
+
+  const totalHours = counted.reduce((sum, b) => sum + hoursOf(b), 0);
+  const adheredHours = counted
+    .filter((b) => b.state === "adhered")
+    .reduce((sum, b) => sum + hoursOf(b), 0);
+
   const drifted = counted.filter((b) => b.state === "drifted").length;
   const skipped = counted.filter((b) => b.state === "skipped").length;
+  const adhered = counted.filter((b) => b.state === "adhered").length;
+  const unmarked = counted.filter((b) => b.state == null && b.due).length;
 
-  let adhered = counted.filter((b) => b.state === "adhered").length;
-  let unmarked = counted.filter((b) => b.state == null).length;
-  let due = counted.length;
-  let habitsPending = 0;
+  const habitsScheduled = habits ? Math.max(0, habits.scheduled) : 0;
+  const habitsDone = habits
+    ? Math.max(0, Math.min(habits.done, habitsScheduled))
+    : 0;
 
-  if (habits) {
-    const done = Math.max(0, Math.min(habits.done, habits.scheduled));
-    adhered += done;
-    if (habits.due) {
-      due += habits.scheduled;
-      unmarked += habits.scheduled - done;
-    } else {
-      // Only the ticked ones are in play; the rest have not had their chance.
-      due += done;
-      habitsPending = habits.scheduled - done;
-    }
-  }
+  const blockPart = totalHours > 0 ? (adheredHours / totalHours) * BLOCK_SHARE : 0;
+  const habitPart =
+    habitsScheduled > 0 ? (habitsDone / habitsScheduled) * HABIT_SHARE : 0;
 
   return {
-    // null, not 0 — "nothing has come due yet" must not render as a 0% failure.
-    pct: due ? Math.round((adhered / due) * 100) : null,
+    pct: Math.round(blockPart + habitPart),
+    adheredHours,
+    totalHours,
     adhered,
     drifted,
     skipped,
     unmarked,
-    due,
-    habitsPending,
+    due: counted.length,
+    habitsDone,
+    habitsScheduled,
   };
 }

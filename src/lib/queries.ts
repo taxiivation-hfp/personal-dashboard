@@ -5,7 +5,6 @@ import { getStreak, weekdayBit } from "./engine";
 import {
   adherenceFor,
   buildBlocks,
-  habitsDueOn,
   type Adherence,
   type Block,
   type BlockState,
@@ -172,23 +171,23 @@ export async function getAdherenceConfig(db: Client): Promise<AdherenceConfig> {
 }
 
 /**
- * The habit tally for one date, or null when non-negotiables do not count for it.
+ * The day’s non-negotiable tally.
  *
- * null for any day BEFORE the start stamp — those days were lived under the blocks-only
- * rule and rewriting them would show four untouched non-negotiables against every one of
- * them, which is a lie about days that already happened.
+ * THERE IS NO LONGER A CUTOFF. Habits used to sit outside the denominator until an evening
+ * hour, so the figure lurched at 21:00 when the untouched ones joined it. With the figure
+ * now climbing from zero, that machinery has nothing to protect against: an unticked habit
+ * simply has not added its share yet, which is the same statement the whole number makes.
+ *
+ * The habitsSince gate went with it. It existed to stop a rule change rewriting days
+ * already lived; the owner’s call is that the handful of placeholder days in the record
+ * are not worth a versioning scheme.
  */
 export function habitTallyFor(
-  date: string,
+  _date: string,
   scheduled: number,
   done: number,
-  cfg: AdherenceConfig,
-  nowMs: number = Date.now(),
-  today: string = todayISO(),
-): HabitTally | null {
-  if (!cfg.habitsSince || date < cfg.habitsSince) return null;
-  const cutoffMs = Date.parse(rfc3339(date, cfg.cutoff));
-  return { due: habitsDueOn(date, today, nowMs, cutoffMs), scheduled, done };
+): HabitTally {
+  return { scheduled, done };
 }
 
 export async function pillarMaps(db: Client) {
@@ -291,12 +290,7 @@ export async function getDayView(
   const cfg = await getAdherenceConfig(db);
   const adherence = adherenceFor(
     blocks,
-    habitTallyFor(
-      date,
-      habits.length,
-      habits.filter((h) => h.done).length,
-      cfg,
-    ),
+    habitTallyFor(date, habits.length, habits.filter((h) => h.done).length),
   );
 
   const journalRes = await db.execute({
@@ -423,6 +417,15 @@ export async function getRingCounts(
   db: Client,
   from: string,
   to: string,
+  /**
+   * Counts this function cannot get from the database.
+   *
+   * Calendar events are never persisted — they are read live from Google — so a metric
+   * sourced from them has to be counted by the caller that already holds the range. Keyed
+   * by metric key; a key that is absent is treated as an unresolved source rather than a
+   * zero, so a Google outage reads as "no data" instead of "you did nothing".
+   */
+  external: Record<string, number | undefined> = {},
 ): Promise<Record<string, RawCount>> {
   const out: Record<string, RawCount> = {};
 
@@ -454,6 +457,12 @@ export async function getRingCounts(
         args: [num(h.rows[0].id), from, to],
       });
       out[m.key] = { count: num(r.rows[0].n), resolved: true };
+      continue;
+    }
+
+    if (m.source === "calendar_social") {
+      const n = external[m.key];
+      out[m.key] = n == null ? { count: 0, resolved: false } : { count: n, resolved: true };
       continue;
     }
 

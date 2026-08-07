@@ -5,7 +5,7 @@ import Link from "next/link";
 import Ring, { SegmentedRing, toneColor, type RingSegment } from "./PillarRing";
 import WorkoutLog, { type Workout } from "./WorkoutLog";
 import type { GoalView, SkillView, PillarKey } from "@/lib/queries";
-import type { PillarRingView, WorkoutKind } from "@/lib/rings";
+import type { MetricRing, PillarRingView, WorkoutKind } from "@/lib/rings";
 
 /** 640 -> "10h 40m". Time is shown as time — an abstract number would invite reading it
  *  as a score, which is the one thing this figure is not. */
@@ -107,20 +107,22 @@ export default function PillarSections({
         const hue = toneColor(pk, colors[pk]);
         const expanded = open === pk;
 
-        // One slice per metric, arc length = weight. Misc and Steps carry weight 0 and get
-        // a fixed token slice from SegmentedRing, so a thing that is tracked-but-not-scored
+        // One slice per metric, arc length = weight. Steps carries weight 0 and gets a
+        // fixed token slice from SegmentedRing, so a thing that is tracked-but-not-scored
         // still appears on the ring it is deliberately excluded from.
         //
         // Before the fetch lands there is one plain empty slice rather than a dashed one:
         // dashes mean "no source exists", and "not loaded yet" is a different statement.
+        const asSegment = (m: MetricRing): RingSegment => ({
+          key: m.key,
+          label: m.label,
+          fill: m.fill,
+          weight: m.weight,
+          ghost: m.state === "ghost",
+        });
+
         const segments: RingSegment[] = ring
-          ? ring.metrics.map((m) => ({
-              key: m.key,
-              label: m.label,
-              fill: m.fill,
-              weight: m.weight,
-              ghost: m.state === "ghost",
-            }))
+          ? ring.metrics.filter((m) => !m.lap).map(asSegment)
           : [
               {
                 key: "pending",
@@ -130,6 +132,12 @@ export default function PillarSections({
                 ghost: false,
               },
             ];
+
+        // Misc, and anything else with a floor of its own that must not move the pillar's
+        // average. Around the donut rather than inside it — see SegmentedRing.
+        const outer: RingSegment[] = ring
+          ? ring.metrics.filter((m) => m.lap).map(asSegment)
+          : [];
 
         // A legend for the donut, and nothing more. Names, never counts: a collapsed pillar
         // is an invitation to open it, not a second place to read the numbers off.
@@ -156,6 +164,7 @@ export default function PillarSections({
               >
                 <SegmentedRing
                   segments={segments}
+                  outer={outer}
                   size={76}
                   stroke={9}
                   tone={pk}

@@ -2,7 +2,6 @@ import { getDb } from "@/lib/db/client";
 import { getCalendarRange } from "@/lib/google";
 import { adherenceFor, buildBlocks, type BlockState } from "@/lib/adherence";
 import {
-  getAdherenceConfig,
   habitTallyFor,
   dayTitlesBetween,
 } from "@/lib/queries";
@@ -68,7 +67,6 @@ export async function GET(req: Request) {
     // Non-negotiables now count toward each day's rate, so the strip and the calendar
     // column need the same tally the Today screen uses. Habit config is read as it is
     // NOW — the schedule is not versioned, which the start stamp bounds the effect of.
-    const cfg = await getAdherenceConfig(db);
     const habitRows = await db.execute(
       "SELECT id, days_mask FROM habits WHERE active=1",
     );
@@ -117,14 +115,7 @@ export async function GET(req: Request) {
       const scheduled = activeHabits.filter((h) => (h.mask & bit) !== 0);
       const ticked = ticksByDate.get(d) ?? new Set<number>();
       const habitsDone = scheduled.filter((h) => ticked.has(h.id)).length;
-      const tally = habitTallyFor(
-        d,
-        scheduled.length,
-        habitsDone,
-        cfg,
-        nowMs,
-        today,
-      );
+      const tally = habitTallyFor(d, scheduled.length, habitsDone);
 
       /**
        * The productivity score — hours SPENT, never results produced. See CLAUDE.md's

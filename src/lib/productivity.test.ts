@@ -130,6 +130,36 @@ test("a negative duration cannot subtract from the day", () => {
   assert.equal(day({ blocks: [red(-120), red(60)] }).points, 100);
 });
 
+// The bar is a PICTURE of the total. If the slabs sum to something else, the picture lies.
+test("the stacked segments always sum to the total", () => {
+  const s = day({
+    blocks: [red(45), uni(25), red(90)],
+    habitsDone: 3,
+    workouts: 2,
+  });
+  assert.equal(
+    s.segments.reduce((t, x) => t + x.points, 0),
+    s.points,
+  );
+});
+
+test("blocked time is merged by colour, not left one slab per event", () => {
+  const s = day({ blocks: [uni(60), uni(60), red(60)] });
+  const time = s.segments.filter((x) => x.kind === "time");
+  assert.equal(time.length, 2, "two colours, two slabs — not three events, three slabs");
+});
+
+test("habits and workouts are their own slabs, and carry no colour", () => {
+  const s = day({ habitsDone: 2, workouts: 1 });
+  const kinds = s.segments.map((x) => x.kind).sort();
+  assert.deepEqual(kinds, ["habits", "workouts"]);
+  for (const x of s.segments) assert.equal(x.colorId, null);
+});
+
+test("an empty day has no slabs at all", () => {
+  assert.deepEqual(day().segments, []);
+});
+
 test("the rate table is well formed", () => {
   const ids = CALENDAR_RATES.map((c) => c.id);
   assert.equal(

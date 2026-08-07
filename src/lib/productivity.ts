@@ -84,6 +84,19 @@ export type ProductivityInput = {
   workouts: number;
 };
 
+/**
+ * One slab of the day's stacked bar.
+ *
+ * The bar is the day's productivity broken into what produced it, so the colour of an
+ * hour on the chart is the colour of that hour in the calendar. `colorId` is null for the
+ * two segments that are not blocked time at all.
+ */
+export type ProductivitySegment = {
+  kind: "time" | "habits" | "workouts";
+  colorId: ColorId;
+  points: number;
+};
+
 export type ProductivityScore = {
   /** UNCAPPED. 1,125 is a valid reading. Always a number, never null. */
   points: number;
@@ -94,6 +107,14 @@ export type ProductivityScore = {
   minutes: number;
   /** Those minutes after the colour rate is applied. */
   weightedMinutes: number;
+  /**
+   * The stack, largest first. Segments always sum to `points`.
+   *
+   * Blocked time is merged BY COLOUR rather than left one-per-event: a day of six Uni
+   * blocks would otherwise draw six identical slabs with hairlines between them, which
+   * reads as detail the chart is not carrying.
+   */
+  segments: ProductivitySegment[];
 };
 
 export function rateFor(colorId: ColorId): number {
@@ -104,6 +125,8 @@ export function rateFor(colorId: ColorId): number {
 export function scoreDay(input: ProductivityInput): ProductivityScore {
   let minutes = 0;
   let weightedMinutes = 0;
+  /** Weighted minutes per colour, so the bar can be split the way the calendar was. */
+  const byColour = new Map<ColorId, number>();
 
   for (const b of input.blocks) {
     if (!COUNTED_STATES.includes(b.state)) continue;
@@ -116,6 +139,7 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     const m = Math.max(0, b.minutes);
     minutes += m;
     weightedMinutes += m * rate;
+    byColour.set(b.colorId, (byColour.get(b.colorId) ?? 0) + m * rate);
   }
 
   // Each part is rounded independently so the three always sum to `points` exactly. Adding
@@ -126,6 +150,25 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
   const habitPoints = input.habitsDone * POINTS_PER_HABIT;
   const workoutPoints = input.workouts * POINTS_PER_WORKOUT;
 
+  // Colour slabs are apportioned out of the ALREADY-ROUNDED timePoints, and the smallest
+  // takes the remainder. Rounding each colour independently would let the stack drift a
+  // point or two from the total it is supposed to be a picture of.
+  const colours = [...byColour.entries()].sort((a, b) => b[1] - a[1]);
+  const segments: ProductivitySegment[] = [];
+  let assigned = 0;
+  colours.forEach(([colorId, wm], i) => {
+    const pts =
+      i === colours.length - 1
+        ? timePoints - assigned
+        : Math.round((wm / weightedMinutes) * timePoints);
+    assigned += pts;
+    if (pts > 0) segments.push({ kind: "time", colorId, points: pts });
+  });
+  if (workoutPoints > 0)
+    segments.push({ kind: "workouts", colorId: null, points: workoutPoints });
+  if (habitPoints > 0)
+    segments.push({ kind: "habits", colorId: null, points: habitPoints });
+
   return {
     points: timePoints + habitPoints + workoutPoints,
     timePoints,
@@ -133,5 +176,6 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     workoutPoints,
     minutes,
     weightedMinutes,
+    segments,
   };
 }

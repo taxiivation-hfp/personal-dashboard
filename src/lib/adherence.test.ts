@@ -2,12 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   adherenceFor,
-  habitsDueOn,
+  BLOCK_SHARE,
+  HABIT_SHARE,
   type Block,
   type BlockState,
 } from "./adherence.ts";
 
-const block = (state: BlockState | null, due = true): Block => ({
+/** A block of `hours`, marked or not. `due` only affects the unmarked call-to-action. */
+const block = (
+  state: BlockState | null,
+  hours = 1,
+  due = true,
+): Block => ({
   event_id: Math.random().toString(36).slice(2),
   title: "b",
   time_start: "09:00",
@@ -16,156 +22,124 @@ const block = (state: BlockState | null, due = true): Block => ({
   state,
   reason: null,
   due,
-  // Adherence is blind to both of these — a block counts as one item whatever colour it
-  // is and however long it runs. They exist for productivity.ts, which is a separate,
-  // quarantined system. Fixed values here so nothing in this file can start depending
-  // on them.
   colorId: null,
-  minutes: 60,
+  minutes: hours * 60,
 });
 
-// 21:00 Melbourne on 2026-08-06 as an epoch — the caller computes this via rfc3339.
-const CUTOFF = Date.parse("2026-08-06T21:00:00+10:00");
-const at = (hhmm: string) => Date.parse(`2026-08-06T${hhmm}:00+10:00`);
+// ---------------------------------------------------------------- the shape of it
 
-// ---------------------------------------------------------------- habitsDueOn
-
-test("a past day is always due — it is over", () => {
-  assert.equal(
-    habitsDueOn("2026-08-05", "2026-08-06", at("08:00"), CUTOFF),
-    true,
-  );
+test("the two shares are 70 and 30", () => {
+  assert.equal(BLOCK_SHARE, 70);
+  assert.equal(HABIT_SHARE, 30);
+  assert.equal(BLOCK_SHARE + HABIT_SHARE, 100);
 });
 
-test("a future day is never due", () => {
-  assert.equal(
-    habitsDueOn("2026-08-07", "2026-08-06", at("23:00"), CUTOFF),
-    false,
-  );
+test("an untouched day is 0, never null", () => {
+  const a = adherenceFor([block(null, 2)], { scheduled: 5, done: 0 });
+  assert.equal(a.pct, 0);
 });
 
-test("today turns due exactly at the cutoff, not before", () => {
-  assert.equal(
-    habitsDueOn("2026-08-06", "2026-08-06", at("20:59"), CUTOFF),
-    false,
-  );
-  assert.equal(
-    habitsDueOn("2026-08-06", "2026-08-06", at("21:00"), CUTOFF),
-    true,
-  );
-  assert.equal(
-    habitsDueOn("2026-08-06", "2026-08-06", at("23:30"), CUTOFF),
-    true,
-  );
-});
-
-// ---------------------------------------------------------------- blocks only
-
-test("omitting habits leaves the old behaviour untouched", () => {
-  const a = adherenceFor([block("adhered"), block("drifted")]);
-  assert.equal(a.pct, 50);
-  assert.equal(a.due, 2);
-  assert.equal(a.habitsPending, 0);
-});
-
-test("nothing due at all is null, never 0", () => {
-  assert.equal(adherenceFor([block(null, false)]).pct, null);
-  assert.equal(adherenceFor([]).pct, null);
-});
-
-// ---------------------------------------------------------------- before the cutoff
-
-test("before the cutoff, unticked habits are in NEITHER numerator nor denominator", () => {
-  // 2 blocks (1 adhered) + 4 scheduled habits, 0 ticked -> still just the blocks.
-  const a = adherenceFor([block("adhered"), block("skipped")], {
-    due: false,
-    scheduled: 4,
-    done: 0,
+test("everything done is exactly 100", () => {
+  const a = adherenceFor([block("adhered", 3), block("adhered", 5)], {
+    scheduled: 5,
+    done: 5,
   });
-  assert.equal(a.due, 2);
-  assert.equal(a.pct, 50);
-  assert.equal(a.habitsPending, 4);
-});
-
-test("before the cutoff, a ticked habit counts in both — ticking must do something", () => {
-  const a = adherenceFor([block("adhered"), block("skipped")], {
-    due: false,
-    scheduled: 4,
-    done: 2,
-  });
-  assert.equal(a.due, 4); // 2 blocks + 2 ticked
-  assert.equal(a.adhered, 3); // 1 block + 2 habits
-  assert.equal(a.pct, 75);
-  assert.equal(a.habitsPending, 2);
-});
-
-test("the optimistic morning: one tick, nothing else due, reads 100", () => {
-  const a = adherenceFor([], { due: false, scheduled: 4, done: 1 });
-  assert.equal(a.pct, 100);
-  assert.equal(a.habitsPending, 3);
-});
-
-test("no blocks and no ticks before the cutoff is still null, not 0", () => {
-  const a = adherenceFor([], { due: false, scheduled: 4, done: 0 });
-  assert.equal(a.pct, null);
-  assert.equal(a.habitsPending, 4);
-});
-
-// ---------------------------------------------------------------- after the cutoff
-
-test("after the cutoff every scheduled habit joins the denominator", () => {
-  const a = adherenceFor([block("adhered"), block("skipped")], {
-    due: true,
-    scheduled: 4,
-    done: 2,
-  });
-  assert.equal(a.due, 6);
-  assert.equal(a.adhered, 3);
-  assert.equal(a.pct, 50);
-  assert.equal(a.unmarked, 2); // the two unticked habits
-  assert.equal(a.habitsPending, 0);
-});
-
-test("the number SETTLES DOWNWARD at the cutoff — same day, same ticks", () => {
-  const before = adherenceFor([block("adhered")], {
-    due: false,
-    scheduled: 4,
-    done: 1,
-  });
-  const after = adherenceFor([block("adhered")], {
-    due: true,
-    scheduled: 4,
-    done: 1,
-  });
-  assert.equal(before.pct, 100);
-  assert.equal(after.pct, 40);
-  assert.ok(after.pct! < before.pct!, "the cutoff must not inflate the day");
-});
-
-test("one item is one item — a habit weighs the same as a block", () => {
-  const a = adherenceFor([block("adhered")], {
-    due: true,
-    scheduled: 1,
-    done: 0,
-  });
-  assert.equal(a.due, 2);
-  assert.equal(a.pct, 50);
-});
-
-// ---------------------------------------------------------------- robustness
-
-test("done above scheduled cannot push the rate over 100", () => {
-  const a = adherenceFor([], { due: true, scheduled: 2, done: 5 });
-  assert.equal(a.adhered, 2);
   assert.equal(a.pct, 100);
 });
 
-test("zero scheduled habits behaves exactly like blocks only", () => {
-  const a = adherenceFor([block("adhered"), block("drifted")], {
-    due: true,
-    scheduled: 0,
-    done: 0,
+// ---------------------------------------------------------------- blocked hours
+
+test("hours, not items — a 3h block outweighs a 1h block", () => {
+  // 4 blocked hours in the day; adhering the 3h one earns 3/4 of the 70.
+  const long = adherenceFor([block("adhered", 3), block(null, 1)]);
+  const short = adherenceFor([block(null, 3), block("adhered", 1)]);
+  assert.equal(long.pct, 53); // 52.5 rounds
+  assert.equal(short.pct, 18); // 17.5 rounds
+  assert.ok(long.pct > short.pct, "the longer block is worth more");
+});
+
+test("half the blocked hours is half the block share", () => {
+  const a = adherenceFor([block("adhered", 2), block(null, 2)]);
+  assert.equal(a.pct, 35);
+  assert.equal(a.adheredHours, 2);
+  assert.equal(a.totalHours, 4);
+});
+
+test("the denominator is the WHOLE day, not the elapsed part — that is what makes it climb", () => {
+  // A 2h block worked and a 6h block still ahead: 2/8 of 70, not 100% of what has passed.
+  const a = adherenceFor([block("adhered", 2), block(null, 6, false)]);
+  assert.equal(a.pct, 18); // 17.5 rounds
+});
+
+test("drift and skip do not subtract, they simply do not add", () => {
+  const drifted = adherenceFor([block("adhered", 1), block("drifted", 1)]);
+  const unmarked = adherenceFor([block("adhered", 1), block(null, 1)]);
+  assert.equal(drifted.pct, 35);
+  assert.equal(unmarked.pct, 35);
+  assert.equal(drifted.pct, unmarked.pct, "drifting costs nothing the clock did not already cost");
+});
+
+test("marking a block can only ever raise the figure", () => {
+  const before = adherenceFor([block("adhered", 1), block(null, 1)]).pct;
+  const after = adherenceFor([block("adhered", 1), block("adhered", 1)]).pct;
+  assert.ok(after > before);
+});
+
+test("dismissed blocks leave both sides of the ratio", () => {
+  const a = adherenceFor([block("adhered", 1), block("dismissed", 9)]);
+  assert.equal(a.totalHours, 1);
+  assert.equal(a.pct, 70);
+});
+
+test("a block with an unknown duration cannot be earned or held against you", () => {
+  const unknown = { ...block(null, 1), minutes: null };
+  const a = adherenceFor([block("adhered", 1), unknown]);
+  assert.equal(a.totalHours, 1);
+  assert.equal(a.pct, 70);
+});
+
+// ---------------------------------------------------------------- non-negotiables
+
+test("five non-negotiables are worth six each", () => {
+  const one = adherenceFor([], { scheduled: 5, done: 1 });
+  assert.equal(one.pct, 6);
+  assert.equal(adherenceFor([], { scheduled: 5, done: 3 }).pct, 18);
+  assert.equal(adherenceFor([], { scheduled: 5, done: 5 }).pct, 30);
+});
+
+test("ticking one adds immediately — there is no cutoff to wait for", () => {
+  const a = adherenceFor([block(null, 4)], { scheduled: 5, done: 1 });
+  assert.equal(a.pct, 6);
+});
+
+test("done above scheduled cannot push past the share", () => {
+  assert.equal(adherenceFor([], { scheduled: 2, done: 9 }).pct, 30);
+});
+
+test("no habits at all leaves only the block share reachable", () => {
+  assert.equal(adherenceFor([block("adhered", 1)]).pct, 70);
+  assert.equal(adherenceFor([block("adhered", 1)], null).pct, 70);
+});
+
+// ---------------------------------------------------------------- the two together
+
+test("the halves compose", () => {
+  // Half the hours (35) plus three of five non-negotiables (18).
+  const a = adherenceFor([block("adhered", 1), block(null, 1)], {
+    scheduled: 5,
+    done: 3,
   });
-  assert.equal(a.pct, 50);
-  assert.equal(a.due, 2);
+  assert.equal(a.pct, 53);
+});
+
+test("the counts are still reported for the call to action", () => {
+  const a = adherenceFor(
+    [block("adhered", 1), block("drifted", 1), block(null, 1), block(null, 1, false)],
+    { scheduled: 4, done: 2 },
+  );
+  assert.equal(a.adhered, 1);
+  assert.equal(a.drifted, 1);
+  assert.equal(a.unmarked, 1, "only a block whose time has passed is a call to action");
+  assert.equal(a.habitsDone, 2);
+  assert.equal(a.habitsScheduled, 4);
 });

@@ -34,9 +34,9 @@ export type Workout = {
 type PastSession = Workout & { date: string };
 
 const PLACEHOLDER: Record<WorkoutKind, string> = {
-  strength: "45kg OHP - 6 reps\n45kg OHP - 6 reps\n70kg Chest Flies - 6 reps",
-  cardio: "5km, 27:40\nzone 2, felt easy",
-  misc: "Bouldering — 3 x V4\nHandstand holds",
+  strength: "Beat the Logbook. Stimulate, Don't Annihilate.",
+  cardio: "Pace yourself. Focus on your breathing, focus on your form.",
+  misc: "Let's have some fun.",
 };
 
 /** Noon, never midnight: a bare ISO date parses as UTC and lands on the day before

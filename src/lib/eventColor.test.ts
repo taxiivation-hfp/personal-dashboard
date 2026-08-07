@@ -88,13 +88,13 @@ test("a near-grey source projects to a true grey", () => {
   assert.equal(g, b);
 });
 
-test("absence is the default, never a twelfth state", () => {
-  assert.equal(
-    projectedColour(null),
-    null,
-    "the calendar default gets no stroke",
-  );
-  assert.equal(projectedColour("99"), null, "an unknown id gets no stroke");
+test("the calendar default wears Peacock, because both mean Uni", () => {
+  assert.equal(projectedColour(null), GOOGLE_PROJECTED["7"]);
+});
+
+test("a colour the table has not been taught gets no stroke", () => {
+  // The honest answer: a hue the app cannot name should not be given one.
+  assert.equal(projectedColour("99"), null);
   assert.equal(projectedColour(""), null);
 });
 

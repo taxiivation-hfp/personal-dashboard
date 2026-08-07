@@ -43,12 +43,15 @@ export const GOOGLE_PROJECTED: Record<string, string> = {
 };
 
 /**
- * The stroke colour for an event, or null when it has none.
+ * The stroke colour for an event.
  *
- * null for the calendar default (Google omits colorId for those) and for anything
- * unrecognised. Absence is the default, never a twelfth state — an event with no colour
- * simply gets no rule, which is also what happens if Google ever adds a colour this table
- * has not been taught.
+ * The calendar DEFAULT resolves to Peacock's projection. Both mean Uni — an event you
+ * scheduled without thinking about its colour is the same kind of thing as one you
+ * deliberately made Peacock — and giving the commonest case no mark at all left most of
+ * the calendar and most of the productivity bar uncoloured.
+ *
+ * null only for a colour this table has not been taught, which is the honest answer: a
+ * hue the app cannot name should not be given one.
  */
 export const projectedColour = (colorId: string | null): string | null =>
-  colorId == null ? null : (GOOGLE_PROJECTED[colorId] ?? null);
+  colorId == null ? GOOGLE_PROJECTED["7"] : (GOOGLE_PROJECTED[colorId] ?? null);

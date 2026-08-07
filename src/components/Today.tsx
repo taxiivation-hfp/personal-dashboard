@@ -38,6 +38,9 @@ type StripDay = {
 // the fold. On mobile these are inert — the page scrolls as one, as it should.
 const colScroll = "lg:h-full lg:overflow-y-auto lg:[scrollbar-gutter:stable]";
 
+/** Hours to one decimal, with no trailing ".0" — "3.5 of 8h" reads; "3.50 of 8.00h" does not. */
+const round1 = (n: number) => String(Math.round(n * 10) / 10);
+
 export default function Today({
   initial,
   goals: initialGoals,
@@ -259,42 +262,29 @@ export default function Today({
           is the answer and the list is the work. */}
       <section className="flex flex-wrap items-start gap-x-9 gap-y-7">
         <div className="shrink-0">
-          {/* `a.pct == null` passes straight through: Ring guards before any arithmetic, so
-              a morning with nothing due draws a neutral track and "—", never a 0% ring. NOT
-              dashed — dashes mean "no source", and nothing-due-yet is emphatically not that. */}
-          <Ring
-            fill={a.pct == null ? null : a.pct / 100}
-            size={176}
-            stroke={8}
-            tone="accent"
-          >
+          {/* The figure CLIMBS from zero: 70 parts blocked hours, 30 parts non-negotiables.
+              It is always a number now — a morning that has earned nothing reads 0, which is
+              a true statement, where the old null-and-dash meant "nothing has come due" and
+              had to be explained every time. Nothing here ever subtracts. */}
+          <Ring fill={a.pct / 100} size={176} stroke={8} tone="accent">
             <div className="flex items-end">
-              <span className="stat-hero text-hero">
-                {a.pct == null ? "—" : a.pct}
-              </span>
-              {a.pct != null && (
-                <span className="stat-hero pb-2 text-body text-[var(--color-muted)]">
-                  %
-                </span>
-              )}
+              <span className="stat-hero text-hero">{a.pct}</span>
+              <span className="stat-hero pb-2 text-body text-[var(--color-muted)]">%</span>
             </div>
           </Ring>
           <p className="mt-3 max-w-[11rem] text-micro text-[var(--color-muted)]">
-            {a.pct == null
-              ? "Nothing due yet today."
-              : `adhered · ${a.adhered} of ${a.due} so far`}
-            {a.unmarked > 0 && (
-              <span className="text-[var(--color-ink)]">
-                {" "}
-                · {a.unmarked} to mark
-              </span>
+            {/* What the figure is MADE of, so the number is never a black box. Hours to one
+                decimal — "3.5 of 8h" is the shape of a day; "3.4999" is noise. */}
+            {round1(a.adheredHours)} of {round1(a.totalHours)}h blocked
+            {a.habitsScheduled > 0 && (
+              <>
+                {" · "}
+                {a.habitsDone} of {a.habitsScheduled} ticked
+              </>
             )}
-            {/* Say what is NOT yet in the denominator. The rate moves at the cutoff when
-                these join it, and an unexplained drop at 9pm reads as a bug. */}
-            {a.habitsPending > 0 && (
-              <span className="mt-1 block">
-                {a.habitsPending} non-negotiable
-                {a.habitsPending === 1 ? "" : "s"} not due yet
+            {a.unmarked > 0 && (
+              <span className="mt-1 block text-[var(--color-ink)]">
+                {a.unmarked} to mark
               </span>
             )}
           </p>

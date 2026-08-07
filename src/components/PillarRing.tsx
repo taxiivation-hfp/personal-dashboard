@@ -193,6 +193,7 @@ const GAP = 0.012;
  */
 export function SegmentedRing({
   segments,
+  outer = [],
   size,
   stroke,
   tone,
@@ -200,16 +201,35 @@ export function SegmentedRing({
   children,
 }: {
   segments: RingSegment[];
+  /**
+   * Metrics drawn as a thin LAP OUTSIDE the donut instead of a slice of it.
+   *
+   * This is where a metric goes when it has a floor of its own but must never move the
+   * pillar's average — Misc, at one session a fortnight. As a slice it would either take
+   * space from the metrics that do count, or sit there at weight 0 looking like a slice
+   * that had been switched off. As an outer lap it reads as an extra, which is exactly
+   * what it is.
+   *
+   * Translucent rather than glowing: a glow is a shadow, and the count in this app is
+   * zero.
+   */
+  outer?: RingSegment[];
   size: number;
   stroke: number;
   tone: PillarKey;
   color?: string | null;
   children?: ReactNode;
 }) {
-  const r = (size - stroke) / 2;
   const cx = size / 2;
   const cy = size / 2;
   const hue = toneColor(tone, color);
+
+  // The outer lap is drawn INSIDE `size`, with the donut inset to make room, so a pillar
+  // with a lap and one without still occupy the same box and the column stays aligned.
+  const lapStroke = outer.length ? Math.max(1.5, stroke * 0.3) : 0;
+  const lapGap = outer.length ? 3 : 0;
+  const rLap = (size - lapStroke) / 2;
+  const r = (size - stroke) / 2 - lapStroke - lapGap;
 
   // Scored slices split whatever the unscored ones leave, in proportion to their weight.
   const unscored = segments.filter((s) => s.weight <= 0);
@@ -217,10 +237,10 @@ export function SegmentedRing({
   const totalWeight = scored.reduce((sum, s) => sum + s.weight, 0);
   const scoredShare = Math.max(0, 1 - unscored.length * UNSCORED_SHARE);
 
-  /** A point on the ring. Angles run from twelve o'clock, clockwise, like a clock face. */
-  const at = (turn: number) => {
+  /** A point on a ring of radius `rad`. Angles run from twelve o'clock, clockwise. */
+  const at = (turn: number, rad: number) => {
     const a = turn * 2 * Math.PI - Math.PI / 2;
-    return [cx + r * Math.cos(a), cy + r * Math.sin(a)] as const;
+    return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)] as const;
   };
 
   /**
@@ -231,13 +251,13 @@ export function SegmentedRing({
    * fighting over the same property. Paths sidestep it entirely and are exact at any
    * angle, which matters when several slices have to butt up against each other.
    */
-  const arcPath = (from: number, to: number) => {
+  const arcPath = (from: number, to: number, rad: number) => {
     if (to - from <= 0) return "";
     // A full turn cannot be expressed as one arc — its start and end points coincide.
     const span = Math.min(to - from, 0.9999);
-    const [x0, y0] = at(from);
-    const [x1, y1] = at(from + span);
-    return `M ${x0} ${y0} A ${r} ${r} 0 ${span > 0.5 ? 1 : 0} 1 ${x1} ${y1}`;
+    const [x0, y0] = at(from, rad);
+    const [x1, y1] = at(from + span, rad);
+    return `M ${x0} ${y0} A ${rad} ${rad} 0 ${span > 0.5 ? 1 : 0} 1 ${x1} ${y1}`;
   };
 
   let cursor = 0;
@@ -251,8 +271,16 @@ export function SegmentedRing({
     // The gap comes off the END of each slice so the arcs never touch.
     const span = Math.max(0, share - GAP);
     // null fill never enters the arithmetic — the same guard the single ring uses.
-    const fillSpan =
-      s.fill == null ? 0 : Math.min(1, Math.max(0, s.fill)) * span;
+    const fillSpan = s.fill == null ? 0 : Math.min(1, Math.max(0, s.fill)) * span;
+    return { ...s, start, span, fillSpan };
+  });
+
+  // Laps share the whole circle between them rather than being packed after the slices —
+  // an outer ring that stopped a third of the way round would read as a fourth slice.
+  const laps = outer.map((s, i) => {
+    const span = (1 - GAP * outer.length) / Math.max(1, outer.length);
+    const start = i * (span + GAP);
+    const fillSpan = s.fill == null ? 0 : Math.min(1, Math.max(0, s.fill)) * span;
     return { ...s, start, span, fillSpan };
   });
 
@@ -261,18 +289,13 @@ export function SegmentedRing({
       className="relative inline-flex shrink-0 items-center justify-center"
       style={{ width: size, height: size }}
     >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        aria-hidden
-      >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
         {slices.map((s) => (
           <g key={s.key}>
             {/* The slice's own track. Always drawn, so an empty segment reads as a segment
                 that is empty rather than as an absence. */}
             <path
-              d={arcPath(s.start, s.start + s.span)}
+              d={arcPath(s.start, s.start + s.span, r)}
               fill="none"
               stroke="var(--color-line-strong)"
               strokeWidth={stroke}
@@ -285,13 +308,37 @@ export function SegmentedRing({
             />
             {s.fillSpan > 0 && (
               <path
-                d={arcPath(s.start, s.start + s.fillSpan)}
+                d={arcPath(s.start, s.start + s.fillSpan, r)}
                 fill="none"
                 stroke={hue}
                 strokeWidth={stroke}
                 // BUTT, never round: round caps add half a stroke width at each end, which
                 // would make the smallest non-zero fills read as half again their true
                 // value AND spill into the neighbouring slice.
+                strokeLinecap="butt"
+              />
+            )}
+          </g>
+        ))}
+
+        {/* The outer laps. Thinner and translucent, so they read as an extra around the
+            pillar rather than a part of it — which is exactly their standing in the maths,
+            where their weight is zero. */}
+        {laps.map((s) => (
+          <g key={`lap-${s.key}`} style={{ opacity: 0.55 }}>
+            <path
+              d={arcPath(s.start, s.start + s.span, rLap)}
+              fill="none"
+              stroke="var(--color-line-strong)"
+              strokeWidth={lapStroke}
+              strokeLinecap="butt"
+            />
+            {s.fillSpan > 0 && (
+              <path
+                d={arcPath(s.start, s.start + s.fillSpan, rLap)}
+                fill="none"
+                stroke={hue}
+                strokeWidth={lapStroke}
                 strokeLinecap="butt"
               />
             )}
