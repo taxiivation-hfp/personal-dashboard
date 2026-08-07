@@ -357,46 +357,175 @@ export default function Dashboard({
             </div>
           </section>
 
-          {/* EVERY METRIC, spelled out. The donuts show the shape; this shows the numbers,
-              because "3 of 8" is a thing you can act on and an arc is not. */}
-          <section className="mt-10">
-            <div className="section-head">
-              <h2 className="text-small font-semibold">Every metric</h2>
-              <span className="text-micro text-[var(--color-muted)]">
-                the bar stops at its minimum — the count never does
-              </span>
+          {/* THE BOARD.
+
+              Three lists that answer three different questions — what the fortnight
+              counted, what is in flight, what is finished — set side by side rather than
+              stacked. Stacked they were a report you scroll; side by side they are a board
+              you read, which is what the owner asked this screen to be.
+
+              One column below lg, in this order, because on a phone the question you open
+              this for is almost always the first one. */}
+          <div className="mt-10 grid gap-x-8 gap-y-10 lg:grid-cols-2">
+            <div>
+            {/* EVERY METRIC, spelled out. The donuts show the shape; this shows the numbers,
+                because "3 of 8" is a thing you can act on and an arc is not. */}
+            <section className="mt-10">
+              <div className="section-head">
+                <h2 className="text-small font-semibold">Every metric</h2>
+                <span className="text-micro text-[var(--color-muted)]">
+                  the bar stops at its minimum — the count never does
+                </span>
+              </div>
+              <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                {(rings ?? []).flatMap((p) =>
+                  p.metrics.map((m) => (
+                    <li
+                      key={`${p.pillar}-${m.key}`}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5"
+                    >
+                      <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
+                        {PILLAR_NAME[p.pillar]}
+                      </span>
+                      <span className="w-24 shrink-0 text-small">{m.label}</span>
+                      <span className="order-last w-full text-micro tabular-nums text-[var(--color-muted)] sm:order-none sm:w-auto sm:flex-1">
+                        {m.fact}
+                        {m.window ? ` · ${m.window}` : ""}
+                      </span>
+                      <span className="h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
+                        {m.fill != null && m.fill > 0 && (
+                          <span
+                            className="motion-data block h-full w-full origin-left rounded-full"
+                            style={{
+                              transform: `scaleX(${m.fill})`,
+                              background: toneColor(p.pillar, colors[p.pillar]),
+                            }}
+                          />
+                        )}
+                      </span>
+                    </li>
+                  )),
+                )}
+              </ul>
+            </section>
+
             </div>
-            <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-              {(rings ?? []).flatMap((p) =>
-                p.metrics.map((m) => (
-                  <li
-                    key={`${p.pillar}-${m.key}`}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5"
+            <div className="flex flex-col gap-10">
+            {/* WHAT IS NEXT. */}
+            <section className="mt-10">
+              <div className="section-head">
+                <h2 className="text-small font-semibold">In flight</h2>
+                <span className="text-micro text-[var(--color-muted)]">
+                  and the next step in each
+                </span>
+              </div>
+              {active.length === 0 ? (
+                <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
+                  No goals in flight.{" "}
+                  <a
+                    href="/goals"
+                    className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
                   >
-                    <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
-                      {PILLAR_NAME[p.pillar]}
-                    </span>
-                    <span className="w-24 shrink-0 text-small">{m.label}</span>
-                    <span className="order-last w-full text-micro tabular-nums text-[var(--color-muted)] sm:order-none sm:w-auto sm:flex-1">
-                      {m.fact}
-                      {m.window ? ` · ${m.window}` : ""}
-                    </span>
-                    <span className="h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
-                      {m.fill != null && m.fill > 0 && (
-                        <span
-                          className="motion-data block h-full w-full origin-left rounded-full"
-                          style={{
-                            transform: `scaleX(${m.fill})`,
-                            background: toneColor(p.pillar, colors[p.pillar]),
-                          }}
-                        />
-                      )}
-                    </span>
-                  </li>
-                )),
+                    Set one
+                  </a>{" "}
+                  and its subgoals become the plan.
+                </p>
+              ) : (
+                <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                  {active.map(({ g, next }) => (
+                    <li key={g.id} className="py-3">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
+                          {PILLAR_NAME[g.pillar]}
+                        </span>
+                        <span className="min-w-0 flex-1 font-serif text-body">
+                          {g.title}
+                        </span>
+                        <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                          {Math.round(g.progress * 100)}%
+                        </span>
+                        <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
+                          {g.progress > 0 && (
+                            <span
+                              className="motion-data block h-full w-full origin-left rounded-full bg-[var(--color-accent)]"
+                              style={{ transform: `scaleX(${g.progress})` }}
+                            />
+                          )}
+                        </span>
+                      </div>
+                      {/* The next step, indented to the title. Named plainly — "next" is the
+                          word that turns a percentage into something you can act on this
+                          afternoon. */}
+                      <p className="mt-1 pl-[5.75rem] text-micro text-[var(--color-muted)]">
+                        {next ? (
+                          <>
+                            next · <span className="text-[var(--color-ink)]">{next.title}</span>
+                          </>
+                        ) : g.subgoals.length === 0 ? (
+                          "no subgoals yet — add a few and this becomes a plan"
+                        ) : (
+                          "every step ticked · mark it done when you agree"
+                        )}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </ul>
-          </section>
+            </section>
+
+            {/* WHAT HAS BEEN ACHIEVED.
+
+                A finished goal used to disappear: every screen filters status !== 'done', so
+                the moment you completed something it left the app entirely. That is exactly
+                backwards for someone who wants a clear view of what they have achieved and
+                what is next — the achievements were the one thing being thrown away.
+
+                Newest first, with the date it was finished. No count, no rate, no "3 this
+                quarter": a list of things you have done is not a productivity figure, and
+                turning it into one is how an archive becomes a quota. */}
+            <section className="mt-10">
+              <div className="section-head">
+                <h2 className="text-small font-semibold">Achieved</h2>
+                <span className="text-micro text-[var(--color-muted)]">
+                  goals you have marked done
+                </span>
+              </div>
+              {done.length === 0 ? (
+                <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
+                  Nothing marked done yet. A goal moves here when you say it is
+                  finished — never automatically at 100%, because deciding a thing
+                  is done is the owner&apos;s call and not a threshold&apos;s.
+                </p>
+              ) : (
+                <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                  {done.map((g) => (
+                    <li
+                      key={g.id}
+                      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
+                    >
+                      <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
+                        {PILLAR_NAME[g.pillar]}
+                      </span>
+                      <span className="min-w-0 flex-1 font-serif text-body">
+                        {g.title}
+                      </span>
+                      <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                        {g.completedAt
+                          ? new Date(g.completedAt).toLocaleDateString("en-AU", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "date not recorded"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            </div>
+          </div>
 
           {loading ? (
             <p className="py-16 text-small text-[var(--color-muted)]">
@@ -458,119 +587,6 @@ export default function Dashboard({
               </Panel>
             </div>
           )}
-
-          {/* WHAT IS NEXT. */}
-          <section className="mt-10">
-            <div className="section-head">
-              <h2 className="text-small font-semibold">In flight</h2>
-              <span className="text-micro text-[var(--color-muted)]">
-                and the next step in each
-              </span>
-            </div>
-            {active.length === 0 ? (
-              <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                No goals in flight.{" "}
-                <a
-                  href="/goals"
-                  className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
-                >
-                  Set one
-                </a>{" "}
-                and its subgoals become the plan.
-              </p>
-            ) : (
-              <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-                {active.map(({ g, next }) => (
-                  <li key={g.id} className="py-3">
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
-                        {PILLAR_NAME[g.pillar]}
-                      </span>
-                      <span className="min-w-0 flex-1 font-serif text-body">
-                        {g.title}
-                      </span>
-                      <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
-                        {Math.round(g.progress * 100)}%
-                      </span>
-                      <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
-                        {g.progress > 0 && (
-                          <span
-                            className="motion-data block h-full w-full origin-left rounded-full bg-[var(--color-accent)]"
-                            style={{ transform: `scaleX(${g.progress})` }}
-                          />
-                        )}
-                      </span>
-                    </div>
-                    {/* The next step, indented to the title. Named plainly — "next" is the
-                        word that turns a percentage into something you can act on this
-                        afternoon. */}
-                    <p className="mt-1 pl-[5.75rem] text-micro text-[var(--color-muted)]">
-                      {next ? (
-                        <>
-                          next · <span className="text-[var(--color-ink)]">{next.title}</span>
-                        </>
-                      ) : g.subgoals.length === 0 ? (
-                        "no subgoals yet — add a few and this becomes a plan"
-                      ) : (
-                        "every step ticked · mark it done when you agree"
-                      )}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* WHAT HAS BEEN ACHIEVED.
-
-              A finished goal used to disappear: every screen filters status !== 'done', so
-              the moment you completed something it left the app entirely. That is exactly
-              backwards for someone who wants a clear view of what they have achieved and
-              what is next — the achievements were the one thing being thrown away.
-
-              Newest first, with the date it was finished. No count, no rate, no "3 this
-              quarter": a list of things you have done is not a productivity figure, and
-              turning it into one is how an archive becomes a quota. */}
-          <section className="mt-10">
-            <div className="section-head">
-              <h2 className="text-small font-semibold">Achieved</h2>
-              <span className="text-micro text-[var(--color-muted)]">
-                goals you have marked done
-              </span>
-            </div>
-            {done.length === 0 ? (
-              <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                Nothing marked done yet. A goal moves here when you say it is
-                finished — never automatically at 100%, because deciding a thing
-                is done is the owner&apos;s call and not a threshold&apos;s.
-              </p>
-            ) : (
-              <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-                {done.map((g) => (
-                  <li
-                    key={g.id}
-                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
-                  >
-                    <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
-                      {PILLAR_NAME[g.pillar]}
-                    </span>
-                    <span className="min-w-0 flex-1 font-serif text-body">
-                      {g.title}
-                    </span>
-                    <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
-                      {g.completedAt
-                        ? new Date(g.completedAt).toLocaleDateString("en-AU", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "date not recorded"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
 
           <p className="mt-10 max-w-[62ch] border-t border-[var(--color-line)] pt-4 text-micro leading-relaxed text-[var(--color-muted)]">
             {daysLogged} of the last {days} days have something marked on them.
