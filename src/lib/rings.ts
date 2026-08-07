@@ -194,7 +194,10 @@ export const METRICS: Metric[] = [
   {
     key: "social_events",
     pillar: "social_capital",
-    label: "Social events",
+    // "Events", not "Social events": the label is printed at its own arc on the Social
+    // donut, where the pillar name is already overhead and the longer form overran the box
+    // by 16px. Shorter is also just better here — the context is never in doubt.
+    label: "Events",
     source: "calendar_social",
     // Graphite in the calendar means a social event — Church, a night out. Counted from
     // the calendar rather than ticked, because they are already scheduled there and a
@@ -208,7 +211,7 @@ export const METRICS: Metric[] = [
   {
     key: "skills",
     pillar: "portfolio",
-    label: "Skill sessions",
+    label: "Skills",
     source: "skill_session",
     required: 4, // 4 sessions / 14 days
     // SESSIONS, not days, by the owner's ruling: several of these (ice skating,

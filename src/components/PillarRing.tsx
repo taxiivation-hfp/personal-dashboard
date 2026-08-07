@@ -249,7 +249,24 @@ export type RingSegment = {
   weight: number;
   /** No writer for this source yet — drawn dashed and never filled. */
   ghost: boolean;
+  /** The count, short enough to sit beside the arc: "3/8", or "—" for a ghost. */
+  short?: string;
 };
+
+/**
+ * How far outside the stroke the labels sit, and how much room the box gives them.
+ *
+ * The donut was the app's least legible object: two to four arcs, all the SAME HUE by rule,
+ * with nothing saying which was which. A colour legend cannot fix that — there is only one
+ * colour — so the only thing that can carry the mapping is POSITION, and the only honest way
+ * to use position is to put the name at the arc.
+ */
+const LABEL_GAP = 11;
+/** Room for the longest label either side. Measured, not guessed: "Social events" renders
+ *  at 86px and "Outreach" escaped a 54px pad by exactly one pixel. */
+const LABEL_PAD = 60;
+/** Below this a label would be bigger than the thing it labels. */
+const LABEL_MIN_SIZE = 120;
 
 /** Fraction of the circle an unweighted metric gets, so "tracked but not scored" and
  *  "no source yet" still appear instead of silently vanishing at weight 0. */
@@ -366,6 +383,39 @@ export function SegmentedRing({
 
   // Laps share the whole circle between them rather than being packed after the slices —
   // an outer ring that stopped a third of the way round would read as a fourth slice.
+  /**
+   * A label per slice, at the arc's own midpoint.
+   *
+   * Anchored by which side of the circle it is on — text growing left from a right-hand arc
+   * would run back across the donut. The dead band around the vertical (|cos| < 0.35) is
+   * centred instead, because a label at twelve o'clock has no side to grow from.
+   */
+  const labelled = size >= LABEL_MIN_SIZE;
+  const rLabel = r + stroke / 2 + LABEL_GAP;
+  const labels = !labelled
+    ? []
+    : slices.map((s) => {
+        const turn = s.start + s.span / 2;
+        const a = turn * 2 * Math.PI - Math.PI / 2;
+        const [cosA, sinA] = [Math.cos(a), Math.sin(a)];
+        return {
+          key: s.key,
+          label: s.label,
+          short: s.short,
+          ghost: s.ghost,
+          x: cx + rLabel * cosA,
+          y: cy + rLabel * sinA,
+          anchor: (cosA > 0.35
+            ? "start"
+            : cosA < -0.35
+              ? "end"
+              : "middle") as "start" | "end" | "middle",
+          // Above the midline the pair sits above the point; below it, below. Otherwise a
+          // label at six o'clock would overlap the arc it belongs to.
+          above: sinA < -0.35,
+        };
+      });
+
   const laps = outer.map((s, i) => {
     const span = (1 - GAP * outer.length) / Math.max(1, outer.length);
     const start = i * (span + GAP);
@@ -373,12 +423,23 @@ export function SegmentedRing({
     return { ...s, start, span, fillSpan };
   });
 
+  // The padded box. Geometry is unchanged — the viewBox simply starts negative, so every
+  // cx/cy/r below still means what it meant before the labels existed.
+  const pad = labelled ? LABEL_PAD : 0;
+  const box = size + pad * 2;
+
   return (
     <div
       className="relative inline-flex shrink-0 items-center justify-center"
-      style={{ width: size, height: size }}
+      style={{ width: box, maxWidth: "100%" }}
     >
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+      <svg
+        // Scales as one object in a narrow column: the arcs, the gaps and the type all shrink
+        // together, so the chart stays itself rather than reflowing into a different chart.
+        width="100%"
+        viewBox={`${-pad} ${-pad} ${box} ${box}`}
+        aria-hidden
+      >
         <LitTrack id={trackId} size={size} />
         {slices.map((s) => (
           <g key={s.key}>
@@ -447,6 +508,35 @@ export function SegmentedRing({
               />
             )}
           </g>
+        ))}
+        {/* The names, and the reason the donut is readable at all. Drawn LAST so they sit
+            over the arcs at the few angles where a long label reaches back across one. */}
+        {labels.map((l) => (
+          <text
+            key={`t-${l.key}`}
+            x={l.x}
+            y={l.y}
+            textAnchor={l.anchor}
+            fontSize={11.5}
+            style={{ fill: "var(--color-ink)" }}
+          >
+            <tspan x={l.x} dy={l.above ? -4 : 4}>
+              {l.label}
+            </tspan>
+            {l.short && (
+              <tspan
+                x={l.x}
+                dy={13}
+                fontSize={11}
+                style={{
+                  fill: "var(--color-muted)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {l.short}
+              </tspan>
+            )}
+          </text>
         ))}
       </svg>
       {children && (

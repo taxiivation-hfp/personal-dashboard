@@ -21,3 +21,6 @@ next-env.d.ts
 
 # Scratch files from contrast/geometry checks. Never part of the app.
 .tmp-*
+
+# Production builds go here so they never collide with the dev server.
+.next-build/

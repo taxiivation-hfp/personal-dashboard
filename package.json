@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build.mjs",
     "test": "node --test \"src/**/*.test.ts\"",
     "start": "node scripts/preflight.mjs && next start",
     "db:migrate": "node scripts/migrate.mjs",

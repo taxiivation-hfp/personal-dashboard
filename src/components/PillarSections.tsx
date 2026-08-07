@@ -164,6 +164,15 @@ export default function PillarSections({
           fill: m.fill,
           weight: m.weight,
           ghost: m.state === "ghost",
+          // The count, beside its own arc. This is what the donut was missing: the arcs are
+          // all one hue by rule, so nothing but position could ever say which was which, and
+          // position says nothing until something is written at it.
+          short:
+            m.state === "ghost"
+              ? "—"
+              : m.required != null
+                ? `${m.count}/${m.required}`
+                : String(m.count),
         });
 
         const segments: RingSegment[] = ring
