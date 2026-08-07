@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Dashboard from "./Dashboard";
 
 /**
@@ -35,6 +35,10 @@ const CLOSE_MS = 260;
 /** When the source cannot be measured, open from slightly small rather than from nowhere. */
 const FALLBACK = "scale(0.96)";
 
+/** Everything Tab can reach. Kept as one string so the trap and any future audit agree. */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export default function ExpandingRecord({
   date,
   from,
@@ -46,6 +50,13 @@ export default function ExpandingRecord({
   onClose: () => void;
 }) {
   const [closing, setClosing] = useState(false);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const closingRef = useRef(false);
+  /** Kept fresh so the Escape handler, which is bound once, never calls a stale callback. */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  /** Whatever had focus when this opened, so it can be handed back. */
+  const returnTo = useRef<HTMLElement | null>(null);
 
   /**
    * The transform that maps the full-screen overlay onto the source column, computed during
@@ -69,21 +80,68 @@ export default function ExpandingRecord({
     return `translate(${r.left}px, ${r.top}px) scale(${sx}, ${sy})`;
   })();
 
-  /** Escape closes it, because it is a window and that is what closes windows. */
+  /**
+   * Focus goes IN on open and comes BACK on close.
+   *
+   * aria-modal is a promise that the rest of the page is inert, and a dialog that leaves
+   * focus behind it breaks that promise in the most literal way: the next Tab lands on
+   * something the user has been told is not there. A native <dialog> gives this for free,
+   * but the expansion needs a plain element it can transform.
+   *
+   * Escape closes it, because it is a window and that is what closes windows.
+   */
   useEffect(() => {
+    returnTo.current = document.activeElement as HTMLElement | null;
+    // The close control, not the first focusable thing — on a screen of charts the useful
+    // first stop is the way out.
+    paneRef.current
+      ?.querySelector<HTMLElement>("[data-record-close]")
+      ?.focus({ preventScroll: true });
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") startClose();
+      if (e.key === "Escape") {
+        startClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      // A real trap. Without it Tab walks straight out of the overlay into the page
+      // underneath, which is still fully focusable because it is still rendered.
+      const items = paneRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
+      if (!items || items.length === 0) return;
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      // On unmount rather than on the close gesture: the record is still on screen for the
+      // length of the return trip, and moving focus out from under it would scroll the page
+      // behind while it is still covering it.
+      returnTo.current?.focus?.({ preventScroll: true });
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Idempotent, and guarded by a REF rather than by the state it sets.
+   *
+   * The first version scheduled the unmount inside the setState updater. An updater is
+   * supposed to be pure — React is free to call it twice, or to discard the result — so a
+   * timer started in one is a timer that may be started twice or reasoned about wrongly.
+   * A ref is read and written synchronously, which is exactly what a one-way latch needs.
+   */
   function startClose() {
-    setClosing((was) => {
-      if (!was) setTimeout(onClose, CLOSE_MS);
-      return true;
-    });
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    setTimeout(onCloseRef.current, CLOSE_MS);
   }
 
   return (
@@ -97,6 +155,7 @@ export default function ExpandingRecord({
       style={{ ["--record-from" as string]: origin }}
     >
       <div
+        ref={paneRef}
         className={`record-pane ${closing ? "is-closing" : ""}`}
         // Overflow hidden so the rounded corner is real while it travels.
         style={{ overflow: "hidden" }}

@@ -209,6 +209,7 @@ export default function Dashboard({
             {onClose ? (
               <button
                 onClick={onClose}
+                data-record-close
                 aria-label="Close the record"
                 className="ml-2 rounded-lg px-2.5 py-1 text-body leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] hover:text-[var(--color-ink)]"
               >
