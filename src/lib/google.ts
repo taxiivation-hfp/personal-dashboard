@@ -96,6 +96,8 @@ export async function isConnected(db: Client): Promise<boolean> {
 }
 
 export async function disconnect(db: Client): Promise<void> {
+  // Otherwise the app keeps serving a disconnected account's events until the TTL expires.
+  clearCalendarCache();
   // Actually revoke the grant at Google, not just forget it locally.
   const r = await db.execute(
     "SELECT refresh_token, access_token FROM google_oauth_tokens WHERE id=1",
@@ -237,6 +239,44 @@ export async function listEvents(
  * would read 100%, because the two you never marked wouldn't be in the denominator.
  * One range request is also far cheaper than seven per-day calls.
  */
+/**
+ * A VERY SHORT-LIVED CACHE over the calendar, and it exists for one measured reason.
+ *
+ * Marking a single block fires four requests: the write, then /api/today, /api/adherence and
+ * /api/rings to refresh. The write is 27ms. The other three are ~300ms each, and all of that
+ * is one Google round trip apiece — so the app's most repeated action, the one tapped a dozen
+ * times a day, was asking Google for the same events three times over inside one second.
+ *
+ * Fifteen seconds is chosen to be shorter than any human edit loop: long enough that one
+ * user action shares a single fetch, far too short to hide a calendar change you just made
+ * and came back to look at. It is per-process and in-memory, so it dies with the server and
+ * cannot go stale across a deploy.
+ *
+ * It caches SUCCESS ONLY. An auth failure or an outage must be retried immediately — caching
+ * a failure would turn a five-second blip into fifteen seconds of an app that says the
+ * calendar is disconnected.
+ */
+const CAL_TTL_MS = 15_000;
+const calCache = new Map<string, { at: number; value: Map<string, CalEvent[]> }>();
+
+/** Exposed so a write through this module can drop what it just invalidated. */
+export function clearCalendarCache(): void {
+  calCache.clear();
+}
+
+async function cachedRange(
+  db: Client,
+  fromDate: string,
+  toDate: string,
+): Promise<Map<string, CalEvent[]>> {
+  const key = `${fromDate}..${toDate}`;
+  const hit = calCache.get(key);
+  if (hit && Date.now() - hit.at < CAL_TTL_MS) return hit.value;
+  const value = await listEventsRange(db, fromDate, toDate);
+  calCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 export async function listEventsRange(
   db: Client,
   fromDate: string,
@@ -291,7 +331,7 @@ export async function getCalendarRange(
   try {
     return {
       connected: true,
-      byDate: await listEventsRange(db, fromDate, toDate),
+      byDate: await cachedRange(db, fromDate, toDate),
     };
   } catch {
     return { connected: false, byDate: new Map() };
@@ -338,6 +378,9 @@ function eventBody(ev: EventInput) {
 }
 
 export async function insertEvent(db: Client, ev: EventInput): Promise<string> {
+  // See clearCalendarCache: a write the user just made must never be hidden by the read
+  // cache, whatever its TTL.
+  clearCalendarCache();
   const data = await api(db, "/calendars/primary/events", {
     method: "POST",
     body: JSON.stringify(eventBody(ev)),
@@ -350,6 +393,7 @@ export async function updateEvent(
   eventId: string,
   ev: EventInput,
 ): Promise<void> {
+  clearCalendarCache();
   try {
     await api(db, `/calendars/primary/events/${encodeURIComponent(eventId)}`, {
       method: "PATCH",
@@ -362,6 +406,7 @@ export async function updateEvent(
 }
 
 export async function deleteEvent(db: Client, eventId: string): Promise<void> {
+  clearCalendarCache();
   try {
     await api(db, `/calendars/primary/events/${encodeURIComponent(eventId)}`, {
       method: "DELETE",
@@ -434,7 +479,10 @@ export async function getCalendarForDate(
     return {
       connected: true,
       configured: true,
-      events: await listEvents(db, date),
+      // Routed through the SAME cache as the range fetch, keyed as a one-day range, so a
+      // screen that asks for today and a screen that asks for the week do not each pay for
+      // it. listEvents itself stays untouched for callers that must not be cached.
+      events: (await cachedRange(db, date, date)).get(date) ?? [],
     };
   } catch (e) {
     if (isAuthFailure(e)) {
