@@ -193,6 +193,23 @@ export default function Dashboard({
     .filter((g) => g.status === "done")
     .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
 
+  /**
+   * What is in flight, and the ONE next thing in each.
+   *
+   * The owner's aim, in their words, is "a clear plan on what I have achieved and what I
+   * wanna achieve next". Achieved is the list below; this is the other half, and the next
+   * unticked subgoal is what makes it a plan rather than an inventory — a goal you cannot
+   * name the next step of is a wish.
+   *
+   * Ordered by how far along, furthest first. Not a ranking: the nearly-done ones are the
+   * ones a decision is actually pending on, and burying them under untouched ones is how a
+   * list of intentions turns into wallpaper.
+   */
+  const active = (goals ?? [])
+    .filter((g) => g.status === "active")
+    .map((g) => ({ g, next: g.subgoals.find((s) => !s.done) ?? null }))
+    .sort((a, b) => b.g.progress - a.g.progress);
+
   const loading = strip == null || trends == null || rings == null;
 
   return (
@@ -441,6 +458,68 @@ export default function Dashboard({
               </Panel>
             </div>
           )}
+
+          {/* WHAT IS NEXT. */}
+          <section className="mt-10">
+            <div className="section-head">
+              <h2 className="text-small font-semibold">In flight</h2>
+              <span className="text-micro text-[var(--color-muted)]">
+                and the next step in each
+              </span>
+            </div>
+            {active.length === 0 ? (
+              <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
+                No goals in flight.{" "}
+                <a
+                  href="/goals"
+                  className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
+                >
+                  Set one
+                </a>{" "}
+                and its subgoals become the plan.
+              </p>
+            ) : (
+              <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                {active.map(({ g, next }) => (
+                  <li key={g.id} className="py-3">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
+                        {PILLAR_NAME[g.pillar]}
+                      </span>
+                      <span className="min-w-0 flex-1 font-serif text-body">
+                        {g.title}
+                      </span>
+                      <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                        {Math.round(g.progress * 100)}%
+                      </span>
+                      <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
+                        {g.progress > 0 && (
+                          <span
+                            className="motion-data block h-full w-full origin-left rounded-full bg-[var(--color-accent)]"
+                            style={{ transform: `scaleX(${g.progress})` }}
+                          />
+                        )}
+                      </span>
+                    </div>
+                    {/* The next step, indented to the title. Named plainly — "next" is the
+                        word that turns a percentage into something you can act on this
+                        afternoon. */}
+                    <p className="mt-1 pl-[5.75rem] text-micro text-[var(--color-muted)]">
+                      {next ? (
+                        <>
+                          next · <span className="text-[var(--color-ink)]">{next.title}</span>
+                        </>
+                      ) : g.subgoals.length === 0 ? (
+                        "no subgoals yet — add a few and this becomes a plan"
+                      ) : (
+                        "every step ticked · mark it done when you agree"
+                      )}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           {/* WHAT HAS BEEN ACHIEVED.
 
