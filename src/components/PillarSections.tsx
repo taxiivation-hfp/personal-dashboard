@@ -91,6 +91,7 @@ export default function PillarSections({
   onUndoTime,
   onSaveWorkout,
   onDeleteWorkout,
+  onOpenRecord,
 }: {
   goals: GoalView[];
   skills: SkillView[];
@@ -118,6 +119,8 @@ export default function PillarSections({
     date: string,
   ) => Promise<void>;
   onDeleteWorkout: (id: number) => Promise<void>;
+  /** Open the record. Owned by Today, which holds the column this expands out of. */
+  onOpenRecord: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   /** Which pillar is expanded. One at a time, so the column never outgrows its window. */
@@ -609,7 +612,7 @@ export default function PillarSections({
 
       {/* The way through to the history, under the three rings it summarises. shrink-0 so
           it never takes room from them — the rings divide whatever is left after this. */}
-      <StatsLink date={date} />
+      <StatsLink date={date} onOpen={onOpenRecord} />
 
       {/* Mounted outside the pillar loop: a modal is not part of the row that opened it,
           and hanging it off Physical's expanded body would unmount it the moment anything

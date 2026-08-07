@@ -1,19 +1,24 @@
 import { todayISO } from "@/lib/dates";
-import Stats from "@/components/Stats";
+import Dashboard from "@/components/Dashboard";
 
 export const dynamic = "force-dynamic";
-
-// The tab is how you tell two open windows apart, and both of these are this app.
 export const metadata = { title: "The record" };
 
 /**
- * The record. Everything history, nothing you can act on.
+ * The record, as a page.
  *
- * A route rather than a fourth pane on Today, because the two answer different questions
- * and a screen that showed both at once would invite reading the past as a verdict on the
- * present. The anchor is resolved on the server so the page and its charts agree about
- * what "today" is even if the tab has been open across midnight.
+ * The same component the Pillars column expands into — one dashboard, two ways in, so the
+ * thing you arrive at is never a second implementation of the thing you expanded. This entry
+ * exists for the phone tab and for a bookmarked URL; the expansion is the primary route on a
+ * laptop, and it is the one that animates.
+ *
+ * The anchor is resolved on the server so the page and its charts agree about what "today"
+ * is even if the tab has been open across midnight.
  */
 export default async function Page() {
-  return <Stats date={todayISO()} />;
+  return (
+    <div className="h-dvh">
+      <Dashboard date={todayISO()} />
+    </div>
+  );
 }

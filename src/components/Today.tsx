@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
 import HabitBox from "./HabitBox";
 import NextUp from "./NextUp";
+import ExpandingRecord from "./ExpandingRecord";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
@@ -113,6 +114,13 @@ export default function Today({
   const [titleDraft, setTitleDraft] = useState("");
   // Raised by the Journal row in the checklist — the journal is written, not ticked.
   const [journalPrompt, setJournalPrompt] = useState(false);
+  /**
+   * The record, open over the top. Held HERE rather than in the pillar column because the
+   * thing it expands out of is that column's own window, and a component cannot measure
+   * the box it is inside.
+   */
+  const [recordOpen, setRecordOpen] = useState(false);
+  const pillarWindow = useRef<HTMLDivElement>(null);
 
   // ENDS on the day being viewed. There is no future half: the calendar column says what
   // tomorrow holds, and a strip that reserved three columns for it spent a third of its
@@ -774,6 +782,7 @@ export default function Today({
       }
       onSaveWorkout={saveWorkout}
       onDeleteWorkout={deleteWorkout}
+      onOpenRecord={() => setRecordOpen(true)}
     />
   );
 
@@ -838,6 +847,7 @@ export default function Today({
               {pane("calendar", <CalendarColumn date={data.date} />)}
             </div>
             <div
+              ref={pillarWindow}
               className={`window bg-[var(--color-surface-3)] p-5 lg:order-3 lg:p-6 ${colScroll}`}
             >
               {pane("pillars", pillarPane)}
@@ -847,6 +857,16 @@ export default function Today({
       </div>
 
       <PhoneTabBar tab={tab} onTab={setTab} />
+
+      {/* The record, opening out of the pillar column. Mounted only while open so its
+          fetches do not run behind a screen nobody asked for. */}
+      {recordOpen && (
+        <ExpandingRecord
+          date={data.date}
+          from={pillarWindow.current}
+          onClose={() => setRecordOpen(false)}
+        />
+      )}
 
     </PhoneSwipe>
   );

@@ -172,6 +172,26 @@
    * It lands on the GLOBAL button rule, so Adhered / Drifted / Skipped share one code path
    * and cannot drift apart in feel. Honest logging stays preserved by construction rather
    * than by remembering to keep three class strings in step. */
+  /* THE ONE OVERSHOOT IN THE APP, and the only easing here whose curve leaves 0..1.
+   *
+   * Reserved for the record opening out of the Pillars column, and nothing else. The owner
+   * asked for that expansion to feel "bubbly"; the house rule bans bounce and elastic
+   * outright, and both of those are right. 1.15 is the reconciliation: a back-curve at 1.5+
+   * is the dated boing the ban is aimed at, and this is roughly a third of it — a drawer
+   * settling rather than a ball landing. You would not name it as an effect; you would only
+   * notice its absence.
+   *
+   * If a second element ever takes this curve, the exception has been misread. A screen
+   * where several things overshoot is a screen that bounces.
+   */
+  --ease-expand: cubic-bezier(0.34, 1.15, 0.38, 1);
+
+  /* Opening the record. Past the 280ms ceiling deliberately — that cap exists because this
+   * app is opened dozens of times a day and nothing may make the owner wait, and it bites on
+   * the things you touch constantly. This is a spatial move you make once in a sitting, and
+   * at 280ms it reads as a jump rather than as a window opening. */
+  --dur-expand: 420ms;
+
   --dur-press: 90ms; /* going down — you */
   --dur-release: 220ms; /* coming back — the button */
   --dur-fast: 180ms; /* hovers, small state */
@@ -673,5 +693,80 @@ input[type="number"]::-webkit-inner-spin-button {
     background: var(--color-bg) !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
+  }
+}
+
+/* THE RECORD, OPENING OUT OF THE PILLAR COLUMN.
+ *
+ * The from-state is declared with @starting-style rather than set from JavaScript, and that
+ * is the load-bearing part. The first version mounted the overlay collapsed and released it
+ * on a double requestAnimationFrame — which never fires in a hidden tab, so the record
+ * opened as a frozen thumbnail with its contents invisible. Here the RESTING state is the
+ * open one: if the transition never runs, the element is simply already open, which is the
+ * only correct default for a reveal.
+ *
+ * --record-from is the measured matrix mapping a full-screen box onto the source column.
+ * It is inline because only the component can measure it; everything else about the move
+ * lives here.
+ *
+ * The corner radius travels too — a window that opens should stop being a window only once
+ * it has filled the screen. */
+.record-pane {
+  height: 100%;
+  width: 100%;
+  transform: none;
+  border-radius: 0;
+  will-change: transform;
+  transition:
+    transform var(--dur-expand) var(--ease-expand),
+    border-radius var(--dur-expand) var(--ease-expand);
+}
+@starting-style {
+  .record-pane {
+    transform: var(--record-from, scale(0.96));
+    border-radius: 16px;
+  }
+}
+
+/* Closing has no overshoot. Opening is the gesture with personality; closing is the system
+ * getting out of the way, and it is faster because a system responding should outpace a
+ * system presenting. */
+.record-pane.is-closing {
+  transform: var(--record-from, scale(0.96));
+  border-radius: 16px;
+  transition:
+    transform 260ms var(--ease-out),
+    border-radius 260ms var(--ease-out);
+}
+
+/* The content fades in behind the move, so the frames where the non-uniform scale has it
+ * stretched are the frames you cannot read. Same rule as the pane: opaque at rest. */
+.record-body {
+  opacity: 1;
+  transition: opacity 240ms var(--ease-out) 120ms;
+}
+@starting-style {
+  .record-body {
+    opacity: 0;
+  }
+}
+.record-pane.is-closing .record-body {
+  opacity: 0;
+  transition: opacity 140ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No travel, and no fade to replace it — the record simply IS. Nulling the transition
+   * leaves both at their resting values, which are the visible ones. */
+  .record-pane,
+  .record-pane.is-closing,
+  .record-body,
+  .record-pane.is-closing .record-body {
+    transition: none;
+  }
+  .record-pane.is-closing,
+  .record-pane.is-closing .record-body {
+    transform: none;
+    opacity: 1;
   }
 }

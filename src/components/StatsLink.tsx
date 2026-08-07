@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 /**
@@ -24,7 +23,16 @@ const DAYS = 14;
 
 type StripDay = { date: string; pct: number };
 
-export default function StatsLink({ date }: { date: string }) {
+export default function StatsLink({
+  date,
+  onOpen,
+}: {
+  date: string;
+  /** Opens the record in place. A BUTTON rather than a link, because nothing navigates:
+   *  the record is this column read at length, and losing the page you were on to see more
+   *  of a part of it is the wrong gesture. */
+  onOpen: () => void;
+}) {
   const [days, setDays] = useState<StripDay[] | null>(null);
 
   useEffect(() => {
@@ -39,9 +47,10 @@ export default function StatsLink({ date }: { date: string }) {
   }, [date]);
 
   return (
-    <Link
-      href="/stats"
-      className="group -mx-2 mt-2 flex shrink-0 items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-[var(--color-panel)]"
+    <button
+      onClick={onOpen}
+      aria-haspopup="dialog"
+      className="group -mx-2 mt-2 flex w-[calc(100%+1rem)] shrink-0 items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel)]"
     >
       <span className="min-w-0 flex-1">
         <span className="block text-small font-semibold">The record</span>
@@ -91,6 +100,6 @@ export default function StatsLink({ date }: { date: string }) {
       >
         →
       </span>
-    </Link>
+    </button>
   );
 }
