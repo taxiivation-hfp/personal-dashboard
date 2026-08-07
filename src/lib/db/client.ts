@@ -128,6 +128,30 @@ async function ensure(c: Client): Promise<Client> {
       "write",
     );
   }
+
+  // Every skill belongs to Portfolio — the owner's ruling. See the skills_portfolio_v1
+  // block in scripts/migrate.mjs for the reasoning; this is its mirror, so a dev database
+  // that never runs db:migrate lands in the same place.
+  //
+  // LATCHED, not unconditional, unlike the index drop above it. That drop enforces an
+  // invariant the code depends on; this is a one-time move of existing rows, and running
+  // it on every boot would quietly overrule any future decision to file a skill elsewhere.
+  //
+  // Placed AFTER the pillars seed: on a brand-new database the subquery would otherwise
+  // resolve to NULL and file every skill under no pillar at all.
+  const latched = await c.execute(
+    "SELECT 1 FROM app_meta WHERE key='skills_portfolio_v1'",
+  );
+  if (!latched.rows.length) {
+    await c.execute(`UPDATE skills
+         SET pillar_id = (SELECT id FROM pillars WHERE key='portfolio'),
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+       WHERE pillar_id IS NOT (SELECT id FROM pillars WHERE key='portfolio')`);
+    await c.execute(
+      "INSERT INTO app_meta (key,value) VALUES ('skills_portfolio_v1','1')",
+    );
+  }
+
   return c;
 }
 

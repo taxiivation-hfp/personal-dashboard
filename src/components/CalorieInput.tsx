@@ -20,11 +20,14 @@ export default function CalorieInput({
   calories,
   entries,
   onChanged,
+  onTrend,
 }: {
   date: string;
   calories: number | null;
   entries: CalorieEntry[];
   onChanged: () => void;
+  /** Open the day-by-day history. Omitted where there is nowhere to open it. */
+  onTrend?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -101,6 +104,19 @@ export default function CalorieInput({
         aria-label="Add calories"
         className="w-[3.5rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-body tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
       />
+
+      {/* Quiet type at the end of the row, never a fourth control competing with the
+          field. What is logged today is the row's job; the history is one tap behind it. */}
+      {onTrend && (
+        <button
+          type="button"
+          onClick={onTrend}
+          aria-haspopup="dialog"
+          className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+        >
+          trend
+        </button>
+      )}
     </div>
   );
 }

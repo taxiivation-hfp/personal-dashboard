@@ -131,14 +131,17 @@ async function main() {
   // sight rather than an empty shell. Runs once; rename or delete freely afterwards.
   const sk = await client.execute("SELECT value FROM app_meta WHERE key='skills_v1'");
   if (!sk.rows.length) {
+    // ALL of them portfolio, by the owner's ruling — see the skills_portfolio_v1 block
+    // below for why. Kept in step with it: a fresh database must land where a migrated
+    // one lands.
     const SKILLS = [
       ["Mandarin", "portfolio", "active", 1],
-      ["Ice skating", "physical", "active", 2],
-      ["Badminton", "physical", "parked", 3],
+      ["Ice skating", "portfolio", "active", 2],
+      ["Badminton", "portfolio", "parked", 3],
       ["Singing", "portfolio", "parked", 4],
       ["Instruments", "portfolio", "parked", 5],
-      ["Dancing", "physical", "parked", 6],
-      ["Calisthenics", "physical", "parked", 7],
+      ["Dancing", "portfolio", "parked", 6],
+      ["Calisthenics", "portfolio", "parked", 7],
     ];
     for (const [name, pillar, state, order] of SKILLS) {
       await client.execute({
@@ -194,6 +197,29 @@ async function main() {
 
     await client.execute("INSERT INTO app_meta (key,value) VALUES ('adherence_v1','1')");
     console.log("adherence_v1: habits.days_mask + system_key added, Steps deactivated, meals dropped (0 rows)");
+  }
+
+  // === skills_portfolio_v1 ==================================================
+  // Every skill belongs to Portfolio, including the physical ones.
+  //
+  // The owner's ruling, and it is about what a SKILL is rather than what it costs the
+  // body: ice skating, badminton, calisthenics and dancing are things being learned, and
+  // learning is what Portfolio holds. Physical already has its own metrics — strength,
+  // cardio, misc, steps — counted from gym_sessions, so a skill filed under it was being
+  // listed beside counters it did not feed.
+  //
+  // Nothing about the rings changes. The 'skills' metric counts every skill_time row
+  // regardless of pillar and always has, so this moves where a skill is LISTED and
+  // nothing else. No history is touched.
+  const skp = await client.execute("SELECT value FROM app_meta WHERE key='skills_portfolio_v1'");
+  if (!skp.rows.length) {
+    const moved = await client.execute(`
+      UPDATE skills
+         SET pillar_id = (SELECT id FROM pillars WHERE key='portfolio'),
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+       WHERE pillar_id IS NOT (SELECT id FROM pillars WHERE key='portfolio')`);
+    await client.execute("INSERT INTO app_meta (key,value) VALUES ('skills_portfolio_v1','1')");
+    console.log(`skills_portfolio_v1: ${moved.rowsAffected} skill(s) moved to Portfolio`);
   }
 
   // === subgoals + skill time (MVP seed) ====================================

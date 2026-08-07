@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
+import TrendPopup, { type TrendKind } from "./TrendPopup";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
@@ -71,6 +72,9 @@ export default function Today({
 }) {
   const [data, setData] = useState<DayView>(initial);
   const [strip, setStrip] = useState<StripDay[]>([]);
+  /** Which history is open, if any. Weight and calories are the two numbers on this screen
+   *  whose value means something as a series rather than only today. */
+  const [trend, setTrend] = useState<TrendKind | null>(null);
   // Goals, skills and rings are OWNED here rather than left as server props. page.tsx
   // renders once per request, so every new control (subgoal tick, +15/+30/+60, gym
   // toggle) would otherwise mutate data the screen could not re-read without a full
@@ -423,6 +427,20 @@ export default function Today({
                           {h.unit}
                         </span>
                       )}
+                      {/* Weight is the one non-negotiable whose VALUE means something
+                          over time — a tick is only ever a tick, but 78.4 is a reading in
+                          a series. Quiet type at the end of the row, the same affordance
+                          calories gets. */}
+                      {h.system_key === "weight" && (
+                        <button
+                          type="button"
+                          onClick={() => setTrend("weight")}
+                          aria-haspopup="dialog"
+                          className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                        >
+                          trend
+                        </button>
+                      )}
                     </span>
                   </div>
                 </li>
@@ -502,6 +520,7 @@ export default function Today({
             calories={data.calories}
             entries={data.calorieEntries}
             onChanged={refresh}
+            onTrend={() => setTrend("calories")}
           />
 
           {/* STEPS. No writer exists for this yet — an iOS Shortcut posting one number is
@@ -881,6 +900,18 @@ export default function Today({
       </div>
 
       <PhoneTabBar tab={tab} onTab={setTab} />
+
+      {/* Mounted at the shell rather than inside the row that opened it: the middle column
+          is its own scroller, and a dialog nested in a scroller is a dialog that can be
+          scrolled off the thing it is covering. */}
+      {trend && (
+        <TrendPopup
+          kind={trend}
+          date={data.date}
+          unit={trend === "weight" ? "kg" : "kcal"}
+          onClose={() => setTrend(null)}
+        />
+      )}
     </PhoneSwipe>
   );
 }
