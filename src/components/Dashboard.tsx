@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import DayChart, { type ChartPoint } from "./DayChart";
+import WeightEntry from "./WeightEntry";
 import { SegmentedRing, toneColor, type RingSegment } from "./PillarRing";
 import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
 import type { ProductivitySegment } from "@/lib/productivity";
@@ -113,6 +114,10 @@ export default function Dashboard({
     };
   }, [date]);
 
+  /** Bumped to re-run the two time series after something is written into them. */
+  const [reloadKey, setReloadKey] = useState(0);
+  const reloadTrends = () => setReloadKey((n) => n + 1);
+
   useEffect(() => {
     let alive = true;
     setStrip(null);
@@ -128,7 +133,7 @@ export default function Dashboard({
     return () => {
       alive = false;
     };
-  }, [date, days]);
+  }, [date, days, reloadKey]);
 
   const adherence: ChartPoint[] = useMemo(
     () => (strip ?? []).map((d) => ({ date: d.date, value: d.pct })),
@@ -398,6 +403,10 @@ export default function Dashboard({
                   unit="kg"
                   emptyNote="No weights recorded in this window."
                 />
+                {/* Under the chart, because this is where you are already looking when you
+                    notice a gap in it. Backfilling is not an edge case for a record meant to
+                    last years — a chart of a fortnight is a chart nobody consults. */}
+                <WeightEntry today={date} onSaved={reloadTrends} />
               </Panel>
 
               <Panel
