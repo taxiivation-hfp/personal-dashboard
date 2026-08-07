@@ -1,7 +1,56 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import type { PillarKey } from "@/lib/queries";
+
+/**
+ * The lamp, on a ring's TRACK.
+ *
+ * The track is the OBJECT and the arc is the DATUM, and that distinction is the whole
+ * licence for this. Lighting the track says the ring is a physical thing sitting under a
+ * lamp and says nothing whatsoever about your day. A gradient on the ARC would encode a
+ * value — a 25% day, drawn entirely in the lit upper arc, would look brighter than a 100%
+ * day — which The One Lamp Rule forbids outright.
+ *
+ * It also strengthens The Legible-Empty Rule rather than eroding it. The lit face is exactly
+ * today's --color-line-strong, unchanged; the shaded face is DARKER, never lighter, so every
+ * point on every track is now at least as visible as before and the bottom is ~25% more so.
+ *
+ * Gated at 48px: a vertical gradient across an 18px metric ring is a <defs> nobody can see.
+ */
+const LIT_TRACK_MIN = 48;
+
+/** Below this the track is flat. Above it, lit at the top and shaded at the foot. */
+const trackStroke = (size: number, id: string) =>
+  size >= LIT_TRACK_MIN ? `url(#${id})` : "var(--color-line-strong)";
+
+/**
+ * The gradient itself.
+ *
+ * userSpaceOnUse and an explicit y2, because objectBoundingBox on a stroked circle measures
+ * the PATH's box and not the element's, which puts the falloff half a stroke out of step.
+ *
+ * The stops carry their colour in style, not as a stop-color attribute: var() is not
+ * honoured inside an SVG presentation attribute, so the attribute form silently renders
+ * black. It is the single likeliest way for this to be transcribed wrongly.
+ */
+function LitTrack({ id, size }: { id: string; size: number }) {
+  return (
+    <defs>
+      <linearGradient
+        id={id}
+        gradientUnits="userSpaceOnUse"
+        x1={0}
+        y1={0}
+        x2={0}
+        y2={size}
+      >
+        <stop offset="0%" style={{ stopColor: "var(--color-line-strong)" }} />
+        <stop offset="100%" style={{ stopColor: "var(--color-line-edge)" }} />
+      </linearGradient>
+    </defs>
+  );
+}
 
 /**
  * One ring. Two species use it, and they MUST stay visually distinct — otherwise today's
@@ -89,6 +138,9 @@ export default function Ring({
   bloom?: boolean;
   children?: ReactNode;
 }) {
+  // Per instance: two rings on one page sharing a gradient id would have the second
+  // silently inherit the first's geometry.
+  const trackId = `lit-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   // Guard clause, not a fallback expression: null must never enter the arithmetic.
   const ghost = fill == null;
   const r = (size - stroke) / 2;
@@ -111,6 +163,7 @@ export default function Ring({
         viewBox={`0 0 ${size} ${size}`}
         aria-hidden
       >
+        <LitTrack id={trackId} size={size} />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -120,7 +173,9 @@ export default function Ring({
           // #efe9de against a #f2ede4 page, which is so close that an EMPTY ring reads as
           // nothing at all rather than as "a ring that isn't filled". An unfilled ring
           // must still be legible — that is the whole "neglected, not failed" signal.
-          stroke="var(--color-line-strong)"
+          // At 48px and up it is the lamp's lit-to-shaded ramp, which starts at exactly
+          // that colour and only ever gets darker.
+          stroke={trackStroke(size, trackId)}
           strokeWidth={stroke}
           strokeDasharray={
             dashed
@@ -128,7 +183,12 @@ export default function Ring({
               : undefined
           }
         />
-        {!ghost && dash > 0 && (
+        {/* Mounted whenever there is a figure at all, NOT only when it is above zero.
+            Behind `dash > 0` the first mark of the day — the one that lifts the figure off
+            0 — mounted the circle instead of transitioning it, so the single most important
+            travel in the app was the one that snapped. At dash 0 the arc is invisible
+            anyway; the guard was buying nothing and costing that. */}
+        {!ghost && (
           <circle
             cx={size / 2}
             cy={size / 2}
@@ -239,6 +299,7 @@ export function SegmentedRing({
   const cx = size / 2;
   const cy = size / 2;
   const hue = toneColor(tone, color);
+  const trackId = `lit-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
   // The outer lap is drawn INSIDE `size`, with the donut inset to make room, so a pillar
   // with a lap and one without still occupy the same box and the column stays aligned.
@@ -313,6 +374,7 @@ export function SegmentedRing({
       style={{ width: size, height: size }}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+        <LitTrack id={trackId} size={size} />
         {slices.map((s) => (
           <g key={s.key}>
             {/* The slice's own track. Always drawn, so an empty segment reads as a segment
@@ -320,7 +382,7 @@ export function SegmentedRing({
             <path
               d={arcPath(s.start, s.start + s.span, r)}
               fill="none"
-              stroke="var(--color-line-strong)"
+              stroke={trackStroke(size, trackId)}
               strokeWidth={stroke}
               strokeLinecap="butt"
               strokeDasharray={
@@ -366,7 +428,7 @@ export function SegmentedRing({
             <path
               d={arcPath(s.start, s.start + s.span, rLap)}
               fill="none"
-              stroke="var(--color-line-strong)"
+              stroke={trackStroke(size, trackId)}
               strokeWidth={lapStroke}
               strokeLinecap="butt"
             />
