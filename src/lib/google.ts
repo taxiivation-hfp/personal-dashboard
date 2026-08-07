@@ -4,6 +4,7 @@
 // mode with yourself as a test user (skips verification).
 
 import type { Client } from "./db/client";
+import { covers, rangeKey, sliceByDate } from "./calRange";
 import { getDb } from "./db/client";
 import { dayBoundsRFC3339, rfc3339, addDays, APP_TZ } from "./dates";
 
@@ -264,25 +265,12 @@ export function clearCalendarCache(): void {
   calCache.clear();
 }
 
-/**
- * A cached range SATISFIES a request when it covers it. Dates are ISO, so a string compare
- * is a date compare — no parsing, and no timezone to get wrong.
- */
-const covers = (
-  entry: string,
-  fromDate: string,
-  toDate: string,
-): boolean => {
-  const [a, b] = entry.split("..");
-  return a! <= fromDate && b! >= toDate;
-};
-
 async function cachedRange(
   db: Client,
   fromDate: string,
   toDate: string,
 ): Promise<Map<string, CalEvent[]>> {
-  const key = `${fromDate}..${toDate}`;
+  const key = rangeKey(fromDate, toDate);
   const now = Date.now();
 
   const exact = calCache.get(key);
@@ -303,11 +291,7 @@ async function cachedRange(
   for (const [entryKey, entry] of calCache) {
     if (now - entry.at >= CAL_TTL_MS) continue;
     if (!covers(entryKey, fromDate, toDate)) continue;
-    const slice = new Map<string, CalEvent[]>();
-    for (const [d, events] of entry.value) {
-      if (d >= fromDate && d <= toDate) slice.set(d, events);
-    }
-    return slice;
+    return sliceByDate(entry.value, fromDate, toDate);
   }
 
   const value = await listEventsRange(db, fromDate, toDate);
