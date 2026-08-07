@@ -271,7 +271,10 @@ export default function PillarSections({
             </h2>
 
             {expanded && (
-              <div className="pb-7">
+              // Settles in rather than appearing. The rings shrinking is the gesture; this
+              // is the thing they made room for, and it should look like it arrived rather
+              // than like it was always there behind them.
+              <div className="motion-reveal pb-7">
                 {/* A LIST, not a row of columns. Four metrics across a 250px column gave
                     each ~88px, so every fact line wrapped to two ragged centred lines.
                     Reading down a left-aligned list also scales: a fifth metric costs a
@@ -371,6 +374,19 @@ export default function PillarSections({
                       );
                     })}
                   </ul>
+                )}
+
+                {/* The whole gym log, from the pillar that owns it. It was reachable only
+                    from inside the log dialog, which meant you had to be writing a session
+                    to go and read the old ones. */}
+                {pk === "physical" && (
+                  <Link
+                    href="/sessions"
+                    className="mt-3 inline-flex items-center gap-1.5 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                  >
+                    every session logged
+                    <span aria-hidden>→</span>
+                  </Link>
                 )}
 
                 {/* Goals keep their own label so a ring-led section never makes goal
