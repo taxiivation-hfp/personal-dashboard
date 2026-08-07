@@ -611,11 +611,21 @@ export default function Today({
                   earned nothing; a true 0 draws nothing at all and the track carries the day. */}
               {d.pct > 0 && (
                 <div
-                  className="h-full w-full origin-left"
+                  // .motion-data, so today's bar TRAVELS when a mark lands rather than
+                  // snapping while the hero ring beside it animates. It costs nothing on
+                  // first paint: the bars only exist once the fetch has returned, so they
+                  // MOUNT at their value and a mount is not a transition. Nothing grows
+                  // from zero on load.
+                  //
+                  // No opacity distinction for today either. Today already carries the ink
+                  // percentage above, the ink column border below and the right-hand edge;
+                  // a fourth marker is over-marking a day the eye cannot miss. Worse, a
+                  // dimmed amber bar reads as a LOWER figure — which is a gradient encoding
+                  // a value by another name.
+                  className="motion-data h-full w-full origin-left"
                   style={{
                     transform: `scaleX(${Math.max(d.pct, 2) / 100})`,
                     background: "var(--color-accent)",
-                    opacity: d.isToday ? 1 : 0.75,
                   }}
                 />
               )}

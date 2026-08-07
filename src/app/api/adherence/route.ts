@@ -1,10 +1,7 @@
 import { getDb } from "@/lib/db/client";
 import { getCalendarRange } from "@/lib/google";
 import { adherenceFor, buildBlocks, type BlockState } from "@/lib/adherence";
-import {
-  habitTallyFor,
-  dayTitlesBetween,
-} from "@/lib/queries";
+import { habitTallyFor } from "@/lib/queries";
 import { weekdayBit } from "@/lib/engine";
 import { addDays, isISODate, todayISO } from "@/lib/dates";
 import { scoreDay } from "@/lib/productivity";
@@ -88,9 +85,11 @@ export async function GET(req: Request) {
       ticksByDate.get(d)!.add(Number(r.habit_id));
     }
 
-    // What the owner intends each day to be. Carried on the strip so the days ahead can be
-    // named in advance, which is the whole point of an intention.
-    const titles = await dayTitlesBetween(db, start, end);
+    // NO day titles here. The strip used to carry them so the days ahead could be named
+    // inline; it ends on today now and names none of them, so the query lost its consumer —
+    // and this route is fetched four times a page load (Today, CalendarColumn, Stats,
+    // StatsLink). getDayView still reads the viewed day's own title, which is where the one
+    // title this app still shows comes from.
 
     const today = todayISO();
     const nowMs = Date.now();
@@ -141,7 +140,6 @@ export async function GET(req: Request) {
         isFuture: d > today,
         ...adherenceFor(blocks, tally),
         productivity,
-        title: titles.get(d) ?? null,
         // A compact summary so the calendar column can show what the day actually
         // held, not just a percentage — enough to read the pattern at a glance.
         //

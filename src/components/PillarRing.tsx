@@ -158,6 +158,11 @@ export default function Ring({
           ring is drawn ON the lit ground, not over a lamp. */}
       {bloom && <span aria-hidden className="ring-bloom" />}
       <svg
+        // POSITIONED, so DOM order decides paint order and the bloom lands underneath.
+        // Without it the absolutely-positioned bloom paints in step 8 and this static
+        // inline SVG in step 7 — i.e. the lamp over the ring, which is the opposite of the
+        // comment above and of the whole idea. The ring is drawn ON the lit ground.
+        className="relative"
         width={size}
         height={size}
         viewBox={`0 0 ${size} ${size}`}

@@ -143,7 +143,20 @@
 
   /* Durations. This app is opened many times a day; nothing may make the owner wait to
    * read a number. Everything interactive stays under 300ms. */
-  --dur-press: 140ms; /* button feedback */
+  /* PRESS, SPLIT IN TWO. One duration in both directions is what makes a button feel like
+   * a rectangle changing size; a fast press and a slow recovery is what makes it feel like
+   * an object with mass. The press is you, and you are not slow. The release is the button
+   * recovering, and an object with mass recovers slowly.
+   *
+   * Both stay under the cap — this is INTERACTION, not arrival. The cap exists because the
+   * app is opened many times a day and nothing may make the owner wait, and that argument
+   * bites hardest on the things you touch.
+   *
+   * It lands on the GLOBAL button rule, so Adhered / Drifted / Skipped share one code path
+   * and cannot drift apart in feel. Honest logging stays preserved by construction rather
+   * than by remembering to keep three class strings in step. */
+  --dur-press: 90ms; /* going down — you */
+  --dur-release: 220ms; /* coming back — the button */
   --dur-fast: 180ms; /* hovers, small state */
   --dur-modal: 240ms; /* dialogs */
   --dur-data: 280ms; /* a ring or bar moving to a new value */
@@ -462,19 +475,24 @@ b,
  *
  * Gated on a real pointer. A touch device fires :hover on tap, so an ungated hover state
  * sticks after your finger lifts and the row looks selected when it isn't. */
+/* At REST, which is also the recovery: the slow half. */
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]) {
   transition:
-    transform var(--dur-press) var(--ease-out),
+    transform var(--dur-release) var(--ease-out),
     background-color var(--dur-fast) ease,
     border-color var(--dur-fast) ease,
     color var(--dur-fast) ease,
     opacity var(--dur-fast) ease;
 }
 
+/* The press itself overrides the duration for the way DOWN only. Two rules rather than
+ * one is the entire mechanism: :active wins while held, and the rest state's longer
+ * duration takes over the moment you let go. */
 button:not(:disabled):active,
 [role="button"]:not([aria-disabled="true"]):active {
   transform: scale(0.97);
+  transition-duration: var(--dur-press);
 }
 
 input::placeholder,
