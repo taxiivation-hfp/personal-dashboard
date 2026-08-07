@@ -226,8 +226,15 @@ export function SegmentedRing({
 
   // The outer lap is drawn INSIDE `size`, with the donut inset to make room, so a pillar
   // with a lap and one without still occupy the same box and the column stays aligned.
-  const lapStroke = outer.length ? Math.max(1.5, stroke * 0.3) : 0;
-  const lapGap = outer.length ? 3 : 0;
+  // 45% of the stroke and a 6px gap, both up from 30% and 3px.
+  //
+  // The lap USED to be drawn at 0.55 opacity, which measured 1.93-2.14:1 against the pillar
+  // window once the donut grew to 148px — under the 3:1 floor for a stroke, i.e. a mark you
+  // could not reliably see. Translucency was the wrong lever: it was standing in for "this
+  // is an extra", and thickness and radius already say that. So the lap is now FULL HUE and
+  // simply thinner, which is legible at every size and still unmistakably not a slice.
+  const lapStroke = outer.length ? Math.max(2, stroke * 0.45) : 0;
+  const lapGap = outer.length ? 6 : 0;
   const rLap = (size - lapStroke) / 2;
   const r = (size - stroke) / 2 - lapStroke - lapGap;
 
@@ -321,11 +328,12 @@ export function SegmentedRing({
           </g>
         ))}
 
-        {/* The outer laps. Thinner and translucent, so they read as an extra around the
-            pillar rather than a part of it — which is exactly their standing in the maths,
-            where their weight is zero. */}
+        {/* The outer laps: thinner, and set outside the donut with a gap, so they read as an
+            extra around the pillar rather than a part of it — which is exactly their standing
+            in the maths, where their weight is zero. Full hue, because a stroke you cannot
+            measure is a stroke that is not there. */}
         {laps.map((s) => (
-          <g key={`lap-${s.key}`} style={{ opacity: 0.55 }}>
+          <g key={`lap-${s.key}`}>
             <path
               d={arcPath(s.start, s.start + s.span, rLap)}
               fill="none"

@@ -7,6 +7,7 @@ import {
   metricFill,
   metricOverdrive,
   type RawCount,
+  pillarCaption,
 } from "./rings.ts";
 
 const ok = (count: number): RawCount => ({ count, resolved: true });
@@ -332,4 +333,71 @@ test("thresholds match the owner's stated minimums", () => {
   assert.equal(by.cardio, 2);
   assert.equal(by.misc, 1); // one a fortnight, as an outer lap rather than a slice
   assert.equal(by.social_events, 2); // graphite in the calendar
+});
+
+// --- the plain-words fortnight ------------------------------------------------------------
+
+test("portfolio counts hours, and a zero is a word rather than a figure", () => {
+  const base = { skillMinutes: 0, workoutSessions: 0, outreach: 0 };
+  assert.equal(
+    pillarCaption("portfolio", base),
+    "no hours logged past fortnight",
+  );
+  assert.equal(
+    pillarCaption("portfolio", { ...base, skillMinutes: 90 }),
+    "1.5 hours logged past fortnight",
+  );
+  assert.equal(
+    pillarCaption("portfolio", { ...base, skillMinutes: 60 }),
+    "1 hour logged past fortnight",
+  );
+  assert.equal(
+    pillarCaption("portfolio", { ...base, skillMinutes: 725 }),
+    "12.1 hours logged past fortnight",
+  );
+});
+
+test("physical counts SESSIONS, and never caps at the ring's threshold", () => {
+  const base = { skillMinutes: 0, workoutSessions: 0, outreach: 0 };
+  assert.equal(
+    pillarCaption("physical", base),
+    "no sessions logged past fortnight",
+  );
+  assert.equal(
+    pillarCaption("physical", { ...base, workoutSessions: 1 }),
+    "1 session logged past fortnight",
+  );
+  // Strength's threshold is 8. The ring caps there; the caption must not.
+  assert.equal(
+    pillarCaption("physical", { ...base, workoutSessions: 23 }),
+    "23 sessions logged past fortnight",
+  );
+});
+
+test("social names both of its sources", () => {
+  const base = { skillMinutes: 0, workoutSessions: 0, outreach: 3 };
+  assert.equal(
+    pillarCaption("social_capital", { ...base, socialEvents: 2 }),
+    "3 outreaches sent, 2 events",
+  );
+  assert.equal(
+    pillarCaption("social_capital", { ...base, outreach: 1, socialEvents: 1 }),
+    "1 outreach sent, 1 event",
+  );
+  assert.equal(
+    pillarCaption("social_capital", { ...base, socialEvents: 0 }),
+    "3 outreaches sent, 0 events",
+  );
+});
+
+// The distinction the whole `socialEvents?: number` signature exists for. A Google outage
+// must not be reported as a fortnight with no social life in it.
+test("an unreachable calendar says so — it never prints a zero", () => {
+  const c = pillarCaption("social_capital", {
+    skillMinutes: 0,
+    workoutSessions: 0,
+    outreach: 2,
+  });
+  assert.equal(c, "2 outreaches sent, events unavailable");
+  assert.ok(!c.includes("0 events"));
 });

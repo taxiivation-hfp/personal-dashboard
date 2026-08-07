@@ -15,7 +15,11 @@ import { prettyDate } from "@/lib/dates";
 import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
 import { CALENDAR_RATES, type ProductivitySegment } from "@/lib/productivity";
 import type { DayView, GoalView, SkillView, PillarKey } from "@/lib/queries";
-import type { PillarRingView, WorkoutKind } from "@/lib/rings";
+import type {
+  PillarFactInput,
+  PillarRingView,
+  WorkoutKind,
+} from "@/lib/rings";
 
 type StripDay = {
   date: string;
@@ -92,6 +96,9 @@ export default function Today({
   const [goals, setGoals] = useState<GoalView[]>(initialGoals);
   const [skills, setSkills] = useState<SkillView[]>(initialSkills);
   const [rings, setRings] = useState<PillarRingView[] | null>(null);
+  /** The raw fortnight printed under each pillar's name. Separate from `rings` because it
+   *  is a different kind of statement — see pillarCaption. */
+  const [facts, setFacts] = useState<PillarFactInput | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   // Phone only: which of the three panes is showing. Opens on the day's work, and a
   // reload returns there rather than wherever you last wandered.
@@ -120,6 +127,7 @@ export default function Today({
       .then((s) => {
         if (s.error) return;
         setRings(s.pillars ?? []);
+        setFacts(s.facts ?? null);
         setWorkouts(s.workouts ?? []);
       })
       .catch(() => {});
@@ -762,6 +770,7 @@ export default function Today({
       goals={goals}
       skills={skills}
       rings={rings}
+      facts={facts}
       colors={colors}
       workouts={workouts}
       date={data.date}

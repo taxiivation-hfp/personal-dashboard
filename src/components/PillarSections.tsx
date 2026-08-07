@@ -4,8 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import Ring, { SegmentedRing, toneColor, type RingSegment } from "./PillarRing";
 import WorkoutLog, { type Workout } from "./WorkoutLog";
+import StatsLink from "./StatsLink";
 import type { GoalView, SkillView, PillarKey } from "@/lib/queries";
-import type { MetricRing, PillarRingView, WorkoutKind } from "@/lib/rings";
+import {
+  pillarCaption,
+  type MetricRing,
+  type PillarFactInput,
+  type PillarRingView,
+  type WorkoutKind,
+} from "@/lib/rings";
 
 /** 640 -> "10h 40m". Time is shown as time — an abstract number would invite reading it
  *  as a score, which is the one thing this figure is not. */
@@ -24,6 +31,27 @@ const PILLAR_NAME: Record<PillarKey, string> = {
 };
 
 const ORDER: PillarKey[] = ["social_capital", "physical", "portfolio"];
+
+/**
+ * Two ring sizes, and they are literal constants rather than a viewport clamp.
+ *
+ * COLLAPSED the column shows nothing but three rings, so they take the room — 148px, which
+ * is still under the 176px adherence hero and must stay so: a pillar ring that matched the
+ * hero would claim the same authority, and these are secondary context by construction.
+ *
+ * OPEN, all three drop to 76px. The ruling was "shrink" rather than "push", and the
+ * difference matters: pushing would have sent the third pillar below the fold the moment you
+ * opened the first, which is the shape this column was rebuilt to escape.
+ *
+ * The box change is NOT animated. Transitioning width and height is forbidden outright, and
+ * the honest alternative — a FLIP with an inverse scale — needs a measure/invalidate cycle
+ * on three SVGs every toggle, on a surface opened dozens of times a day. What DOES animate
+ * is the two rings you did not open, which scale to 0.94: that is the shrink you can see,
+ * on transform alone.
+ */
+const RING_LARGE = 148;
+const RING_SMALL = 76;
+const RING_STROKE = 9;
 const QUICK_ADD = [15, 30, 60];
 
 /** The first line of a note, for a chip that has to fit a 250px column. The line breaks
@@ -54,6 +82,7 @@ export default function PillarSections({
   goals,
   skills,
   rings,
+  facts,
   colors,
   workouts,
   date,
@@ -66,6 +95,8 @@ export default function PillarSections({
   goals: GoalView[];
   skills: SkillView[];
   rings: PillarRingView[] | null;
+  /** The plain-words fortnight under each pillar's name. null until /api/rings lands. */
+  facts: PillarFactInput | null;
   /** Owner-chosen hue per pillar, from the curated palette. */
   colors: Partial<Record<PillarKey, string | null>>;
   workouts: Workout[];
@@ -107,8 +138,11 @@ export default function PillarSections({
     }
   };
 
+  // h-full only while everything is closed: the three rings then divide the column between
+  // them and the last caption lands on its bottom edge. Once something is open the column may
+  // outgrow its box and scroll — the detail is what you came for.
   return (
-    <div className="flex flex-col">
+    <div className={`flex flex-col ${open ? "lg:min-h-full" : "lg:h-full"}`}>
       {ORDER.map((pk) => {
         const ring = rings?.find((r) => r.pillar === pk) ?? null;
         const mine = goals.filter(
@@ -150,9 +184,10 @@ export default function PillarSections({
           ? ring.metrics.filter((m) => m.lap).map(asSegment)
           : [];
 
-        // A legend for the donut, and nothing more. Names, never counts: a collapsed pillar
-        // is an invitation to open it, not a second place to read the numbers off.
-        const legend = ring ? ring.metrics.map((m) => m.label).join(" · ") : "";
+        // What the fortnight actually held, in plain words. A RAW count, deliberately not
+        // derived from the ring above it: the ring caps at a threshold and this must not, or
+        // a fortnight of twenty sessions would print as eight.
+        const caption = facts ? pillarCaption(pk, facts) : "";
 
         // Three entries in one list rather than three stacked sections: a hairline between
         // pillars is separation enough once each collapses to a single row, and a ruled
@@ -162,34 +197,56 @@ export default function PillarSections({
         return (
           <section
             key={pk}
-            className="border-t border-[var(--color-line)] first:border-t-0"
+            // flex-1 + justify-center is what makes the three rings SPREAD rather than stack
+            // at the top with dead space beneath. Slack becomes air inside each third, so the
+            // last caption meets the bottom of the column instead of floating halfway up it.
+            // Rules appear only once something is open, when the column becomes a list again.
+            className={
+              open
+                ? "shrink-0 border-t border-[var(--color-line)] first:border-t-0"
+                : "flex min-h-0 flex-1 flex-col justify-center"
+            }
           >
-            {/* The whole header is the control — a 76px donut beside its name is a large,
+            {/* The whole header is the control — the donut and its name together are a large,
                 obvious target at 11pm, and a separate chevron would be a smaller one for no
                 gain. The heading stays an h2 so the column keeps a document outline. */}
             <h2>
               <button
                 onClick={() => setOpen(expanded ? null : pk)}
                 aria-expanded={expanded}
-                className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3.5 rounded-lg px-2 py-3.5 text-left transition-colors hover:bg-[var(--color-panel)]"
+                className={`-mx-2 flex w-[calc(100%+1rem)] rounded-lg px-2 transition-colors hover:bg-[var(--color-panel)] ${
+                  open
+                    ? "items-center gap-3.5 py-3.5 text-left"
+                    : "flex-col items-center gap-3 py-4 text-center"
+                }`}
               >
-                <SegmentedRing
-                  segments={segments}
-                  outer={outer}
-                  size={76}
-                  stroke={9}
-                  tone={pk}
-                  color={colors[pk]}
-                />
+                {/* The two rings you did NOT open scale down as well as shrink, so the
+                    movement says "these stepped back" rather than "these were resized".
+                    Transform only; .motion-slide carries the reduced-motion path. */}
+                <span
+                  className="motion-slide inline-flex"
+                  style={{
+                    transform: open && !expanded ? "scale(0.94)" : "scale(1)",
+                  }}
+                >
+                  <SegmentedRing
+                    segments={segments}
+                    outer={outer}
+                    size={open ? RING_SMALL : RING_LARGE}
+                    stroke={RING_STROKE}
+                    tone={pk}
+                    color={colors[pk]}
+                  />
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-small font-semibold">
                     {PILLAR_NAME[pk]}
                   </span>
-                  {legend && (
-                    <span className="mt-1 block text-micro text-[var(--color-muted)]">
-                      {legend}
-                    </span>
-                  )}
+                  {/* A fixed minimum height, so a pillar whose caption has not arrived yet
+                      does not sit a line higher than the two beside it. */}
+                  <span className="mt-1 block min-h-[1.35em] text-micro text-[var(--color-muted)]">
+                    {caption}
+                  </span>
                 </span>
               </button>
             </h2>
@@ -533,6 +590,10 @@ export default function PillarSections({
           </section>
         );
       })}
+
+      {/* The way through to the history, under the three rings it summarises. shrink-0 so
+          it never takes room from them — the rings divide whatever is left after this. */}
+      <StatsLink date={date} />
 
       {/* Mounted outside the pillar loop: a modal is not part of the row that opened it,
           and hanging it off Physical's expanded body would unmount it the moment anything

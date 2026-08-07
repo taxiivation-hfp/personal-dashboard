@@ -322,6 +322,27 @@ b,
   transition: transform var(--dur-data) var(--ease-out);
 }
 
+/* The one STAGGERED entrance in the app, and it is confined to the stats link.
+ *
+ * Sequencing is normally a tell — the uniform reflex of animating every section in turn —
+ * so it is allowed in exactly one place, on the one element whose job is to be noticed.
+ * The per-bar delay is inline; this class owns the travel.
+ *
+ * An ANIMATION rather than a transition, and the difference is load-bearing: a transition
+ * needs something to change it, which in practice means a state flip in a rAF, which never
+ * fires in a hidden tab. An animation is scheduled by CSS at element creation. `backwards`
+ * holds the bar at zero through its delay; under reduced motion the animation is removed
+ * entirely, which also removes the fill, leaving the bar at its resting height. The
+ * resting state is always the VISIBLE one. */
+@keyframes spark-rise {
+  from {
+    transform: scaleY(0);
+  }
+}
+.motion-spark {
+  animation: spark-rise var(--dur-fast) var(--ease-out) backwards;
+}
+
 /* The same contract at UI speed: something moving across the screen in response to a tap,
  * rather than a datum settling on a new value. */
 .motion-slide {
@@ -461,6 +482,12 @@ dialog[open]::backdrop {
   .motion-arc {
     transition: none;
   }
+
+  /* Removed, not zeroed — see the class. Zeroing the duration would keep the backwards
+   * fill and leave every bar collapsed. */
+  .motion-spark {
+    animation: none;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -473,3 +500,19 @@ dialog[open]::backdrop {
   border: 3px solid var(--color-bg);
 }
 
+
+/* Number fields carry no spinner.
+ *
+ * Not cosmetic. WebKit reveals the stepper ON HOVER ONLY, and it eats about 14px of a 40px
+ * field — so the weight row overflows its column under the pointer and nowhere else, which
+ * is the kind of bug that never appears in a screenshot. The value here is typed, never
+ * stepped: nobody nudges their bodyweight up by 0.1 with an arrow. */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

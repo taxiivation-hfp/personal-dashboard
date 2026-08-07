@@ -390,3 +390,63 @@ export function buildRings(
     return { pillar, fill, metrics };
   });
 }
+
+/**
+ * What a pillar's fortnight actually held, in plain words, under its name.
+ *
+ * The counterpart to the ring above it, and deliberately a DIFFERENT KIND of statement. The
+ * ring answers "how full", which is capped, weighted and bounded at a threshold; this
+ * answers "what happened", which is raw and must never cap. A caption derived from the ring
+ * would inherit the cap and print "8 sessions" on a fortnight of twenty.
+ *
+ * It is a count, not a verdict. No comparison with the last fortnight, no "up from", no
+ * adjective — the same prohibition the coach runs under.
+ *
+ * PURE, so it is testable without a database, and so the wording lives beside the registry
+ * rather than in a component where it would drift.
+ */
+export type PillarFactInput = {
+  /** Portfolio: total minutes across every skill in the window. */
+  skillMinutes: number;
+  /** Physical: gym_sessions ROWS in the window, all three kinds. */
+  workoutSessions: number;
+  /** Social: outreach non-negotiable ticks in the window. */
+  outreach: number;
+  /**
+   * Social: graphite calendar events in the window.
+   *
+   * UNDEFINED when Google could not be reached, and that distinction is the whole reason
+   * this is not a number. A zero would claim the fortnight held no social events, which is
+   * a different and possibly false statement — the same rule the ghost ring runs under.
+   */
+  socialEvents?: number;
+};
+
+/** "90" -> "1.5", "120" -> "2", "0" -> "0". One decimal, no trailing zero. */
+const asHours = (minutes: number): string =>
+  String(Math.round((minutes / 60) * 10) / 10);
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+export function pillarCaption(
+  pillar: PillarKey,
+  f: PillarFactInput,
+): string {
+  if (pillar === "portfolio") {
+    const h = asHours(f.skillMinutes);
+    // "no hours", not "0 hours": the zero is true, and saying it as a word rather than a
+    // figure keeps it from reading as a score of nought.
+    if (f.skillMinutes <= 0) return "no hours logged past fortnight";
+    return `${h} ${plural(Number(h), "hour", "hours")} logged past fortnight`;
+  }
+
+  if (pillar === "physical") {
+    if (f.workoutSessions <= 0) return "no sessions logged past fortnight";
+    return `${f.workoutSessions} ${plural(f.workoutSessions, "session", "sessions")} logged past fortnight`;
+  }
+
+  const out = `${f.outreach} ${plural(f.outreach, "outreach", "outreaches")} sent`;
+  // Say the calendar is unreachable rather than print a number that would be a guess.
+  if (f.socialEvents == null) return `${out}, events unavailable`;
+  return `${out}, ${f.socialEvents} ${plural(f.socialEvents, "event", "events")}`;
+}
