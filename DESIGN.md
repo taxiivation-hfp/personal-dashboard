@@ -449,11 +449,40 @@ shape said the same thing twice and made three pillars taller than a screen.
   sidestep it and stay exact where slices butt together.
 - Butt caps, never round: a round cap adds half a stroke width at each end, which would
   both overstate a small fill and spill into the neighbouring slice.
+- **A metric with a floor but no share is drawn as a thin lap OUTSIDE the donut**, at 30%
+  the stroke and 0.55 opacity — currently Misc, at one session a fortnight. As a slice it
+  would either take circle from the metrics that count or sit at weight 0 looking switched
+  off; as an outer lap it reads as an extra, which is exactly its standing in the maths.
+  The donut insets to make room, so a pillar with a lap and one without occupy the same box
+  and the column stays aligned. **Translucent, never glowing** — see The No-Shadow Rule.
 
 Arcs use `stroke-linecap: butt`, never round: round caps add half a stroke width at each
 end, making the smallest non-zero fills read as roughly half again their true value. The
 ring would overstate exactly where honesty matters most. Overdrive past the threshold draws
 a second translucent lap at 0.45 opacity and 42% stroke width, capped at 2×.
+
+### The week strip
+
+A combo chart, and the two quantities are on two different scales in one box because they
+are genuinely about the same days.
+
+- **Bars: productivity**, stacked in the colours those hours had in the calendar, scaled to
+  the visible week's own high — the score is uncapped, so there is no ceiling to scale
+  against, and the caption says so. **No number is printed.** The height is the whole claim.
+- **Line: adherence**, 2.5px in the accent, over everything. Thicker than any hairline in
+  the app and the same amber as the ring above it: one quantity, one colour, said twice. It
+  stops at today — a line through days that have not happened is a prediction.
+- **A halo, not a shadow.** The line is drawn twice: 5px in the column's own surface colour
+  first, then 2.5px in the accent. It is the page colour, it has no offset and it implies no
+  light source, so it stays legible over a dark slab without breaking The No-Shadow Rule.
+- **The column gap is a PERCENTAGE, not px.** The line is drawn in a 0–100 viewBox stretched
+  to the column's width; in px the two only agree at one width. Verified: the polyline's x
+  values land exactly on the bar centres at 1440 and 402.
+- **Today is a stronger outline, not a wash.** An amber tint behind the bars coloured every
+  slab in the stack, which is the one thing a chart made of colours cannot afford.
+- The stack is **sized against the peak directly, not scaled**. A `scaleY` would have been
+  composited and free, but it scales the separator hairlines with it, thinning them toward
+  nothing on exactly the short days that need them most.
 
 ### Motion
 
@@ -487,6 +516,19 @@ top, left, bottom or right — verified in the browser, not assumed.
 
 **The Pressable Rule.** Every interactive element confirms the tap. A control that does not
 move on press leaves you unsure it registered.
+
+**The Achromatic Slab Rule.** In a chart whose colours are borrowed from somewhere real —
+the calendar — anything that did not come from there is grey. A hue would have to *mean*
+something, and there is nothing behind it to mean. `SLAB_NEUTRAL` holds the two: certified
+on every surface like the projections (5.19:1 and 3.17:1) and 1.64:1 apart from each other,
+which is what lets two adjacent grey slabs read as two things rather than one tall one.
+
+**The Gap-Is-Not-A-Zero Rule.** In any series over time, a day with no entry draws NOTHING.
+Not a zero-height bar, not a line segment through it. An unweighed morning is not a morning
+that weighed nothing, and a day with no food logged is not a fast. The weight line breaks
+into a separate polyline per unbroken run for exactly this reason — and a run of one emits
+its point twice, because a single-point polyline draws nothing at all and would leave the
+commonest first-week state as an empty box.
 
 ## 6. Do's and Don'ts
 

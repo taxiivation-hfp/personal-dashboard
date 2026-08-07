@@ -50,19 +50,36 @@ A calendar block is not done/not-done. It is exactly one of:
 **Adherence rate is the hero stat**: today's adherence % is the single largest number
 on the screen, drawn as a large amber ring with a 7-day strip beneath it.
 
-**Non-negotiables count toward it too, weighted equally with blocks** — one item is one
-item. A habit has no end time, so it becomes due at an evening cutoff
-(`app_meta['habit_cutoff']`, default 21:00) rather than at midnight. Before the cutoff an
-UNTICKED habit is in neither numerator nor denominator; a TICKED one counts immediately,
-because ticking must visibly do something or tap-as-you-go is pointless until 9pm.
+### The figure CLIMBS from 0, and never falls
 
-The rate is therefore optimistic before the cutoff and settles — usually downward — when
-the rest join the denominator. The screen says how many are not yet due, so the movement
-is never a surprise.
+`src/lib/adherence.ts`. Two shares, and it is a sum of what has been EARNED, never a
+ratio of done-to-due:
 
-`app_meta['adherence_habits_since']` bounds this: days before it are computed blocks-only.
-Counting habits retroactively would have held untouched non-negotiables against days
-already lived under the old rule, which is a lie about the past.
+| Share | Earned by |
+|---|---|
+| **70** | blocked hours worked ÷ blocked hours in the day |
+| **30** | non-negotiables ticked ÷ non-negotiables scheduled, split evenly |
+
+So one hour of an eight-hour day is `1/8 × 70`, and one of five non-negotiables is 6.
+A day with 8h blocked and 5 items starts at 0 and can only go up.
+
+**This replaced a ratio of adhered-to-due, and the reason is behavioural, not
+arithmetic.** That figure fell every time a block came due unmarked, and fell again at an
+evening habit cutoff. Watching a number you are trying to earn slide backwards all
+afternoon is demotivating in a way that makes people stop looking, and a number nobody
+looks at cannot do its job.
+
+Consequences worth knowing, all of them intended:
+
+- **There is no habit cutoff any more.** `app_meta['habit_cutoff']` and `habitsDueOn` are
+  gone. An unticked non-negotiable is simply 6 points not yet earned; nothing has to
+  become "due" for the figure to be honest, because nothing is ever held against you.
+- **Drift is not punished, it just does not add.** The three-state mark still records what
+  happened and the coach still reads it. The hero figure stops being the place that holds
+  it against you.
+- **A day ends wherever it got to.** 60% is not a failure grade; it is sixty points earned.
+- Blocks with no duration are excluded from both sides — an all-day event is not eight
+  hours of work you failed to do.
 
 ## Non-negotiables
 
@@ -117,10 +134,28 @@ truth, what counts is the cap.
   give `0.8 x 1.25 + 0.2 x 0 = 100%`, so overdoing strength would exactly cancel skipping
   cardio. The cap stays in the maths; the acknowledgement lives in the pixels. A test
   asserts no amount of strength can fill Physical alone.
-- **Some things are tracked but NOT scored.** A metric with a live source and no
-  threshold (Misc — bouldering, calisthenic skills) shows a count, draws no ring, and is
-  excluded from the pillar mean. It is the "output is not scored" rule made literal: a
-  thing you log that is never a target. Do not give it a threshold.
+- **A metric may have a floor without having a share, and it is drawn OUTSIDE the ring.**
+  Misc — bouldering, calisthenic skills — has `required: 1` (one session a fortnight) and
+  `weight: 0`. It fills its own mark and never enters the Physical mean.
+
+  As a slice it would have been wrong either way: weighted, it would take circle from the
+  metrics that count; at weight 0 it would sit there looking like a slice switched off. As
+  a **thin translucent lap around the donut** it reads as an extra, which is exactly its
+  standing in the maths. `MetricRing.lap` derives this in `rings.ts` — the registry stays
+  the only place that knows what weight 0 means. A ghost is never a lap: "no source yet" is
+  a statement about the app and belongs on the ring where the metric would have been.
+
+  Translucent, **not glowing**. A glow is a shadow, and this app ships none.
+- **Social events come from the CALENDAR, not a checklist.** Graphite (`colorId: "8"`)
+  means a social event — Church, a night out. Two a fortnight. They are already scheduled
+  there, and a second place to record them is a second place to forget. Counted in
+  `/api/rings` and passed to `getRingCounts`; on a calendar failure the count is left
+  UNDEFINED so the ring goes ghost rather than reporting a false zero.
+- **Every skill lives under Portfolio**, including ice skating, badminton, calisthenics and
+  dancing. They are things being LEARNED, and learning is what Portfolio holds; Physical
+  already counts its own work from `gym_sessions`. The `skills` metric counts every
+  `skill_time` row regardless of pillar and always did, so this decides where a skill is
+  listed and nothing else.
 - **The real number is always printed beneath the ring** (`11 of 8 days`). The arc caps;
   the text never does. A cap must never hide the truth.
 - **`null` is not `0`.** A metric with no source is a dashed ghost and is excluded from
@@ -141,6 +176,17 @@ overrides leave behind.
 **It feeds nothing else** — not adherence, not the streak, not the rings, not the coach.
 That isolation is what stops "did I do what I said I'd do" becoming "how much did I
 finish". Goals are never auto-completed at 100%; marking one done is the owner's call.
+
+## Weight and calories — a record, never a verdict
+
+Both open a day-by-day history (`/api/trends`, `TrendPopup`), reached from a quiet
+"trend" at the end of their row. Weight is a **line** on the range actually observed —
+pinned to zero it would be a flat line saying nothing. Calories are **bars from zero** — a
+line would imply Tuesday's intake flowed into Wednesday's.
+
+**No average, no delta, no target line, no smoothing.** Every one of those is a judgement
+about a number this app has no business judging. A day with no entry is a GAP, never a
+zero: an unweighed morning is not a morning that weighed nothing.
 
 ## The day's title
 
@@ -173,8 +219,18 @@ didn't schedule a productive day. Both numbers matter.
 - **It feeds nothing** — not adherence, not the rings, not the streak, not the coach. The
   quarantine is enforced by data flow, not by discipline: the score exists only on
   `/api/adherence` and never on `DayView`, which is what the coach reads.
-- **Adherence remains the hero.** Productivity is secondary context, drawn smaller and in a
-  different channel — ink, never the accent, so the two can never be read as one quantity.
+- **On the week strip, productivity is the BARS and adherence is the LINE**, and the bars
+  are stacked in the colours those hours had in the calendar. Productivity carries the most
+  ink because it is the thing with composition to show — where the hours went. Adherence
+  keeps the accent, the printed percentage and the top of the z-order, because it is still
+  the measurement and still the app's question.
+- **No productivity number is ever printed.** The bar's height is the whole claim. Printing
+  an uncapped score with no ceiling beside it invites a comparison it cannot support — and
+  it is the shortest path back to a scoreboard.
+- The two slabs that are not calendar time — non-negotiables and workouts — are
+  ACHROMATIC (`SLAB_NEUTRAL` in `eventColor.ts`). A hue there would have to mean something,
+  and there is no calendar colour behind them to mean it.
+- **Adherence remains the hero** — the 176px amber ring, not the strip.
 - **No week-over-week comparison, no best-week marker, no target line, no delta.** It is
   graphite on paper: a record, not a scoreboard.
 - **It does not reopen gamification.** No levels, no thresholds, no milestones, no streaks
@@ -200,6 +256,13 @@ Light beige, premium, clean.
   `engine.setPillarColor` refuses anything outside it. The accent, the ink, the surfaces
   and the three block states are NOT editable — one accent is what keeps the page quiet,
   and the block states deliberately avoid a severity ramp. Do not add a free hex picker.
+- **Three windows, separated by HUE and not by lightness.** Calendar / Today / Pillars sit
+  on `--color-surface-2` (cool green, 120°), `-1` (warm near-white, 82°) and `-3` (gold,
+  68°). Lightness was tried first and failed: contrast ratio measures luminance only, so
+  three tones a point apart in L measured 1.03–1.07:1 against each other and read as one
+  surface. Separating on hue at nearly equal lightness is visible and costs no contrast.
+  The ramp is built UPWARD from `--color-bg`; darkening the page instead drops `--color-muted`
+  to 4.10:1 and `skipped` to 3.97:1, both failures.
 - Generous whitespace. One clear visual hierarchy. Restrained colour.
 - Big, clean number treatment for the adherence stat.
 - **Two font weights only** — 400 and 600. No 500, no `font-medium`. A third weight is a
