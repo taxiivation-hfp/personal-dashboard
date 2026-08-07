@@ -18,3 +18,6 @@ next-env.d.ts
 .impeccable/
 
 .DS_Store
+
+# Scratch files from contrast/geometry checks. Never part of the app.
+.tmp-*
