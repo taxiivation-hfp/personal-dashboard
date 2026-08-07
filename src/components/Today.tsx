@@ -40,12 +40,10 @@ type StripDay = {
  */
 const STRIP_GAP_PCT = 2;
 
-/** The stack, bottom-up, in the fill each slab is drawn with. Blocked time keeps the
- *  colour it had in the calendar; the two things that are not blocked time go grey. */
+/** The stack, bottom-up, in the fill each slab is drawn with. Blocked time keeps the colour
+ *  it had in the calendar; the one thing that is not blocked time goes grey. */
 const slabFill = (s: ProductivitySegment): string =>
-  s.kind === "time"
-    ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL.habits)
-    : SLAB_NEUTRAL[s.kind];
+  s.kind === "time" ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL) : SLAB_NEUTRAL;
 
 // Desktop only: each column owns its scroll, bounded to whatever the masthead leaves.
 //
@@ -280,11 +278,11 @@ export default function Today({
             rank: i < 0 ? CALENDAR_RATES.length : i,
           });
         } else {
+          // After every calendar colour: the hours came first, and this is the one thing
+          // in the bar that was not an hour.
           seen.set(fill, {
-            label: s.kind === "workouts" ? "Workouts" : "Non-negotiables",
-            // After every calendar colour: the hours came first, and these are the two
-            // things in the bar that were not hours.
-            rank: CALENDAR_RATES.length + (s.kind === "workouts" ? 1 : 2),
+            label: "Non-negotiables",
+            rank: CALENDAR_RATES.length + 1,
           });
         }
       }

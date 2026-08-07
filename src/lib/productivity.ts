@@ -27,7 +27,6 @@ export type BlockState = "adhered" | "drifted" | "skipped" | "dismissed";
 
 export const POINTS_PER_HOUR = 100;
 export const POINTS_PER_HABIT = 25;
-export const POINTS_PER_WORKOUT = 100;
 export const MINUTES_PER_HOUR = 60;
 
 /**
@@ -52,6 +51,10 @@ export const CALENDAR_RATES: {
   // its colour. Peacock briefly sat here too, but that was a stray on a couple of real
   // events rather than a rule; a colour has to be chosen deliberately to mean something.
   { id: null, google: "default", label: "Uni", rate: 0.5 },
+  // Gym. This is where a workout enters the score, and it is the ONLY place — see the note
+  // on ProductivityInput. Half rate, the owner's ruling: an hour under a bar is an hour
+  // spent, and it is not the hour the day was built around.
+  { id: "3", google: "Grape", label: "Gym", rate: 0.5 },
 ];
 
 export const UNLISTED_RATE = 0;
@@ -77,12 +80,30 @@ export type ProductiveBlock = {
 
 export type ProductivityInput = {
   blocks: ProductiveBlock[];
-  /** Non-negotiables ticked that day, numeric ones included — an entry exists or it does not. */
+  /**
+   * Non-negotiables ticked that day, numeric ones included — an entry exists or it does not.
+   *
+   * These DO stay in the score even though adherence counts them too, and that is not a
+   * double count: adherence and productivity are two different questions asked of the same
+   * day. Ticking a non-negotiable is both "I did what I said I'd do" and "I spent time on
+   * it", and it is allowed to answer both.
+   */
   habitsDone: number;
-  /** gym_sessions ROWS that day. Sessions, not days. All three kinds count: "not scored"
-   *  is a statement about the Physical ring, and this is a separate system. */
-  workouts: number;
 };
+
+/**
+ * WORKOUTS ARE NOT AN INPUT, AND THAT IS DELIBERATE.
+ *
+ * A gym session used to score 100 points from its gym_sessions row. It now scores from the
+ * CALENDAR instead, as a Grape block, at half rate like any other hour. Both at once would
+ * have been a real double count — the same hour paid for twice, once because it was
+ * scheduled and again because it was written up afterwards — and it would have quietly
+ * rewarded logging rather than training.
+ *
+ * The consequence worth knowing: a session you did but never put in the calendar scores
+ * nothing here. That is consistent with COUNTED_STATES, which only pays for blocks you
+ * marked. The Physical ring still counts the logged session, and that is the ring's job.
+ */
 
 /**
  * One slab of the day's stacked bar.
@@ -92,7 +113,7 @@ export type ProductivityInput = {
  * two segments that are not blocked time at all.
  */
 export type ProductivitySegment = {
-  kind: "time" | "habits" | "workouts";
+  kind: "time" | "habits";
   colorId: ColorId;
   points: number;
 };
@@ -102,7 +123,6 @@ export type ProductivityScore = {
   points: number;
   timePoints: number;
   habitPoints: number;
-  workoutPoints: number;
   /** Raw minutes that scored anything at all. */
   minutes: number;
   /** Those minutes after the colour rate is applied. */
@@ -148,7 +168,6 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     (weightedMinutes / MINUTES_PER_HOUR) * POINTS_PER_HOUR,
   );
   const habitPoints = input.habitsDone * POINTS_PER_HABIT;
-  const workoutPoints = input.workouts * POINTS_PER_WORKOUT;
 
   // Colour slabs are apportioned out of the ALREADY-ROUNDED timePoints, and the smallest
   // takes the remainder. Rounding each colour independently would let the stack drift a
@@ -164,16 +183,13 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     assigned += pts;
     if (pts > 0) segments.push({ kind: "time", colorId, points: pts });
   });
-  if (workoutPoints > 0)
-    segments.push({ kind: "workouts", colorId: null, points: workoutPoints });
   if (habitPoints > 0)
     segments.push({ kind: "habits", colorId: null, points: habitPoints });
 
   return {
-    points: timePoints + habitPoints + workoutPoints,
+    points: timePoints + habitPoints,
     timePoints,
     habitPoints,
-    workoutPoints,
     minutes,
     weightedMinutes,
     segments,

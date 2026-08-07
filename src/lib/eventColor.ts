@@ -57,21 +57,18 @@ export const projectedColour = (colorId: string | null): string | null =>
   colorId == null ? GOOGLE_PROJECTED["7"] : (GOOGLE_PROJECTED[colorId] ?? null);
 
 /**
- * The two slabs of the productivity stack that are NOT blocked calendar time.
+ * The ONE slab of the productivity stack that is not calendar time: non-negotiables ticked.
  *
- * Achromatic on purpose. A hue here would have to mean something — and there is no
- * calendar colour behind a non-negotiable or a workout to mean it. Grey says "logged, but
- * not an hour you scheduled", which is exactly their standing in the score.
+ * Achromatic on purpose. A hue here would have to mean something, and there is no calendar
+ * colour behind a non-negotiable to mean it. Grey says "logged, but not an hour you
+ * scheduled", which is exactly its standing in the score.
  *
- * Certified against every surface exactly as the projections are — worst case 5.19:1 and
- * 3.17:1, both clear of the 3:1 floor for a filled shape. They also sit 1.64:1 apart from
- * each other, which is what lets two adjacent grey slabs read as two things rather than one
- * tall one.
+ * There used to be a second one for workouts. A gym session now scores as a Grape block in
+ * the calendar instead, so it arrives already coloured and the grey it used to take is gone
+ * — one fewer thing on the chart that had to be explained.
  *
- * Graphite projects to #747474, which falls between them. No collision in practice: graphite
- * means a social event, social events are not a scored colour, so they never reach the bar.
+ * Certified against every surface exactly as the projections are: worst case 3.35:1, clear
+ * of the 3:1 floor for a filled shape, and inside the projections' own tonal band (their
+ * worst case is 3.70:1) so it never out-shouts a coloured slab.
  */
-export const SLAB_NEUTRAL: Record<"workouts" | "habits", string> = {
-  workouts: "#5f5f5f",
-  habits: "#818181",
-};
+export const SLAB_NEUTRAL = "#7d7d7d";

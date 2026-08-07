@@ -109,29 +109,31 @@ test("a known id resolves to its projection", () => {
   assert.equal(projectedColour("11"), GOOGLE_PROJECTED["11"]);
 });
 
-// --- the two slabs that are not calendar time -------------------------------------------
+// --- the one slab that is not calendar time ----------------------------------------------
 
-test("the neutral slabs are certified on every surface, like the projections", () => {
-  for (const [kind, hex] of Object.entries(SLAB_NEUTRAL))
-    for (const s of SURFACES)
-      assert.ok(
-        contrast(hex, s) >= 3,
-        `${kind} on ${s} is ${contrast(hex, s).toFixed(2)}`,
-      );
+test("the neutral slab is certified on every surface, like the projections", () => {
+  for (const s of SURFACES)
+    assert.ok(
+      contrast(SLAB_NEUTRAL, s) >= 3,
+      `slab on ${s} is ${contrast(SLAB_NEUTRAL, s).toFixed(2)}`,
+    );
 });
 
-test("the two neutral slabs are far enough apart to read as two", () => {
-  // Adjacent in the stack with only a hairline between them. Below about 1.5 they merge
-  // into one tall grey block and the bar stops saying what it is made of.
-  const sep = contrast(SLAB_NEUTRAL.workouts, SLAB_NEUTRAL.habits);
-  assert.ok(sep >= 1.5, `separation is ${sep.toFixed(2)}`);
+test("the neutral slab never out-shouts a coloured one", () => {
+  // Inside the projections' own tonal band. A grey darker than every calendar colour would
+  // make the one part of the bar that is not an hour the heaviest thing in it.
+  const worstProjection = Math.min(
+    ...Object.values(GOOGLE_PROJECTED).flatMap((h) =>
+      SURFACES.map((s) => contrast(h, s)),
+    ),
+  );
+  const slab = Math.min(...SURFACES.map((s) => contrast(SLAB_NEUTRAL, s)));
+  assert.ok(slab <= worstProjection, `slab ${slab} vs projections ${worstProjection}`);
 });
 
-test("the neutral slabs are truly achromatic — a hue here would have to mean something", () => {
-  for (const hex of Object.values(SLAB_NEUTRAL)) {
-    const n = parseInt(hex.slice(1), 16);
-    const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-    assert.equal(r, g);
-    assert.equal(g, b);
-  }
+test("the neutral slab is truly achromatic — a hue here would have to mean something", () => {
+  const n = parseInt(SLAB_NEUTRAL.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  assert.equal(r, g);
+  assert.equal(g, b);
 });

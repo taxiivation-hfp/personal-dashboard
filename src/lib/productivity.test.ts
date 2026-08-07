@@ -4,7 +4,6 @@ import {
   CALENDAR_RATES,
   UNLISTED_RATE,
   POINTS_PER_HABIT,
-  POINTS_PER_WORKOUT,
   rateFor,
   scoreDay,
   type BlockState,
@@ -26,8 +25,14 @@ const uni = (minutes: number): ProductiveBlock => ({
   colorId: null,
   state: "adhered",
 });
+/** Grape — the owner's colour for gym. The ONLY way a workout enters this score. */
+const grape = (minutes: number): ProductiveBlock => ({
+  minutes,
+  colorId: "3",
+  state: "adhered",
+});
 const day = (o: Partial<ProductivityInput> = {}) =>
-  scoreDay({ blocks: [], habitsDone: 0, workouts: 0, ...o });
+  scoreDay({ blocks: [], habitsDone: 0, ...o });
 
 test("red is Work at the full rate", () => {
   assert.equal(rateFor("11"), 1);
@@ -77,9 +82,26 @@ test("each non-negotiable is 25", () => {
   assert.equal(day({ habitsDone: 4 }).points, 100);
 });
 
-test("each workout is 100 regardless of duration", () => {
-  assert.equal(POINTS_PER_WORKOUT, 100);
-  assert.equal(day({ workouts: 2 }).points, 200);
+// The double-count guard, and the reason the workouts input was deleted rather than
+// zeroed. A gym session used to score from its gym_sessions row AND would now score again
+// as a Grape block; paying twice for one hour would have rewarded writing the session up
+// rather than doing it.
+test("a gym hour scores once, from the calendar, at half rate", () => {
+  const gym = CALENDAR_RATES.find((c) => c.id === "3");
+  assert.ok(gym, "Grape is in the rate table");
+  assert.equal(gym.label, "Gym");
+  assert.equal(gym.rate, 0.5);
+  assert.equal(day({ blocks: [grape(60)] }).points, 50);
+});
+
+test("logging a session cannot add points — there is no input for it", () => {
+  // Parsed rather than written as a literal: this is a STALE CALLER, the shape a caller
+  // that was never updated would send, and TypeScript would refuse to let me write one.
+  const s = scoreDay(
+    JSON.parse('{"blocks":[],"habitsDone":0,"workouts":3}'),
+  );
+  assert.equal(s.points, 0);
+  assert.deepEqual(s.segments, []);
 });
 
 // The property the whole feature turns on. This is the DELIBERATE inversion of the ring
@@ -87,7 +109,7 @@ test("each workout is 100 regardless of duration", () => {
 // well-rounded fortnight the only good-looking board. This does not cap, because its job
 // is the opposite — a raw comparative reading of hours actually spent.
 test("the score is UNCAPPED", () => {
-  const s = day({ blocks: [red(360), uni(120)], habitsDone: 5, workouts: 3 });
+  const s = day({ blocks: [red(360), uni(120), grape(360)], habitsDone: 5 });
   assert.equal(s.points, 1125);
   assert.ok(s.points > 100);
 });
@@ -109,8 +131,8 @@ test("a mixed day counts only the adhered minutes", () => {
 });
 
 test("the parts always sum to the total", () => {
-  const s = day({ blocks: [red(45), uni(25)], habitsDone: 3, workouts: 1 });
-  assert.equal(s.timePoints + s.habitPoints + s.workoutPoints, s.points);
+  const s = day({ blocks: [red(45), uni(25)], habitsDone: 3 });
+  assert.equal(s.timePoints + s.habitPoints, s.points);
 });
 
 test("points are whole numbers", () => {
@@ -133,9 +155,8 @@ test("a negative duration cannot subtract from the day", () => {
 // The bar is a PICTURE of the total. If the slabs sum to something else, the picture lies.
 test("the stacked segments always sum to the total", () => {
   const s = day({
-    blocks: [red(45), uni(25), red(90)],
+    blocks: [red(45), uni(25), grape(90)],
     habitsDone: 3,
-    workouts: 2,
   });
   assert.equal(
     s.segments.reduce((t, x) => t + x.points, 0),
@@ -149,11 +170,19 @@ test("blocked time is merged by colour, not left one slab per event", () => {
   assert.equal(time.length, 2, "two colours, two slabs — not three events, three slabs");
 });
 
-test("habits and workouts are their own slabs, and carry no colour", () => {
-  const s = day({ habitsDone: 2, workouts: 1 });
-  const kinds = s.segments.map((x) => x.kind).sort();
-  assert.deepEqual(kinds, ["habits", "workouts"]);
+test("non-negotiables are their own slab, and carry no colour", () => {
+  const s = day({ habitsDone: 2 });
+  assert.deepEqual(
+    s.segments.map((x) => x.kind),
+    ["habits"],
+  );
   for (const x of s.segments) assert.equal(x.colorId, null);
+});
+
+// Adherence counts them too, and that is NOT a double count — see the note on
+// ProductivityInput. Two different questions asked of the same day.
+test("non-negotiables stay in the score even though adherence counts them", () => {
+  assert.equal(day({ habitsDone: 4 }).points, 100);
 });
 
 test("an empty day has no slabs at all", () => {
@@ -179,6 +208,5 @@ test("an empty day scores a real zero", () => {
   assert.equal(s.points, 0);
   assert.equal(s.timePoints, 0);
   assert.equal(s.habitPoints, 0);
-  assert.equal(s.workoutPoints, 0);
   assert.equal(s.minutes, 0);
 });

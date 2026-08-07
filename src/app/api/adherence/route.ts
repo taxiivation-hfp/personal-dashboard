@@ -85,17 +85,6 @@ export async function GET(req: Request) {
       ticksByDate.get(d)!.add(Number(r.habit_id));
     }
 
-    // Gym sessions per day, for the productivity score. One range query rather than one
-    // per day — the strip asks for 7 and the calendar column for 9.
-    const gymRows = await db.execute({
-      sql: "SELECT date, COUNT(*) AS n FROM gym_sessions WHERE date BETWEEN ? AND ? GROUP BY date",
-      args: [start, end],
-    });
-    // Number(), not the raw value: libSQL returns aggregates as BigInt and `bigint /
-    // number` throws. A GROUP BY COUNT is never null, so no null-guard is needed.
-    const gymByDate = new Map<string, number>();
-    for (const r of gymRows.rows) gymByDate.set(String(r.date), Number(r.n));
-
     // What the owner intends each day to be. Carried on the strip so the days ahead can be
     // named in advance, which is the whole point of an intention.
     const titles = await dayTitlesBetween(db, start, end);
@@ -126,8 +115,11 @@ export async function GET(req: Request) {
        * structurally invisible to the coach rather than merely discouraged by a prompt.
        *
        * null when the calendar is unreachable, and that gate matters: without it a day
-       * would still report a number built from habits and workouts while every scheduled
+       * would still report a number built from its non-negotiables while every scheduled
        * hour silently counted as zero — a wrong number rather than an absent one.
+       *
+       * Gym sessions are NOT read here any more. A workout scores as a Grape block in the
+       * calendar; paying for the logged row as well would be the same hour counted twice.
        */
       const productivity = connected
         ? scoreDay({
@@ -137,7 +129,6 @@ export async function GET(req: Request) {
               state: b.state,
             })),
             habitsDone,
-            workouts: gymByDate.get(d) ?? 0,
           })
         : null;
 
