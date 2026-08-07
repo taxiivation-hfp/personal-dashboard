@@ -26,13 +26,15 @@ type StripDay = {
   /** 0-100, and it only ever climbs through the day. Never null — see adherence.ts. */
   pct: number;
   isToday: boolean;
-  isFuture: boolean;
   /** Hours SPENT, uncapped. null when the calendar is unreachable — see CLAUDE.md's
    *  Productivity section; it is a quarantined exception, not a second adherence. */
   productivity: { points: number; segments: ProductivitySegment[] } | null;
-  /** What the owner intends the day to be. */
-  title: string | null;
 };
+
+// `isFuture` and `title` are still returned by /api/adherence and deliberately NOT declared
+// here. The strip ends on the day being viewed, so no day on it can be future; and the days
+// ahead are no longer named from this screen. Leaving the fields in the type would invite the
+// next reader to branch on one that is always false.
 
 /**
  * The gap between the week's columns, as a PERCENTAGE of the row.
