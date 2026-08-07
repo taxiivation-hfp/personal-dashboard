@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
+import HabitBox from "./HabitBox";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
@@ -395,18 +396,7 @@ export default function Today({
                 // clearing the field clears the day exactly like unticking.
                 <li key={h.id} className={CHECK_ROW}>
                   <div className="flex w-full items-center gap-2.5 py-2.5">
-                    <span
-                      aria-hidden
-                      className="h-[18px] w-[18px] shrink-0 rounded-[5px] border transition-colors"
-                      style={{
-                        borderColor: h.done
-                          ? habitTone(h.pillar)
-                          : "var(--color-line-strong)",
-                        background: h.done
-                          ? habitTone(h.pillar)
-                          : "transparent",
-                      }}
-                    />
+                    <HabitBox done={h.done} tone={habitTone(h.pillar)} />
                     <label
                       htmlFor={`h${h.id}`}
                       className={`min-w-0 flex-1 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
@@ -455,38 +445,7 @@ export default function Today({
                     }
                     className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
                   >
-                    <span
-                      aria-hidden
-                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors"
-                      style={{
-                        // Its pillar's hue, so the checklist reads as categorised rather
-                        // than as one undifferentiated list. The tick and the muted label
-                        // carry done-ness too, so nothing rides on colour alone.
-                        borderColor: h.done
-                          ? habitTone(h.pillar)
-                          : "var(--color-line-strong)",
-                        background: h.done
-                          ? habitTone(h.pillar)
-                          : "transparent",
-                      }}
-                    >
-                      {h.done && (
-                        <svg
-                          width="11"
-                          height="11"
-                          viewBox="0 0 12 12"
-                          fill="none"
-                        >
-                          <path
-                            d="M2.5 6.5l2.2 2.2L9.5 3.8"
-                            stroke="#fff"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      )}
-                    </span>
+                    <HabitBox done={h.done} tone={habitTone(h.pillar)} />
                     <span
                       className={`min-w-0 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
                     >

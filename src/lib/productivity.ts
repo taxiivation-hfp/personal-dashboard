@@ -27,6 +27,20 @@ export type BlockState = "adhered" | "drifted" | "skipped" | "dismissed";
 
 export const POINTS_PER_HOUR = 100;
 export const POINTS_PER_HABIT = 25;
+
+/**
+ * The calorie FLOOR — a number to reach, never a ceiling to stay under.
+ *
+ * The owner's, and the direction is the whole point: this is someone training, for whom
+ * under-eating is the failure and there is no upper bound worth drawing. It scores exactly
+ * one non-negotiable's worth, because that is what it is — a daily thing you either did or
+ * did not do.
+ *
+ * It does NOT reach adherence. Adherence is blocked hours and the non-negotiables list, and
+ * calories are on neither; a floor that moved the hero figure would be a target by another
+ * name. This is the productivity score, which is allowed to count hours and effort.
+ */
+export const CALORIE_FLOOR = 2500;
 export const MINUTES_PER_HOUR = 60;
 
 /**
@@ -89,6 +103,15 @@ export type ProductivityInput = {
    * it", and it is allowed to answer both.
    */
   habitsDone: number;
+  /**
+   * The day's calorie total, or null if nothing was logged.
+   *
+   * At or above CALORIE_FLOOR it scores one non-negotiable's worth and joins the SAME grey
+   * slab the non-negotiables occupy. One grey rather than two: both are things you ticked
+   * off a day rather than hours you scheduled, and a second achromatic slab would be a
+   * distinction the chart cannot draw and the reader cannot use.
+   */
+  calories?: number | null;
 };
 
 /**
@@ -167,7 +190,12 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
   const timePoints = Math.round(
     (weightedMinutes / MINUTES_PER_HOUR) * POINTS_PER_HOUR,
   );
-  const habitPoints = input.habitsDone * POINTS_PER_HABIT;
+  // The calorie floor counts as one more ticked thing. Below it, nothing — a floor you did
+  // not reach is not a partial credit, or it would stop being a floor.
+  const ticked =
+    input.habitsDone +
+    ((input.calories ?? 0) >= CALORIE_FLOOR ? 1 : 0);
+  const habitPoints = ticked * POINTS_PER_HABIT;
 
   // Colour slabs are apportioned out of the ALREADY-ROUNDED timePoints, and the smallest
   // takes the remainder. Rounding each colour independently would let the stack drift a

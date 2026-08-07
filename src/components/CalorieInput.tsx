@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import HabitBox from "./HabitBox";
+import { CALORIE_FLOOR } from "@/lib/productivity";
 import type { CalorieEntry } from "@/lib/queries";
 
 /**
@@ -28,6 +30,7 @@ export default function CalorieInput({
 }) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
+  const met = (calories ?? 0) >= CALORIE_FLOOR;
 
   async function add() {
     const n = Number(value.replace(/[,\s]/g, ""));
@@ -70,21 +73,36 @@ export default function CalorieInput({
     // unrecoverable, and a field you are afraid to touch is a field you stop using.
     <div className="py-2.5">
       <div className="flex items-center gap-2.5">
+        {/* A FLOOR, not a ceiling — the direction is the whole point for someone training,
+            where under-eating is the failure and there is no upper bound worth drawing. The
+            box is dashed until it is met, which is this app's existing word for "not yet"
+            rather than "failed"; most of the day is legitimately spent below the line. */}
+        <HabitBox
+          done={met}
+          pending
+          tone="var(--color-physical)"
+        />
         <label
           htmlFor="kcal"
-          className="min-w-0 flex-1 font-serif text-small leading-snug text-[var(--color-muted)]"
+          className={`min-w-0 flex-1 font-serif text-small leading-snug ${met ? "text-[var(--color-muted)]" : ""}`}
         >
           Calories
         </label>
 
         {/* The total is the value — the field beside it is only an increment. Tabular so it
             doesn't jitter as it climbs through the day. */}
+        {/* The total is the value; the field beside it is only an increment. Tabular so it
+            doesn't jitter as it climbs. The floor is printed beside it in muted — a number
+            you are walking toward is more use than a number on its own. */}
         <span className="shrink-0 text-small tabular-nums">
           {calories == null ? (
             <span className="text-[var(--color-muted)]">—</span>
           ) : (
             calories
           )}
+          <span className="text-micro text-[var(--color-muted)]">
+            /{CALORIE_FLOOR}
+          </span>
         </span>
 
         {/* Written on a line, not typed into a chip: the underline is the field, and it

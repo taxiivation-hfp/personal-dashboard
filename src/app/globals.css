@@ -85,7 +85,17 @@
    * and a gold. Every one keeps --color-muted above the 4.5:1 floor (5.50, 5.11, 4.67). */
   --color-bar: #eee7da; /* masthead · muted 4.54:1 · skipped FAILS here, ink only */
   --color-surface-1: #fffdf9; /* TODAY    · warm near-white, the hero column */
-  --color-surface-2: #f3f6ec; /* CALENDAR · cool green, the days around it */
+  /* CALENDAR · cool paper with a faint lilac cast.
+   *
+   * Was the green that now belongs to TODAY'S ROW alone. Making the whole window green meant
+   * today — which takes no wash, deliberately — was the same colour as the ground it sat on,
+   * so the live row read as the window rather than as a row. The green does more work as one
+   * row's fill than as several hundred pixels of background.
+   *
+   * Cool rather than warm, so the column of days AROUND today reads quieter than the hero
+   * column beside it. Still separated from the other two windows by HUE at near-equal
+   * lightness — 1.11:1 from surface-1, 1.06:1 from surface-3 — exactly as before. */
+  --color-surface-2: #f2f1f5;
   --color-surface-3: #f5e9dd; /* PILLARS  · gold, the fortnight behind */
 
   /* Recorded vs not-yet, in the calendar column and the strip.
@@ -99,6 +109,13 @@
    * page, an upcoming one floats UP) and position carries it a third, so nothing rides on
    * chroma alone. */
   --color-recorded: #fdefdc; /* past & completed · ink 14.34:1 · muted 4.93:1 */
+  /* TODAY, in the calendar column, and nowhere else.
+   *
+   * The green the window used to be, deepened enough to read as a deliberate fill rather
+   * than as bare ground. It sits ~1.05:1 from the window and from the past-row wash, which
+   * is expected: the ratio measures luminance and hue is what separates these. Certified
+   * where it matters — muted 4.75:1, skipped 4.60:1, ink 13.80:1. */
+  --color-today: #e6f0dc;
   --color-ahead: #fcfbf9; /* upcoming · ink 15.69:1 · muted 5.40:1 */
 
   /* TYPE.

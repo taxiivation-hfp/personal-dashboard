@@ -41,12 +41,19 @@ const dot = (state: string | null) =>
  * against the surface they actually land on — recorded is ink 14.34:1 / muted 4.93:1, ahead
  * is 15.69:1 / 5.40:1.
  *
- * Today takes no wash at all. The calendar window IS today's ground, and being the one row
- * that isn't tinted is most of why it reads as the live one.
+ * Today takes the GREEN, and it is the only place that colour appears in the app.
+ *
+ * It used to take no wash at all and let the window's own green through — which worked only
+ * while the window was green, and made the live row indistinguishable from the ground when
+ * the window stopped being. Today is now a fill like the other two states, so the column
+ * reads as three kinds of row on one paper rather than two kinds and a hole.
+ *
+ * Warm past, green today, pale future: the day you can still act on is the only one with a
+ * hue, and the two you cannot are a memory and a blank.
  */
 const surface = (d: Day) =>
   d.isToday
-    ? "transparent"
+    ? "var(--color-today)"
     : d.isFuture
       ? "var(--color-ahead)"
       : "var(--color-recorded)";

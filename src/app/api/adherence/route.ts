@@ -91,6 +91,16 @@ export async function GET(req: Request) {
     // StatsLink). getDayView still reads the viewed day's own title, which is where the one
     // title this app still shows comes from.
 
+    // Calories per day, for the productivity floor. One ranged query rather than one per
+    // day. SUM is an aggregate, so libSQL hands it back as a BigInt — Number() at the
+    // boundary, as everywhere else.
+    const calRows = await db.execute({
+      sql: "SELECT date, SUM(kcal) AS total FROM calorie_entries WHERE date BETWEEN ? AND ? GROUP BY date",
+      args: [start, end],
+    });
+    const calByDate = new Map<string, number>();
+    for (const r of calRows.rows) calByDate.set(String(r.date), Number(r.total));
+
     const today = todayISO();
     const nowMs = Date.now();
     const out = [];
@@ -131,6 +141,7 @@ export async function GET(req: Request) {
               state: b.state,
             })),
             habitsDone,
+            calories: calByDate.get(d) ?? null,
           })
         : null;
 

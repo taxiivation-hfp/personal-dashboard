@@ -4,6 +4,7 @@ import {
   CALENDAR_RATES,
   UNLISTED_RATE,
   POINTS_PER_HABIT,
+  CALORIE_FLOOR,
   rateFor,
   scoreDay,
   type BlockState,
@@ -209,4 +210,47 @@ test("an empty day scores a real zero", () => {
   assert.equal(s.timePoints, 0);
   assert.equal(s.habitPoints, 0);
   assert.equal(s.minutes, 0);
+});
+
+// --- the calorie floor ---------------------------------------------------------------------
+
+test("the calorie floor scores one non-negotiable's worth, and only at or above it", () => {
+  assert.equal(CALORIE_FLOOR, 2500);
+  assert.equal(day({ calories: 2499 }).points, 0);
+  assert.equal(day({ calories: 2500 }).points, POINTS_PER_HABIT);
+  assert.equal(day({ calories: 4000 }).points, POINTS_PER_HABIT);
+});
+
+// A FLOOR, not a gauge. Partial credit below the line would make it a target you can
+// half-hit, which is a different and softer thing than a floor.
+test("below the floor is nothing, never a partial credit", () => {
+  for (const kcal of [0, 1, 1250, 2499])
+    assert.equal(day({ calories: kcal }).points, 0);
+  assert.equal(day({ calories: null }).points, 0);
+  assert.equal(day({}).points, 0);
+});
+
+test("the floor joins the non-negotiables slab rather than growing a second grey", () => {
+  const s = day({ habitsDone: 2, calories: 3000 });
+  assert.deepEqual(
+    s.segments.map((x) => x.kind),
+    ["habits"],
+  );
+  // Three ticked things: two non-negotiables and the floor.
+  assert.equal(s.habitPoints, 3 * POINTS_PER_HABIT);
+  assert.equal(
+    s.segments.reduce((t, x) => t + x.points, 0),
+    s.points,
+  );
+});
+
+// The floor is a productivity rule and must stay one. Adherence is blocked hours plus the
+// non-negotiables list; calories are on neither, and a floor that moved the hero figure
+// would be a target by another name.
+test("the floor never reaches adherence — it has no path to it", () => {
+  const withFloor = day({ blocks: [red(60)], habitsDone: 1, calories: 3000 });
+  const without = day({ blocks: [red(60)], habitsDone: 1 });
+  assert.equal(withFloor.points - without.points, POINTS_PER_HABIT);
+  // scoreDay returns no adherence figure at all — the quarantine is structural.
+  assert.ok(!("pct" in withFloor));
 });
