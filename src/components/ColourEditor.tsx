@@ -40,10 +40,15 @@ export default function ColourEditor({ initial }: { initial: PillarView[] }) {
         <h1 className="text-heading font-serif font-semibold">Colours</h1>
         <Link
           href="/"
-          className="text-small text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-        >
-          ← Today
-        </Link>
+          aria-label="Close"
+
+          className="shrink-0 rounded-lg px-2 py-1 text-body leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] hover:text-[var(--color-ink)]"
+
+          >
+
+            ×
+
+          </Link>
       </header>
 
       <p className="mt-3 max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
