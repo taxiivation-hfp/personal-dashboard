@@ -26,6 +26,11 @@ const PILLAR_NAME: Record<PillarKey, string> = {
 const ORDER: PillarKey[] = ["social_capital", "physical", "portfolio"];
 const QUICK_ADD = [15, 30, 60];
 
+/** The first line of a note, for a chip that has to fit a 250px column. The line breaks
+ *  ARE the log, so the first line is reliably the most identifying thing in it. */
+const firstLine = (note: string | null): string =>
+  (note ?? "").split(/\r?\n/)[0]!.trim();
+
 const WORKOUTS: { kind: WorkoutKind; label: string }[] = [
   { kind: "strength", label: "Strength" },
   { kind: "cardio", label: "Cardio" },
@@ -80,7 +85,13 @@ export default function PillarSections({
   /** Which pillar is expanded. One at a time, so the column never outgrows its window. */
   const [open, setOpen] = useState<PillarKey | null>(null);
   const [openSkill, setOpenSkill] = useState<number | null>(null);
-  const [openLog, setOpenLog] = useState<WorkoutKind | null>(null);
+  /** Which session the log dialog is on. `id: null` opens a NEW one — the whole point of
+   *  logging per session rather than per day is that a second lift on a Tuesday is a second
+   *  session, so the Log button must never reopen the first. */
+  const [openLog, setOpenLog] = useState<{
+    kind: WorkoutKind;
+    id: number | null;
+  } | null>(null);
 
   // Relative to the largest FORTNIGHT figure, so the bars compare where time went
   // recently. No target and no full state — nothing here is completable.
@@ -236,7 +247,7 @@ export default function PillarSections({
                               twice and turn a workout into something you tick off. */}
                           {kind && (
                             <button
-                              onClick={() => setOpenLog(kind)}
+                              onClick={() => setOpenLog({ kind, id: null })}
                               aria-haspopup="dialog"
                               aria-label={`Log ${m.label}`}
                               className="shrink-0 rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-micro transition-colors hover:bg-[var(--color-panel)]"
@@ -257,6 +268,29 @@ export default function PillarSections({
                               </>
                             )}
                           </span>
+
+                          {/* Today's sessions of this kind, one chip each, so a second
+                              lift is a second thing you can open rather than the first one
+                              silently overwritten. Labelled by the note's first line
+                              because that is what the owner will recognise — a numbered
+                              chip is a thing you have to open to identify. */}
+                          {kind && (
+                            <ul className="flex w-full flex-wrap gap-1.5 pl-[1.875rem]">
+                              {workouts
+                                .filter((w) => w.kind === kind)
+                                .map((w, i) => (
+                                  <li key={w.id}>
+                                    <button
+                                      onClick={() => setOpenLog({ kind, id: w.id })}
+                                      aria-haspopup="dialog"
+                                      className="max-w-[11rem] truncate rounded-full border border-[var(--color-line)] px-2 py-0.5 text-micro text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] hover:text-[var(--color-ink)]"
+                                    >
+                                      {firstLine(w.note) || `session ${i + 1}`}
+                                    </button>
+                                  </li>
+                                ))}
+                            </ul>
+                          )}
                         </li>
                       );
                     })}
@@ -505,22 +539,21 @@ export default function PillarSections({
           collapsed the section underneath. */}
       {openLog && (
         <WorkoutLog
-          kind={openLog}
-          label={WORKOUTS.find((w) => w.kind === openLog)!.label}
+          kind={openLog.kind}
+          label={WORKOUTS.find((w) => w.kind === openLog.kind)!.label}
           date={date}
-          workout={workouts.find((x) => x.kind === openLog) ?? null}
-          hue={toneColor("physical", colors.physical)}
-          onSave={(note) =>
-            onSaveWorkout(
-              openLog,
-              note,
-              workouts.find((x) => x.kind === openLog)?.id ?? null,
-            )
+          workout={
+            openLog.id == null
+              ? null
+              : (workouts.find((x) => x.id === openLog.id) ?? null)
           }
-          onDelete={() => {
-            const w = workouts.find((x) => x.kind === openLog);
-            return w ? onDeleteWorkout(w.id) : Promise.resolve();
-          }}
+          hue={toneColor("physical", colors.physical)}
+          onSave={(note) => onSaveWorkout(openLog.kind, note, openLog.id)}
+          onDelete={() =>
+            openLog.id == null
+              ? Promise.resolve()
+              : onDeleteWorkout(openLog.id)
+          }
           onClose={() => setOpenLog(null)}
         />
       )}

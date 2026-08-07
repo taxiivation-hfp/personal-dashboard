@@ -12,20 +12,39 @@ import Ring, { toneColor } from "./PillarRing";
 import { PhoneTabBar, PhoneSwipe, type PhoneTab } from "./PhoneTabs";
 import type { Workout } from "./WorkoutLog";
 import { prettyDate } from "@/lib/dates";
+import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
+import { CALENDAR_RATES, type ProductivitySegment } from "@/lib/productivity";
 import type { DayView, GoalView, SkillView, PillarKey } from "@/lib/queries";
 import type { PillarRingView, WorkoutKind } from "@/lib/rings";
 
 type StripDay = {
   date: string;
-  pct: number | null;
+  /** 0-100, and it only ever climbs through the day. Never null — see adherence.ts. */
+  pct: number;
   isToday: boolean;
   isFuture: boolean;
   /** Hours SPENT, uncapped. null when the calendar is unreachable — see CLAUDE.md's
    *  Productivity section; it is a quarantined exception, not a second adherence. */
-  productivity: { points: number } | null;
+  productivity: { points: number; segments: ProductivitySegment[] } | null;
   /** What the owner intends the day to be. */
   title: string | null;
 };
+
+/**
+ * The gap between the week's columns, as a PERCENTAGE of the row.
+ *
+ * A percentage rather than a Tailwind px gap because the line drawn over the bars has to
+ * land on their centres, and it is drawn in a 0-100 viewBox stretched to whatever width
+ * the column happens to be. In px the two would only agree at one width.
+ */
+const STRIP_GAP_PCT = 2;
+
+/** The stack, bottom-up, in the fill each slab is drawn with. Blocked time keeps the
+ *  colour it had in the calendar; the two things that are not blocked time go grey. */
+const slabFill = (s: ProductivitySegment): string =>
+  s.kind === "time"
+    ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL.habits)
+    : SLAB_NEUTRAL[s.kind];
 
 // Desktop only: each column owns its scroll, bounded to whatever the masthead leaves.
 //
@@ -181,29 +200,93 @@ export default function Today({
   const a = data.adherence;
 
   /**
-   * The productivity trace across the visible week, as polyline points in a 0-100 box.
+   * The week: two quantities in one box, on two different scales.
    *
-   * Scaled to the week's OWN high because the score is uncapped and has no ceiling to
-   * scale against — the caption says so out loud, since a shape whose scale is unstated is
-   * a shape that lies. Stops at today: a line drawn through days that have not happened
-   * would be a prediction, and this app does not make those.
+   *   BARS  productivity — hours spent, stacked by what produced them. UNCAPPED, so there
+   *         is no ceiling to scale against and it is scaled to the week's own high. No
+   *         number is printed: the height is the whole statement, and a figure with no
+   *         ceiling printed beside it is a figure inviting comparison it cannot support.
+   *   LINE  adherence — a percentage, so its scale is fixed 0..100 and needs no caption.
+   *         Thicker than the bars' hairlines and drawn in the accent, which is the same
+   *         amber as the ring above it: one quantity, one colour, said twice.
+   *
+   * Sharing a box is the standard combo shape and the honest one here — the two are
+   * genuinely about the same days. What makes it readable is that neither is decoration:
+   * the bars carry composition, the line carries trend.
+   *
+   * Column centres account for the GAP. The old version cut the row into n equal parts and
+   * put each point at the centre of one, which is only right when the columns touch; with
+   * a gap every point drifted, worst at the ends. The gap is a PERCENTAGE so the same
+   * arithmetic holds at any width.
    */
-  const productivityLine = (() => {
-    const upTo = strip.filter((d) => !d.isFuture && d.productivity != null);
-    if (upTo.length < 2) return null;
-    const peak = Math.max(...upTo.map((d) => d.productivity!.points), 1);
-    // Each bar is one 1/n slice of the row; the point sits at its centre.
+  const week = (() => {
     const n = strip.length;
-    const points = upTo
-      .map((d) => {
-        const i = strip.findIndex((s) => s.date === d.date);
-        const x = ((i + 0.5) / n) * 100;
-        // 8% headroom at the top so the peak never touches the frame.
-        const y = 100 - (d.productivity!.points / peak) * 92;
-        return `${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .join(" ");
-    return { points };
+    if (!n) return null;
+    const colW = (100 - STRIP_GAP_PCT * (n - 1)) / n;
+    const centre = (i: number) => i * (colW + STRIP_GAP_PCT) + colW / 2;
+
+    const peak = Math.max(
+      1,
+      ...strip.map((d) => d.productivity?.points ?? 0),
+    );
+
+    // Stops at today. A line drawn through days that have not happened would be a
+    // prediction, and this app does not make those.
+    const past = strip
+      .map((d, i) => ({ d, i }))
+      .filter((x) => !x.d.isFuture);
+    const points =
+      past.length < 2
+        ? null
+        : past
+            // 6% headroom at the top so a 100% day never rides on the frame.
+            .map(
+              ({ d, i }) =>
+                `${centre(i).toFixed(2)},${(100 - d.pct * 0.94).toFixed(2)}`,
+            )
+            .join(" ");
+
+    return { peak, points };
+  })();
+  /** Uncapped, so the bars have no fixed ceiling — 1 keeps the maths safe before the
+   *  fetch lands, when there are no bars to draw anyway. */
+  const peak = week?.peak ?? 1;
+
+  /**
+   * A key for the stack, built from what the visible week actually contains.
+   *
+   * Derived rather than declared, so it can never list a colour that isn't on screen — a
+   * legend naming four things when three are drawn is worse than none. It is also the only
+   * place the grey slabs are named at all; a hue borrowed from the calendar explains
+   * itself, and a grey one cannot.
+   *
+   * Ordered by the registry rather than by first appearance, so it does not reshuffle
+   * itself when the week's composition changes.
+   */
+  const stackKey = (() => {
+    const seen = new Map<string, { label: string; rank: number }>();
+    for (const d of strip)
+      for (const s of d.productivity?.segments ?? []) {
+        const fill = slabFill(s);
+        if (seen.has(fill)) continue;
+        if (s.kind === "time") {
+          const i = CALENDAR_RATES.findIndex((c) => c.id === s.colorId);
+          seen.set(fill, {
+            label: CALENDAR_RATES[i]?.label ?? "Other",
+            rank: i < 0 ? CALENDAR_RATES.length : i,
+          });
+        } else {
+          seen.set(fill, {
+            label: s.kind === "workouts" ? "Workouts" : "Non-negotiables",
+            // After every calendar colour: the hours came first, and these are the two
+            // things in the bar that were not hours.
+            rank: CALENDAR_RATES.length + (s.kind === "workouts" ? 1 : 2),
+          });
+        }
+      }
+    return [...seen]
+      .map(([fill, v]) => ({ fill, ...v }))
+      .sort((x, y) => x.rank - y.rank);
   })();
   // Straight off DayView.pillars — no extra request for something already loaded.
   const colors = Object.fromEntries(
@@ -438,14 +521,17 @@ export default function Today({
         </div>
       </section>
 
-      {/* THE WEEK. Bars are adherence, capped 0-100. The line is the productivity score,
-          which is uncapped, so it is scaled to this week's own high and says so. It is
-          drawn in INK, never the accent: a second amber quantity beside the adherence bars
-          would read as one measurement instead of two. */}
+      {/* THE WEEK. Bars are PRODUCTIVITY, stacked in the colours the hours had in the
+          calendar; the line is ADHERENCE, a percentage, in the ring's own amber.
+
+          The reversal is deliberate. Productivity carries the most ink because it is the
+          thing with composition to show — where the hours went. Adherence stays the
+          measurement, so it keeps the accent and the printed figure, and it is drawn ON TOP
+          of everything: the app's question is still "did I do what I said I'd do". */}
       <section>
         <div className="mb-2 flex items-baseline justify-between gap-3">
           <span className="text-micro text-[var(--color-muted)]">
-            adherence · productivity to this week&apos;s high
+            adherence · hours to this week&apos;s high
           </span>
           {data.streak > 0 && (
             // A count, deliberately undramatised — no flame, no badge, no "don't break it".
@@ -456,61 +542,90 @@ export default function Today({
           )}
         </div>
 
-        <div className="flex gap-2">
+        {/* The percentages belong to the LINE. Productivity gets no number at all — its
+            height is the entire claim, and printing an uncapped score invites a comparison
+            it cannot support. */}
+        <div className="flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
           {strip.map((d) => (
             <span
               key={d.date}
-              className="flex-1 text-center text-micro tabular-nums"
+              className="min-w-0 flex-1 text-center text-micro tabular-nums"
               style={{
                 color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
               }}
             >
-              {d.productivity ? d.productivity.points : "—"}
+              {d.isFuture ? "" : `${d.pct}%`}
             </span>
           ))}
         </div>
 
         <div className="relative mt-1.5">
-          <div className="flex items-end gap-2">
+          <div
+            className="flex items-end"
+            style={{ gap: `${STRIP_GAP_PCT}%` }}
+          >
             {strip.map((d) => (
               <div
                 key={d.date}
-                className="h-16 flex-1 overflow-hidden rounded-t-[3px] border-x border-t"
+                className="relative h-20 min-w-0 flex-1 overflow-hidden rounded-t-[3px] border-x border-t"
                 style={{
                   // OUTLINED, not filled. --color-panel-2 measures 1.04:1 against the page,
                   // so a day with no bar vanished entirely and the strip read as five days
                   // instead of seven. An outline is the system's existing answer: it is how
                   // "skipped" stays legible without becoming a third weight of fill.
-                  borderColor: "var(--color-line-strong)",
-                  background: d.isToday
-                    ? "var(--color-accent-soft)"
-                    : "transparent",
-                  opacity: d.isFuture ? 0.55 : 1,
+                  //
+                  // Today is marked by a STRONGER OUTLINE rather than the amber wash it used
+                  // to get. The wash sat behind the slabs and tinted every colour in the
+                  // stack, which is the one thing a chart of colours cannot afford.
+                  borderColor: d.isToday
+                    ? "var(--color-ink)"
+                    : "var(--color-line-strong)",
+                  opacity: d.isFuture ? 0.45 : 1,
                 }}
               >
-                {d.pct != null && (
-                  <div
-                    className="motion-data h-full w-full rounded-t-[3px]"
-                    style={{
-                      // SLID, not grown. The bar is always full height and translates down
-                      // so the track clips all but the top `pct`. translateY is composited
-                      // and skips layout entirely — the old height+marginTop version
-                      // animated two layout properties and only transitioned one of them.
-                      transform: `translateY(${100 - Math.max(d.pct, 3)}%)`,
-                      background: "var(--color-accent)",
-                      opacity: d.isToday ? 1 : 0.78,
-                    }}
-                  />
+                {/* Each slab sized against the WEEK'S PEAK directly, bottom-aligned.
+                    Deliberately un-transformed and un-animated: a scaleY on the stack would
+                    have been composited and free, but it scales the separators with it, so
+                    the hairlines that make two slabs read as two would thin toward nothing
+                    on exactly the short days that need them most. The strip renders once
+                    when the fetch lands, and the motion in this screen belongs to the ring
+                    above it. */}
+                {d.productivity && d.productivity.points > 0 && (
+                  <div className="absolute inset-0 flex flex-col justify-end">
+                    {/* Drawn bottom-up, so the largest slab sits at the base and the day
+                        reads as a foundation with the extras on top. `segments` arrives
+                        largest first — see scoreDay. */}
+                    {[...d.productivity.segments].reverse().map((s, i) => (
+                      <div
+                        key={`${s.kind}-${s.colorId ?? "d"}-${i}`}
+                        style={{
+                          height: `${(s.points / peak) * 100}%`,
+                          background: slabFill(s),
+                          // A hairline in the column's own surface, so two slabs of a
+                          // similar tone still read as two things.
+                          borderTop:
+                            i === 0
+                              ? undefined
+                              : "1px solid var(--color-surface-1)",
+                        }}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             ))}
           </div>
 
-          {/* The productivity trace, over the bars. Not animated: `points` is neither
-              transform nor opacity, so the Transform-Only Rule forbids it, and
-              stroke-dasharray is reserved for ring arcs — using it here would make the line
-              look like it was being drawn, which is to say celebrated. */}
-          {productivityLine && (
+          {/* Adherence, over the bars. Drawn twice: a wide stroke in the column's own
+              surface first, so the line stays legible where it crosses a dark slab, then
+              the line itself. A halo, not a shadow — it is the page colour, it has no
+              offset, and it implies no light source.
+
+              Not animated: `points` is neither transform nor opacity, so the
+              Transform-Only Rule forbids it, and stroke-dasharray is reserved for ring
+              arcs — using it here would make the line look like it was being drawn, which
+              is to say celebrated. */}
+          {week?.points && (
             <svg
               className="pointer-events-none absolute inset-0 h-full w-full"
               viewBox="0 0 100 100"
@@ -518,12 +633,22 @@ export default function Today({
               aria-hidden
             >
               <polyline
-                points={productivityLine.points}
+                points={week.points}
                 fill="none"
-                stroke="var(--color-ink)"
-                strokeWidth="1.5"
+                stroke="var(--color-surface-1)"
+                strokeWidth="5"
                 vectorEffect="non-scaling-stroke"
                 strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              <polyline
+                points={week.points}
+                fill="none"
+                stroke="var(--color-accent)"
+                strokeWidth="2.5"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+                strokeLinecap="round"
               />
             </svg>
           )}
@@ -531,11 +656,11 @@ export default function Today({
 
         <div className="h-px w-full bg-[var(--color-line-strong)]" />
 
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
           {strip.map((d) => (
             <span
               key={d.date}
-              className="flex-1 text-center text-micro"
+              className="min-w-0 flex-1 text-center text-micro"
               style={{
                 color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
               }}
@@ -546,6 +671,27 @@ export default function Today({
             </span>
           ))}
         </div>
+
+        {/* Swatches, not a boxed legend. Four small marks on one line under the chart read
+            in a glance and cost a line; a bordered key would cost a block and turn the
+            strip into a figure with an apparatus. */}
+        {stackKey.length > 0 && (
+          <ul className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1">
+            {stackKey.map((k) => (
+              <li
+                key={k.fill}
+                className="flex items-center gap-1.5 text-micro text-[var(--color-muted)]"
+              >
+                <span
+                  aria-hidden
+                  className="h-2 w-2 shrink-0 rounded-[2px]"
+                  style={{ background: k.fill }}
+                />
+                {k.label}
+              </li>
+            ))}
+          </ul>
+        )}
 
         {/* Naming the days ahead. The strip already holds the next three, so they are named
             where they are read rather than on a screen of their own. */}
@@ -612,151 +758,24 @@ export default function Today({
         </div>
       </section>
 
-      <section>
-        <div className="section-head">
-          <h2 className="text-small font-semibold">Non-negotiables</h2>
-          <Link
-            href="/habits"
-            className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-          >
-            edit
-          </Link>
-        </div>
-        {/* Hairline-separated rows, not a stack of rounded cards. Ticking one of these is
-            the single most repeated act in the app; the row is the target, and the rule
-            below it is all the separation it needs. */}
-        <ul className="divide-y divide-[var(--color-line)]">
-          {data.habits.map((h) =>
-            // A NUMERIC non-negotiable — weight. Typing a number is the tick: the entry
-            // exists or it does not, so adherence needs no special case. Clearing the
-            // field clears the day, exactly like unticking.
-            h.input === "number" ? (
-              <li key={h.id}>
-                <div className="flex w-full items-center gap-3.5 py-3">
-                  <span
-                    aria-hidden
-                    className="h-[18px] w-[18px] shrink-0 rounded-[5px] border transition-colors"
-                    style={{
-                      borderColor: h.done
-                        ? habitTone(h.pillar)
-                        : "var(--color-line-strong)",
-                      background: h.done ? habitTone(h.pillar) : "transparent",
-                    }}
-                  />
-                  <label
-                    htmlFor={`h${h.id}`}
-                    className={`font-serif text-body ${h.done ? "text-[var(--color-muted)]" : ""}`}
-                  >
-                    {h.name}
-                  </label>
-                  {/* A value written on a line, not typed into a chip. The underline is
-                      the field; it darkens on focus rather than growing a box. */}
-                  <span className="ml-auto flex items-baseline gap-1.5">
-                    <input
-                      id={`h${h.id}`}
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      inputMode="decimal"
-                      placeholder="—"
-                      defaultValue={h.value ?? ""}
-                      onBlur={(e) => setHabitNumber(h.id, e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" &&
-                        (e.target as HTMLInputElement).blur()
-                      }
-                      className="w-[4rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-body tabular-nums outline-none transition-colors focus:border-[var(--color-accent)]"
-                    />
-                    {h.unit && (
-                      <span className="text-small text-[var(--color-muted)]">
-                        {h.unit}
-                      </span>
-                    )}
-                  </span>
-                </div>
-              </li>
-            ) : (
-              <li key={h.id}>
-                <button
-                  onClick={() => toggleHabit(h.id, !h.done)}
-                  aria-pressed={h.done}
-                  className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3.5 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel)]"
-                >
-                  <span
-                    aria-hidden
-                    className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors"
-                    style={{
-                      // Its pillar's hue, so the checklist reads as categorised rather than
-                      // as one undifferentiated list. The tick and the muted label carry
-                      // done-ness too, so nothing here rides on colour alone.
-                      borderColor: h.done
-                        ? habitTone(h.pillar)
-                        : "var(--color-line-strong)",
-                      background: h.done ? habitTone(h.pillar) : "transparent",
-                    }}
-                  >
-                    {h.done && (
-                      <svg
-                        width="11"
-                        height="11"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                      >
-                        <path
-                          d="M2.5 6.5l2.2 2.2L9.5 3.8"
-                          stroke="#fff"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    )}
-                  </span>
-                  <span
-                    className={`font-serif text-body ${h.done ? "text-[var(--color-muted)]" : ""}`}
-                  >
-                    {h.name}
-                  </span>
-                </button>
-              </li>
-            ),
-          )}
-          {data.habits.length === 0 && (
-            <li className="py-3 text-body text-[var(--color-muted)]">
-              Nothing set for today.{" "}
-              <Link
-                href="/habits"
-                className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
-              >
-                Add some
-              </Link>
-              .
-            </li>
-          )}
-        </ul>
-      </section>
+      {/* The JOURNAL, as a shelf of pages and nothing else.
 
-      <section>
-        <div className="section-head">
-          <h2 className="text-small font-semibold">Journal</h2>
-        </div>
-        <div className="mt-4">
-          <JournalPanel
-            date={data.date}
-            entries={data.journal}
-            onChanged={refresh}
-            prompt={journalPrompt}
-            onPromptHandled={() => setJournalPrompt(false)}
-          />
-        </div>
-      </section>
+          Its write / type buttons used to sit here as well as behind the checklist row
+          above, which offered the same two choices twice; the row is the way in now. The
+          pages stay, because they are the artefact and they exist nowhere else. The panel
+          is always mounted whether or not there are any — it owns the chooser and the
+          writing surface the row opens.
 
+          Non-negotiables and calories were repeated here verbatim and are simply gone:
+          both now sit beside the ring, where they are read. */}
       <section>
-        <CalorieInput
+        <JournalPanel
           date={data.date}
-          calories={data.calories}
-          entries={data.calorieEntries}
+          entries={data.journal}
           onChanged={refresh}
+          prompt={journalPrompt}
+          actions={false}
+          onPromptHandled={() => setJournalPrompt(false)}
         />
       </section>
     </div>

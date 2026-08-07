@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GOOGLE_PROJECTED, projectedColour } from "./eventColor.ts";
+import {
+  GOOGLE_PROJECTED,
+  SLAB_NEUTRAL,
+  projectedColour,
+} from "./eventColor.ts";
 
 // --- contrast, recomputed here so the table cannot rot silently -------------------------
 // The projection's whole justification is that every value is certified against every
@@ -22,12 +26,15 @@ const contrast = (a: string, b: string) => {
 };
 
 /** Every surface a projected stroke can land on. */
+// Kept in step with globals.css BY HAND, which is the point of the test: if a surface is
+// retuned there and not here, the certification quietly starts checking colours against a
+// page that no longer exists.
 const SURFACES = [
-  "#ede7db", // bar
+  "#eee7da", // bar
   "#f2ede4", // bg
-  "#f7f3ee", // surface-3
-  "#f9f7f3", // surface-2
-  "#fdfbf8", // surface-1
+  "#fffdf9", // surface-1  TODAY
+  "#f3f6ec", // surface-2  CALENDAR
+  "#f5e9dd", // surface-3  PILLARS
   "#fdefdc", // recorded
   "#fcfbf9", // ahead
 ];
@@ -100,4 +107,31 @@ test("a colour the table has not been taught gets no stroke", () => {
 
 test("a known id resolves to its projection", () => {
   assert.equal(projectedColour("11"), GOOGLE_PROJECTED["11"]);
+});
+
+// --- the two slabs that are not calendar time -------------------------------------------
+
+test("the neutral slabs are certified on every surface, like the projections", () => {
+  for (const [kind, hex] of Object.entries(SLAB_NEUTRAL))
+    for (const s of SURFACES)
+      assert.ok(
+        contrast(hex, s) >= 3,
+        `${kind} on ${s} is ${contrast(hex, s).toFixed(2)}`,
+      );
+});
+
+test("the two neutral slabs are far enough apart to read as two", () => {
+  // Adjacent in the stack with only a hairline between them. Below about 1.5 they merge
+  // into one tall grey block and the bar stops saying what it is made of.
+  const sep = contrast(SLAB_NEUTRAL.workouts, SLAB_NEUTRAL.habits);
+  assert.ok(sep >= 1.5, `separation is ${sep.toFixed(2)}`);
+});
+
+test("the neutral slabs are truly achromatic — a hue here would have to mean something", () => {
+  for (const hex of Object.values(SLAB_NEUTRAL)) {
+    const n = parseInt(hex.slice(1), 16);
+    const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    assert.equal(r, g);
+    assert.equal(g, b);
+  }
 });

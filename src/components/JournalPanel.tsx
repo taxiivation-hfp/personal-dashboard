@@ -21,6 +21,7 @@ export default function JournalPanel({
   entries,
   onChanged,
   prompt = false,
+  actions = true,
   onPromptHandled,
 }: {
   date: string;
@@ -29,6 +30,14 @@ export default function JournalPanel({
   /** Raised by the Journal row in the day's checklist. The journal is written, not ticked,
    *  so its row asks which kind of page rather than toggling a box. */
   prompt?: boolean;
+  /**
+   * Show the inline write / type buttons.
+   *
+   * False on Today, where the checklist row is the way in and these were the same two
+   * choices offered a second time twenty lines below. The shelf of pages stays either
+   * way — that is the artefact, and it exists nowhere else.
+   */
+  actions?: boolean;
   onPromptHandled?: () => void;
 }) {
   const [mode, setMode] = useState<Mode>(null);
@@ -162,7 +171,9 @@ export default function JournalPanel({
 
         {/* Sitting on the same bottom edge as the pages beside it, so the shelf has one
             line rather than controls hovering at the top of tall thumbnails. */}
-        <div className="flex items-center gap-3 self-end">
+        <div
+          className={`items-center gap-3 self-end ${actions ? "flex" : "hidden"}`}
+        >
           <button
             onClick={() => setMode("draw")}
             className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-panel)]"
