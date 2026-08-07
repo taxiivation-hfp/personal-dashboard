@@ -193,15 +193,17 @@ export default function Today({
   }
 
   /** id null logs a NEW session; an id edits that one. A day can hold two lifts. */
+  /** `date` is the dialog's, not the screen's — a session can be written up days later. */
   async function saveWorkout(
     kind: WorkoutKind,
     note: string,
     id: number | null,
+    date: string,
   ) {
     await fetch("/api/gym", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ date: data.date, kind, note, id }),
+      body: JSON.stringify({ date, kind, note, id }),
     }).catch(() => {});
     loadRings();
   }

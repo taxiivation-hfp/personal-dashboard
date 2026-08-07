@@ -63,11 +63,20 @@ export default function WorkoutLog({
   date: string;
   workout: Workout | null;
   hue: string;
-  onSave: (note: string) => Promise<void>;
+  /** The date is passed BACK on save, because the dialog may have changed it. */
+  onSave: (note: string, date: string) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
   const [note, setNote] = useState(workout?.note ?? "");
+  /**
+   * WHEN it happened, and it is editable.
+   *
+   * Sessions get written up after the fact — on the train home, or on Sunday for the week —
+   * and a log that can only record today is a log you fall behind on and then abandon. It
+   * opens on the day being viewed, so the common case is still one tap.
+   */
+  const [day, setDay] = useState(date);
   const [busy, setBusy] = useState(false);
   // null while the fetch is out: an empty list and an unanswered one are different facts,
   // and printing "Nothing logged yet." during the wait would state the wrong one.
@@ -85,7 +94,7 @@ export default function WorkoutLog({
 
   useEffect(() => {
     let alive = true;
-    const q = new URLSearchParams({ kind, before: date, limit: "5" });
+    const q = new URLSearchParams({ kind, before: day, limit: "5" });
     // History is context, never the reason the dialog opened: a failed fetch leaves the
     // pane empty and the writing surface untouched.
     fetch(`/api/gym/recent?${q}`)
@@ -97,7 +106,7 @@ export default function WorkoutLog({
     return () => {
       alive = false;
     };
-  }, [kind, date]);
+  }, [kind, day]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -109,11 +118,7 @@ export default function WorkoutLog({
     }
   };
 
-  const pretty = onDay(date).toLocaleDateString("en-AU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+
 
   return (
     // A dialog is the one thing genuinely lifted off the page, so it keeps a panel where
@@ -148,7 +153,28 @@ export default function WorkoutLog({
         </button>
       </div>
 
-      <p className="pt-2 text-micro text-[var(--color-muted)]">{pretty}</p>
+      {/* The date reads as a line of prose until you touch it, which is what keeps a field
+          nobody usually needs from looking like a form. max is TODAY: a session in the
+          future has not happened, and this is a record. */}
+      <label className="mt-2 flex items-center gap-2 text-micro text-[var(--color-muted)]">
+        <span>on</span>
+        <input
+          type="date"
+          value={day}
+          max={date}
+          onChange={(e) => e.target.value && setDay(e.target.value)}
+          className="rounded border border-transparent bg-transparent px-1 py-0.5 font-serif text-micro text-[var(--color-ink)] outline-none transition-colors hover:border-[var(--color-line)] focus:border-[var(--color-accent)]"
+        />
+        {day !== date && (
+          <button
+            type="button"
+            onClick={() => setDay(date)}
+            className="underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+          >
+            back to today
+          </button>
+        )}
+      </label>
 
       {/* A 1px rule between the columns, not a gap: one document in two columns is the
           spread the rest of the app is built on. The toggle is a grid child too, but
@@ -196,7 +222,7 @@ export default function WorkoutLog({
                 kinds, so filling the action with it would categorise nothing and give the
                 app a second accent. */}
             <button
-              onClick={() => run(() => onSave(note))}
+              onClick={() => run(() => onSave(note, day))}
               disabled={busy}
               className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90 disabled:opacity-40"
             >
@@ -226,6 +252,15 @@ export default function WorkoutLog({
         >
           <div className="section-head">
             <h3 className="text-small font-semibold">Last 5</h3>
+            {/* The whole log is a page, not a taller pane. This one is REFERENCE — last
+                week is what today is written against — and a scrollable list of two hundred
+                does not belong beside a textarea. */}
+            <a
+              href="/sessions"
+              className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+            >
+              show all
+            </a>
           </div>
 
           {recent && recent.length === 0 && (

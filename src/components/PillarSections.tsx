@@ -104,11 +104,18 @@ export default function PillarSections({
   onSubgoal: (id: number, done: boolean) => Promise<void>;
   onLogTime: (skillId: number, minutes: number) => Promise<void>;
   onUndoTime: (skillId: number) => Promise<void>;
-  /** id null = log a NEW session; an id edits that one. */
+  /**
+   * id null = log a NEW session; an id edits that one.
+   *
+   * `date` comes back FROM the dialog rather than being read from the screen, because the
+   * dialog is where it can be changed. Passing the viewed date instead would typecheck, do
+   * nothing visible, and silently file every backdated session under today.
+   */
   onSaveWorkout: (
     kind: WorkoutKind,
     note: string,
     id: number | null,
+    date: string,
   ) => Promise<void>;
   onDeleteWorkout: (id: number) => Promise<void>;
 }) {
@@ -618,7 +625,9 @@ export default function PillarSections({
               : (workouts.find((x) => x.id === openLog.id) ?? null)
           }
           hue={toneColor("physical", colors.physical)}
-          onSave={(note) => onSaveWorkout(openLog.kind, note, openLog.id)}
+          onSave={(note, day) =>
+            onSaveWorkout(openLog.kind, note, openLog.id, day)
+          }
           onDelete={() =>
             openLog.id == null
               ? Promise.resolve()

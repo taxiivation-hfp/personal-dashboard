@@ -745,6 +745,38 @@ export async function recentWorkouts(
 }
 
 /**
+ * EVERY session, newest first. The whole log, not a window on it.
+ *
+ * Deliberately unpaginated. A workout log is text — a few hundred rows of it after years,
+ * which is smaller than one screenshot — and the owner asked to see the lot. Paginating it
+ * would add a control, a state and an off-by-one for a saving nobody would ever notice.
+ *
+ * Sessions with an EMPTY note are included here, unlike recentWorkouts. That function feeds
+ * a reference pane where a blank entry would be noise; this is the record, and a session you
+ * logged without writing anything still happened.
+ */
+export async function allWorkouts(
+  db: Client,
+  kind?: WorkoutKind,
+): Promise<(Workout & { date: string })[]> {
+  const r = await db.execute(
+    kind
+      ? {
+          sql: "SELECT id,date,kind,title,note FROM gym_sessions WHERE kind=? ORDER BY date DESC, id DESC",
+          args: [kind],
+        }
+      : "SELECT id,date,kind,title,note FROM gym_sessions ORDER BY date DESC, id DESC",
+  );
+  return r.rows.map((x) => ({
+    id: Number(x.id),
+    date: String(x.date),
+    kind: String(x.kind) as WorkoutKind,
+    title: x.title == null ? null : String(x.title),
+    note: x.note == null ? null : String(x.note),
+  }));
+}
+
+/**
  * Remove ONE session by id. Returns false when nothing matched, so the caller can hide
  * the control rather than pretend it did something.
  *
