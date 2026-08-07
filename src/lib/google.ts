@@ -264,16 +264,62 @@ export function clearCalendarCache(): void {
   calCache.clear();
 }
 
+/**
+ * A cached range SATISFIES a request when it covers it. Dates are ISO, so a string compare
+ * is a date compare — no parsing, and no timezone to get wrong.
+ */
+const covers = (
+  entry: string,
+  fromDate: string,
+  toDate: string,
+): boolean => {
+  const [a, b] = entry.split("..");
+  return a! <= fromDate && b! >= toDate;
+};
+
 async function cachedRange(
   db: Client,
   fromDate: string,
   toDate: string,
 ): Promise<Map<string, CalEvent[]>> {
   const key = `${fromDate}..${toDate}`;
-  const hit = calCache.get(key);
-  if (hit && Date.now() - hit.at < CAL_TTL_MS) return hit.value;
+  const now = Date.now();
+
+  const exact = calCache.get(key);
+  if (exact && now - exact.at < CAL_TTL_MS) return exact.value;
+
+  /**
+   * A WIDER cached range serves a narrower request.
+   *
+   * Today asks for three different spans on one load — one day for the day's blocks, seven
+   * for the strip, fourteen for the rings and the sparkline. Keyed exactly, that is three
+   * Google calls for events that overlap almost entirely. The fortnight contains both of the
+   * others, so once any of them has been fetched the rest are free.
+   *
+   * Slicing is safe because listEventsRange groups by date and a day's events do not depend
+   * on how wide a window they arrived in. The result is rebuilt rather than shared, so a
+   * caller cannot mutate the cache through the map it was handed.
+   */
+  for (const [entryKey, entry] of calCache) {
+    if (now - entry.at >= CAL_TTL_MS) continue;
+    if (!covers(entryKey, fromDate, toDate)) continue;
+    const slice = new Map<string, CalEvent[]>();
+    for (const [d, events] of entry.value) {
+      if (d >= fromDate && d <= toDate) slice.set(d, events);
+    }
+    return slice;
+  }
+
   const value = await listEventsRange(db, fromDate, toDate);
-  calCache.set(key, { at: Date.now(), value });
+
+  // Drop what has expired before adding. Nothing here ever removed an entry, and the key is
+  // a date range — so a server left running for weeks accumulated one entry per distinct
+  // span per anchor date and never gave any of it back. Sweeping on insert costs a walk of
+  // a map that is a handful of entries in practice, and bounds it by construction.
+  for (const [k, v] of calCache) {
+    if (now - v.at >= CAL_TTL_MS) calCache.delete(k);
+  }
+  calCache.set(key, { at: now, value });
   return value;
 }
 
