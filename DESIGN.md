@@ -316,14 +316,53 @@ panel surface, the hairline and the z-index already say "above".
 
 ### Named Rules
 
-**The No-Shadow Rule.** Zero, not few. If an element needs to read as lifted, give it the
-panel surface and a hairline. If that is not enough separation, the problem is the layout.
+**The One Lamp Rule.** *(replaces The One Gradient Rule)* There is a single light source,
+above the page at twelve o'clock, outside the frame. Every gradient in the interface must be
+derivable from it — and **no gradient may encode a value.** The second clause is the
+load-bearing one: a bloom that brightened as adherence climbed would make marking a block a
+reward, so the bloom is pixel-identical at 0% and at 100%, and **nothing you MARK catches the
+light at all** — not the block states, not the habit boxes, not the subgoal ticks. Marking
+"adhered" must cost exactly what marking "drifted" costs.
 
-**The One Gradient Rule.** There is exactly one gradient in the interface: the border
-around today in the calendar column, which fades downward toward tomorrow. It replaces
-nothing — no shadow was added — and it encodes *direction*, which no flat stroke can. The
-journal's ruled lines are paper texture, not a UI effect, and do not count. A second
-gradient is a bug. Fills are flat, borders are flat, bars are flat.
+The old rule counted gradients. This one is stricter in the way that matters, and still
+falsifiable by an engineer reading a diff, which is the property worth keeping.
+
+The light only ever **lifts**, never darkens. On warm paper there is no room above white for
+a highlight, so light reads as the surface itself being brighter where it is hit — and
+because it only adds, nothing needed re-certifying. Windows take a 220px falloff of white at
+0.38 from their top edge and every measured value improved (muted on the gold window 4.67:1
+→ 5.00:1). Ring tracks ≥48px run lit at the top to shaded at the foot: **the track is the
+OBJECT and the arc is the DATUM**, and a gradient on the arc would mean a 25% day, drawn
+entirely in the lit upper arc, looked brighter than a 100% day.
+
+**The No-Shadow Rule.** *(narrowed, not repealed — see The One Lamp Rule)* Two exceptions and
+no others: one **annular bloom** behind the 176px adherence ring, peaking at the ring's own
+radius with a 56px clear disc inside it so no hero glyph sits on tint; and **blur on
+`dialog::backdrop`**, never on the panel. Blurring the panel would buy transparency with a
+contrast ratio and force every `--color-panel` certification to be re-run against whatever
+happens to pass beneath a modal. What reads as glass is the blur, not the alpha.
+`prefers-reduced-transparency` gets a real alternative rather than an absence: the blur goes
+and the dim goes *up* to 0.34, past the 0.28 it started at, because 0.28 was chosen with no
+blur to help it.
+
+Everything else that looks lifted is a **lift** — a gradient that adds light — which is a
+different mechanism from a shadow and implies no cast object. Windows also carry a
+three-step bevel (lit top edge, mid sides, shaded bottom) drawn entirely inside the border
+box, so three panes still sit 16px apart without the gutters filling with soft grey.
+
+*Both of the above superseded two rules that shipped for most of this project's life, kept
+here because the reasoning is still the reasoning:*
+
+> **The old No-Shadow Rule.** Zero, not few. If an element needs to read as lifted, give it
+> the panel surface and a hairline. If that is not enough separation, the problem is the
+> layout. — *Still true of everything except the two named exceptions. Nothing in this app
+> casts.*
+>
+> **The old One Gradient Rule.** There is exactly one gradient in the interface: the border
+> around today in the calendar column, which fades downward toward tomorrow. A second
+> gradient is a bug. — *Replaced because a light layer cannot survive a gradient count. The
+> today-border still stands, and it is still the only gradient that encodes DIRECTION; every
+> other one now in the app describes the lamp and encodes nothing.*
 
 **The Hue-Not-Lightness Rule.** This palette's lightness range is spent. `--color-muted`
 needs a surface at or above `oklch(0.9268)` to hold 4.5:1, which is 0.02 L below the page,

@@ -177,16 +177,33 @@ overrides leave behind.
 That isolation is what stops "did I do what I said I'd do" becoming "how much did I
 finish". Goals are never auto-completed at 100%; marking one done is the owner's call.
 
-## Weight and calories — a record, never a verdict
+## /stats — the record, and the only place history lives
 
-Both open a day-by-day history (`/api/trends`, `TrendPopup`), reached from a quiet
-"trend" at the end of their row. Weight is a **line** on the range actually observed —
-pinned to zero it would be a flat line saying nothing. Calories are **bars from zero** — a
-line would imply Tuesday's intake flowed into Wednesday's.
+A route, not a fourth pane, reached from the fourth phone tab and from `StatsLink` under
+the pillar rings. Today is where you ACT; this is where you look back, and the split is
+deliberate — a screen showing both invites reading the past as a verdict on the present.
 
-**No average, no delta, no target line, no smoothing.** Every one of those is a judgement
-about a number this app has no business judging. A day with no entry is a GAP, never a
-zero: an unweighed morning is not a morning that weighed nothing.
+Four charts, and the order is the argument: **adherence** first because it is the app's
+question, **hours** second because it is the sanctioned exception, **weight** and
+**calories** last because they are facts about a body rather than about a plan.
+
+`DayChart` is the one primitive, and the FORM follows what the quantity IS:
+
+| Form | For | Why |
+|---|---|---|
+| **line** | weight | it persists between readings. On the range observed — pinned to zero it is a flat line saying nothing. Broken at every gap; a run of one is drawn as a dot. |
+| **bars** | calories, adherence | accumulates then restarts. From ZERO, and a line would imply Tuesday's intake flowed into Wednesday's. |
+| **stacked** | hours | bars with composition, split by where the hours went. |
+
+**A day with no entry draws NOTHING** in all three — not a zero-height bar, not a line
+through it. Most days in a 90-day window are blank in an app this new, and drawing them as
+zeros would report a catastrophe that never happened.
+
+Adherence is the one series with a real ceiling, so it is scaled to 100 rather than to its
+own high: scaling it to itself would make a week of 40s look like a week of 100s.
+
+**No average, no delta, no target line, no smoothing, no window-over-window comparison.**
+Every one of those is a judgement about a number this app has no business judging.
 
 ## The day's title
 
@@ -219,17 +236,28 @@ didn't schedule a productive day. Both numbers matter.
 - **It feeds nothing** — not adherence, not the rings, not the streak, not the coach. The
   quarantine is enforced by data flow, not by discipline: the score exists only on
   `/api/adherence` and never on `DayView`, which is what the coach reads.
-- **On the week strip, productivity is the BARS and adherence is the LINE**, and the bars
-  are stacked in the colours those hours had in the calendar. Productivity carries the most
-  ink because it is the thing with composition to show — where the hours went. Adherence
-  keeps the accent, the printed percentage and the top of the z-order, because it is still
-  the measurement and still the app's question.
+- **On the week strip the two are SEPARATE ROWS, not a shared box.** Adherence is a 3px
+  horizontal bar under its own printed percentage; productivity is the stacked column below
+  the rule, in the colours those hours had in the calendar. They stopped sharing a box
+  because one of them has a fixed axis and the other cannot have one — a percentage drawn
+  over an uncapped score invites a comparison neither can support.
+- **The strip ENDS ON TODAY.** Seven days, today last, no future columns. The calendar
+  column is what says what tomorrow holds; a strip reserving three empty columns for it
+  spent a third of its width on days that had not happened.
+- **A gym hour scores ONCE, from the calendar.** Grape (`colorId "3"`) is Gym at half rate.
+  `scoreDay` has no `workouts` input at all — deleted rather than zeroed — because paying
+  for the logged `gym_sessions` row as well would count the same hour twice and reward
+  writing a session up rather than doing it. A session you did but never scheduled scores
+  nothing here; the Physical ring still counts it, and that is the ring's job.
+- **Non-negotiables stay in the score even though adherence counts them too.** Not a double
+  count: adherence and productivity are two different questions asked of the same day, and
+  ticking a non-negotiable is a true answer to both.
 - **No productivity number is ever printed.** The bar's height is the whole claim. Printing
   an uncapped score with no ceiling beside it invites a comparison it cannot support — and
   it is the shortest path back to a scoreboard.
-- The two slabs that are not calendar time — non-negotiables and workouts — are
-  ACHROMATIC (`SLAB_NEUTRAL` in `eventColor.ts`). A hue there would have to mean something,
-  and there is no calendar colour behind them to mean it.
+- The one slab that is not calendar time — non-negotiables — is ACHROMATIC
+  (`SLAB_NEUTRAL` in `eventColor.ts`). A hue there would have to mean something, and there
+  is no calendar colour behind it to mean it.
 - **Adherence remains the hero** — the 176px amber ring, not the strip.
 - **No week-over-week comparison, no best-week marker, no target line, no delta.** It is
   graphite on paper: a record, not a scoreboard.
