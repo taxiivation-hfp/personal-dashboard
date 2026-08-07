@@ -98,6 +98,13 @@ shared field. Saving IS logging; there is no second "did it" toggle to forget. T
 deliberately unstructured: a workout log is numbers scribbled between sets, and any form
 imposed here is a form to fight on a bad day.
 
+**Calories have a FLOOR at 2500**, worth one non-negotiable in the productivity score and
+nothing at all in adherence. A floor to reach, never a ceiling to stay under: this is someone
+training, for whom under-eating is the failure and there is no upper bound worth drawing. Its
+box is DASHED until met — "not yet" rather than "failed", since most of a day is legitimately
+spent below the line — and below the floor scores nothing, because partial credit would make
+it a target you can half-hit.
+
 A non-negotiable may take a **number** instead of a tick (`habits.input = 'number'`, with
 `habits.unit`). Daily weight uses it. The value lives in `habit_entries.value`, which is
 already a REAL, so adherence and the rings need no special case — an entry exists or it
@@ -169,6 +176,22 @@ truth, what counts is the cap.
 
 ## Goals — the one sanctioned accomplishment measure, quarantined
 
+**A finished goal must never disappear.** Every screen filters `status != 'done'`, which used
+to mean completing something removed it from the app entirely — exactly backwards for an owner
+who wants "a clear plan on what I have achieved and what I wanna achieve next". The record
+carries both halves: **In flight**, each active goal with its progress and THE NEXT UNTICKED
+SUBGOAL, and **Achieved**, finished goals newest first with the date.
+
+`goals.completed_at` is stamped by `updateGoal` when the status becomes 'done' and CLEARED
+when it leaves — a live goal claiming a completion date is worse than no date at all. It sat
+in the schema unwritten for the app's whole life before that, so goals finished earlier are
+undated; they still list, and sort last.
+
+Naming the next step is what makes it a plan rather than an inventory. A goal you cannot name
+the next step of is a wish, and a percentage on its own is not something you can act on this
+afternoon.
+
+
 Goal progress is the sum of completed subgoal weights (`src/lib/goals.ts`), derived on
 read and never stored. `weight = 0` means AUTO: an equal share of what the explicit
 overrides leave behind.
@@ -176,6 +199,19 @@ overrides leave behind.
 **It feeds nothing else** — not adherence, not the streak, not the rings, not the coach.
 That isolation is what stops "did I do what I said I'd do" becoming "how much did I
 finish". Goals are never auto-completed at 100%; marking one done is the owner's call.
+
+## Backdating — the log is for catching up as much as keeping up
+
+Workout sessions and weight readings can both be dated. The workout dialog carries a date
+capped at TODAY (a session in the future has not happened); weight readings are entered under
+the weight chart on the record, where you already are when you notice a gap in it.
+
+**Neither lives on Today.** That screen is for the day in front of you, and a date picker on
+it is one more thing between waking up and typing a number.
+
+`/sessions` is the whole gym log — every session ever, newest first, grouped by day, filtered
+by kind, deliberately unpaginated. Two lifts on one Tuesday read as one Tuesday with two
+entries. It is a COUNT, never a score: no streaks, no personal bests, no volume totals.
 
 ## /stats — the record, and the only place history lives
 
@@ -284,9 +320,11 @@ Light beige, premium, clean.
   `engine.setPillarColor` refuses anything outside it. The accent, the ink, the surfaces
   and the three block states are NOT editable — one accent is what keeps the page quiet,
   and the block states deliberately avoid a severity ramp. Do not add a free hex picker.
-- **Three windows, separated by HUE and not by lightness.** Calendar / Today / Pillars sit
-  on `--color-surface-2` (cool green, 120°), `-1` (warm near-white, 82°) and `-3` (gold,
-  68°). Lightness was tried first and failed: contrast ratio measures luminance only, so
+- **Three windows, separated by HUE and not by lightness.** Today / Calendar / Pillars sit
+  on `--color-surface-1` (warm near-white), `-2` (cool paper with a lilac cast) and `-3`
+  (gold). The calendar window used to BE the green that now belongs to today's row alone —
+  which meant the live row was the same colour as the ground it sat on. Warm past, green
+  today, pale future: the day you can still act on is the only one with a hue. Lightness was tried first and failed: contrast ratio measures luminance only, so
   three tones a point apart in L measured 1.03–1.07:1 against each other and read as one
   surface. Separating on hue at nearly equal lightness is visible and costs no contrast.
   The ramp is built UPWARD from `--color-bg`; darkening the page instead drops `--color-muted`

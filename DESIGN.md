@@ -472,6 +472,18 @@ a missing data source. Ghost metrics pass `dashed`; nothing else does.
 
 #### The segmented donut
 
+**Every slice is labelled at its own arc, and this is not optional.** All of a pillar's arcs
+are one hue by rule, so a colour legend cannot work — the only thing that can carry the
+mapping is POSITION, and position says nothing until something is written at it. Name and
+count sit at each arc's midpoint ("Strength 3/8"), anchored by which side of the circle they
+are on so text never grows back across the donut. Without them the chart was the least
+legible object in the app and read as decorative.
+
+The SVG grows a padded viewBox rather than new geometry — every cx/cy/r still means what it
+meant — and scales as one object in a narrow column, so the arcs, the gaps and the type shrink
+together instead of reflowing into a different chart.
+
+
 A pillar is ONE ring divided into slices, not a ring plus a row of little ones. The old
 shape said the same thing twice and made three pillars taller than a screen.
 
@@ -548,6 +560,31 @@ are genuinely about the same days.
   make modals pop.
 
 ### Named Rules
+
+**The Resting-State Rule.** *(violated twice before it was written down)* An element's
+RESTING style must be its VISIBLE style, and an entrance may only ever be decoration on top
+of that. Never mount something hidden and reveal it from JavaScript.
+
+The failure is specific and it shipped twice: `requestAnimationFrame` does not fire in a
+hidden tab, so a component that mounts at `opacity: 0` and releases in a rAF stays invisible
+for anyone who opened the app in a background tab — the sparkline shipped blank, and the
+record opened as a frozen thumbnail. Both looked fine in a focused window, which is why it
+happened twice.
+
+The correct form is `@starting-style`: the browser owns the from-state, the rule owns the
+resting state, and if the transition never runs the element is simply already there. It is
+also what makes `prefers-reduced-motion` honest — nulling the transition leaves the element
+visible instead of collapsed.
+
+**The One Overshoot Rule.** Exactly one easing in this app leaves the 0..1 range:
+`--ease-expand`, at 1.15, used only for the record opening out of the Pillars column. The
+owner asked for that expansion to feel "bubbly"; bounce and elastic are banned and both bans
+are right. A back-curve at 1.5+ is the dated boing the ban is aimed at, and a third of it is
+a drawer settling rather than a ball landing — you would not name it as an effect, you would
+only notice its absence. **If a second element ever takes this curve the exception has been
+misread**: a screen where several things overshoot is a screen that bounces. Closing has no
+overshoot at all, because opening is the gesture with personality and closing is the system
+getting out of the way.
 
 **The Transform-Only Rule.** Animate `transform` and `opacity`. Bars translate or scale,
 never `width`/`height`. No element in the app transitions height, width, margin, padding,
