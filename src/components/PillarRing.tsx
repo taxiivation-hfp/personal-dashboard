@@ -49,6 +49,7 @@ export default function Ring({
   tone,
   color = null,
   dashed = false,
+  bloom = false,
   children,
 }: {
   fill: number | null;
@@ -74,6 +75,18 @@ export default function Ring({
    * the hero element that misread matters.
    */
   dashed?: boolean;
+  /**
+   * Draw the lamp's bloom behind this ring. The 176px adherence hero, and nothing else.
+   *
+   * A BOOLEAN, deliberately — it can be on or off and can never be given a value. A bloom
+   * that brightened with the figure would turn marking a block into a reward, which is the
+   * one thing the light layer may not do. See The One Lamp Rule in globals.css.
+   *
+   * Not given to the pillar donuts either: three coloured blooms would be three accents by
+   * the back door, and a pillar ring that glowed as it filled is exactly the "full ring is
+   * a win" reading CLAUDE.md forbids.
+   */
+  bloom?: boolean;
   children?: ReactNode;
 }) {
   // Guard clause, not a fallback expression: null must never enter the arithmetic.
@@ -89,6 +102,9 @@ export default function Ring({
       className="relative inline-flex shrink-0 items-center justify-center"
       style={{ width: size, height: size }}
     >
+      {/* First in DOM order so it paints beneath the arc without needing a z-index — the
+          ring is drawn ON the lit ground, not over a lamp. */}
+      {bloom && <span aria-hidden className="ring-bloom" />}
       <svg
         width={size}
         height={size}
@@ -313,18 +329,31 @@ export function SegmentedRing({
                   : undefined
               }
             />
-            {s.fillSpan > 0 && (
-              <path
-                d={arcPath(s.start, s.start + s.fillSpan, r)}
-                fill="none"
-                stroke={hue}
-                strokeWidth={stroke}
-                // BUTT, never round: round caps add half a stroke width at each end, which
-                // would make the smallest non-zero fills read as half again their true
-                // value AND spill into the neighbouring slice.
-                strokeLinecap="butt"
-              />
-            )}
+            {/* Mounted UNCONDITIONALLY, and drawn across the whole slice with the fill
+                expressed as a dash offset rather than as a shorter path.
+
+                Three donuts used to pop into existence when /api/rings landed while the
+                adherence ring beside them travelled — the gap was that a shorter path is a
+                different `d`, and `d` is not animatable. pathLength normalises the slice to
+                1 whatever its real length, so the offset is just `1 - fill` and the same
+                .motion-arc that carries the hero's arc carries these.
+
+                Safe because only TRACKS are ever dashed, for ghosts. The fill path never is,
+                which is the exact conflict the path-based geometry was written to avoid. */}
+            <path
+              d={arcPath(s.start, s.start + s.span, r)}
+              fill="none"
+              stroke={hue}
+              strokeWidth={stroke}
+              // BUTT, never round: round caps add half a stroke width at each end, which
+              // would make the smallest non-zero fills read as half again their true value
+              // AND spill into the neighbouring slice.
+              strokeLinecap="butt"
+              pathLength={1}
+              strokeDasharray="1 1"
+              strokeDashoffset={s.span > 0 ? 1 - s.fillSpan / s.span : 1}
+              className="motion-arc"
+            />
           </g>
         ))}
 

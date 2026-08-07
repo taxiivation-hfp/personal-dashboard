@@ -334,7 +334,7 @@ export default function Today({
               It is always a number now — a morning that has earned nothing reads 0, which is
               a true statement, where the old null-and-dash meant "nothing has come due" and
               had to be explained every time. Nothing here ever subtracts. */}
-          <Ring fill={a.pct / 100} size={176} stroke={8} tone="accent">
+          <Ring fill={a.pct / 100} size={176} stroke={8} tone="accent" bloom>
             <div className="flex items-end">
               <span className="stat-hero text-hero">{a.pct}</span>
               <span className="stat-hero pb-2 text-body text-[var(--color-muted)]">%</span>

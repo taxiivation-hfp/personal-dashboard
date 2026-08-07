@@ -16,6 +16,10 @@
   --color-panel-2: #efe9de; /* recessed / inset */
   --color-line: #e2dbcd; /* hairline */
   --color-line-strong: #cfc5b2;
+  /* The SHADED edge — the third step of the window bevel, and the only one of the three
+   * that is new. 1.76:1 on the page ground against line-strong's 1.47:1 and line's 1.18:1.
+   * It is a border colour and nothing else; never text, never a fill. */
+  --color-line-edge: #bfb49f;
 
   /* ink */
   --color-ink: #23201b; /* 13.9:1 on bg */
@@ -23,6 +27,10 @@
 
   /* the single accent */
   --color-accent: #9a6a2e; /* 4.7:1 with white on top */
+  /* The same colour as channels, so it can be given an alpha in a gradient stop. MUST move
+   * with --color-accent above it; there is no way to derive one from the other in CSS that
+   * also works inside a gradient stop on every target this app runs on. */
+  --color-accent-rgb: 154 106 46;
   --color-accent-soft: #f0e4d0; /* accent tint for fills behind ink */
 
   /* Block states — no red anywhere, and distinguished by FORM not by a severity ramp:
@@ -234,9 +242,83 @@ b,
  * The ruled-page vocabulary survives INSIDE them: rules, margins and hairline rows are
  * unchanged. The card is a frame around a column, not a return to the card-per-section
  * pattern the redesign removed. Nothing inside a window may take a second surface. */
+/* ONE LAMP, AT TWELVE O'CLOCK, OUTSIDE THE FRAME.
+ *
+ * Every gradient in this app is a consequence of that lamp, and this is the rule that
+ * replaced The One Gradient Rule when the shadow ban was narrowed. It is stricter in the
+ * way that matters: not "count the gradients" but
+ *
+ *   1. every gradient must be derivable from one light source above the page, and
+ *   2. NO gradient may encode a value.
+ *
+ * The second clause is the load-bearing one. A bloom that brightened as adherence climbed
+ * would make marking a block a reward, which is the single thing this layer may not do —
+ * so the bloom is pixel-identical at 0% and at 100%, and nothing that you MARK catches the
+ * light at all. Not the block states, not the habit boxes, not the subgoal ticks. Marking
+ * "adhered" must cost exactly what marking "drifted" costs.
+ *
+ * The light only ever LIFTS, never darkens. On warm paper there is no room above white for
+ * a highlight, so light has to read as the surface itself being brighter where it is hit —
+ * and because it only adds, nothing needed re-certifying. Measured: the top of every window
+ * is now MORE legible than what shipped (muted on the gold window 4.67:1 -> 5.00:1, on the
+ * green 5.11:1 -> 5.27:1), and the bottom is untouched.
+ */
 .window {
   border-radius: 16px;
-  border: 1px solid var(--color-line);
+  /* A THREE-STEP BEVEL, not a uniform hairline, and it is the same lamp again: the top edge
+   * of a sheet lying on a desk catches the light and its bottom edge falls into shade. Three
+   * tones already in the ramp plus one new shaded edge — 1.18:1 / 1.47:1 / 1.76:1 against the
+   * page ground, so the cue is an ORDER rather than any one edge shouting.
+   *
+   * The whole effect is drawn inside the element's own border box. No shadow, no extra
+   * geometry, no size change — which is what lets three panes sit 16px apart without the
+   * gutters filling up with soft grey. */
+  border: 1px solid var(--color-line-strong);
+  border-top-color: var(--color-line);
+  border-bottom-color: var(--color-line-edge);
+  /* A FIXED 220px falloff, not a percentage: one lamp has one falloff distance, so a short
+   * window and a 2000px phone column are lit identically. background-attachment stays at
+   * its default scroll, which on an overflow container pins the image to the border box —
+   * so the light stays at the top of the window rather than travelling with the content. */
+  background-image: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.38) 0,
+    rgb(255 255 255 / 0) 220px
+  );
+}
+
+/* The bloom behind the 176px adherence ring. The one place the narrowed shadow rule is
+ * spent on the page itself; the other is the dialogs.
+ *
+ * ANNULAR, not a disc. Light comes off the lit object, so it peaks at the ring's own radius
+ * (76% of 112px = 85px, which is the stroke's radius) and falls away both inward and
+ * outward. A disc behind the numeral would be a lamp behind a dial — a fitness-app
+ * achievement glow — and would put tint under the hero glyphs. The inner 50% is held at
+ * zero alpha for exactly that reason: the numeral's half-diagonal is 50.6px and the clear
+ * disc is 56px, so no glyph ever sits on tint.
+ *
+ * CONSTANT. It takes no props, reads no value, and never animates. See The One Lamp Rule.
+ *
+ * Measured at its peak, composited over --color-surface-1: ink 13.61:1, muted 4.68:1, and
+ * the amber arc drawn on it 3.94:1 — every floor cleared. Where the caption sits the tint
+ * is ~4% and muted reads 5.23:1.
+ *
+ * -24px on each side is not a taste number: it is exactly the window's lg:p-6, so the
+ * bloom's box lands on the padding edge and adds no scrollable overflow to a column that
+ * is overflow-y:auto. */
+.ring-bloom {
+  position: absolute;
+  inset: -24px;
+  pointer-events: none;
+  background: radial-gradient(
+    circle closest-side,
+    rgb(var(--color-accent-rgb) / 0) 0%,
+    rgb(var(--color-accent-rgb) / 0) 50%,
+    rgb(var(--color-accent-rgb) / 0.05) 62%,
+    rgb(var(--color-accent-rgb) / 0.13) 76%,
+    rgb(var(--color-accent-rgb) / 0.045) 88%,
+    rgb(var(--color-accent-rgb) / 0) 97%
+  );
 }
 
 /* THE ONE GRADIENT. Today, in the calendar column: a full accent stroke where the day
@@ -354,8 +436,13 @@ b,
  * is drawn at all. It lives here rather than inline on the circle so that reduced motion
  * can actually reach it: an inline style would need !important to override, and the
  * blanket reduced-motion rule only nulls animation-*, never transition. */
+/* The single ring places its arc with stroke-dasharray; the segmented donut places its
+ * slice with stroke-dashoffset over a pathLength of 1. Both are here so the two species
+ * travel identically — and so both inherit the one reduced-motion path below. */
 .motion-arc {
-  transition: stroke-dasharray var(--dur-data) var(--ease-out);
+  transition:
+    stroke-dasharray var(--dur-data) var(--ease-out),
+    stroke-dashoffset var(--dur-data) var(--ease-out);
 }
 
 * {
@@ -433,13 +520,39 @@ dialog[open] {
   }
 }
 
+/* The FROST, and the second of the two places the narrowed shadow rule is spent.
+ *
+ * It goes on the BACKDROP, never on the panel. Blurring the panel would mean buying
+ * transparency with a contrast ratio — every certification on --color-panel would have to
+ * be re-run against whatever happens to pass beneath it — whereas blurring what is BEHIND
+ * the dialog leaves the panel fully opaque and every existing figure intact. The dialog
+ * still reads as glass, because what reads as glass is the blur and not the alpha.
+ *
+ * The ink dim drops 0.28 -> 0.20 in exchange: the blur is now doing the separating, so more
+ * of the page warmth survives and the modal still cannot be read through. */
 dialog::backdrop {
-  background: rgb(35 32 27 / 0.28);
+  background: rgb(35 32 27 / 0.2);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
   opacity: 0;
   transition:
     opacity var(--dur-fast) var(--ease-out),
     overlay var(--dur-fast) allow-discrete,
     display var(--dur-fast) allow-discrete;
+}
+
+/* THE REAL ALTERNATIVE, not an absence of one.
+ *
+ * A reader who has asked for less transparency must not simply lose the separation the blur
+ * was providing — so the dim goes UP, past where it started, and the blur goes away. Denser
+ * than the original 0.28 because 0.28 was chosen with no blur to help it and this is the
+ * case where there is none again. */
+@media (prefers-reduced-transparency: reduce) {
+  dialog::backdrop {
+    background: rgb(35 32 27 / 0.34);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 dialog[open]::backdrop {
@@ -515,4 +628,15 @@ input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+/* The tab bar is the app's third and last translucent surface. Same alternative as the
+ * dialog backdrop: when transparency is unwelcome it becomes an opaque band rather than a
+ * blurred one, which is a real answer instead of a degraded version of the same thing. */
+@media (prefers-reduced-transparency: reduce) {
+  nav[aria-label="Sections"] {
+    background: var(--color-bg) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
 }

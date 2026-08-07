@@ -57,8 +57,12 @@ export function PhoneTabBar({
       style={{
         // Translucent so the page reads as continuing underneath rather than being cut
         // off by an opaque bar.
-        background: "color-mix(in srgb, var(--color-bg) 88%, transparent)",
-        backdropFilter: "blur(12px)",
+        // Frosted, on the same terms as the dialog backdrop — see globals.css. The
+        // reduced-transparency fallback lives in CSS rather than here, so it can be a
+        // media query rather than a subscription.
+        background: "color-mix(in srgb, var(--color-bg) 86%, transparent)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
         // The iPhone home indicator sits in this space; without it the labels are under
         // the user's thumb rail.
         paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
