@@ -5,6 +5,7 @@ import Link from "next/link";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
 import HabitBox from "./HabitBox";
+import NextUp from "./NextUp";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
@@ -12,7 +13,7 @@ import PillarSections from "./PillarSections";
 import Ring, { toneColor } from "./PillarRing";
 import { PhoneTabBar, PhoneSwipe, type PhoneTab } from "./PhoneTabs";
 import type { Workout } from "./WorkoutLog";
-import { prettyDate } from "@/lib/dates";
+import { prettyDate, todayISO } from "@/lib/dates";
 import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
 import { CALENDAR_RATES, type ProductivitySegment } from "@/lib/productivity";
 import type { DayView, GoalView, SkillView, PillarKey } from "@/lib/queries";
@@ -314,19 +315,26 @@ export default function Today({
             className="mt-1 w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-heading outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
           />
         ) : (
-          <button
-            onClick={() => {
-              setTitleDraft(data.title ?? "");
-              setEditingTitle(true);
-            }}
-            className="mt-1 block w-full text-left font-serif text-heading transition-colors hover:text-[var(--color-accent)]"
-          >
-            {data.title ?? (
-              <span className="text-[var(--color-muted)]">
-                What is today for?
-              </span>
-            )}
-          </button>
+          // ONE ROW: what you meant today to be, and the next thing that is actually going
+          // to happen. The space to the right of a short title was empty, and the schedule
+          // is the most useful thing that could go in it — it answers the question you open
+          // the app to ask between blocks.
+          <div className="mt-1 flex items-end justify-between gap-6">
+            <button
+              onClick={() => {
+                setTitleDraft(data.title ?? "");
+                setEditingTitle(true);
+              }}
+              className="min-w-0 flex-1 truncate text-left font-serif text-heading transition-colors hover:text-[var(--color-accent)]"
+            >
+              {data.title ?? (
+                <span className="text-[var(--color-muted)]">
+                  What is today for?
+                </span>
+              )}
+            </button>
+            <NextUp blocks={data.blocks} date={data.date} today={todayISO()} />
+          </div>
         )}
       </header>
 
