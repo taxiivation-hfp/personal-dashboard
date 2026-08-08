@@ -262,11 +262,37 @@ export type RingSegment = {
  * to use position is to put the name at the arc.
  */
 const LABEL_GAP = 11;
-/** Room for the longest label either side. Measured, not guessed: "Social events" renders
- *  at 86px and "Outreach" escaped a 54px pad by exactly one pixel. */
-const LABEL_PAD = 60;
-/** Below this a label would be bigger than the thing it labels. */
-const LABEL_MIN_SIZE = 120;
+/**
+ * The box grows ASYMMETRICALLY, and that is the whole reason three pillars fit a laptop.
+ *
+ * Labels sit left and right of the ring, so they need horizontal room — but the first
+ * version padded a SQUARE viewBox, spending the same 60px above and below where nothing is
+ * drawn. On a 730px screen that wasted height turned a 148px ring into a 353px row and the
+ * pillar column into a 1176px scroll inside a 607px window, which is exactly the shape the
+ * column was rebuilt to escape.
+ *
+ * Vertical pad only has to clear the two-line label at twelve and six o'clock.
+ */
+const LABEL_PAD_X = 80;
+/**
+ * ONE LINE of text, so this only has to clear a single 11.5px cap height plus its offset.
+ *
+ * Putting the count on the same line as the name spends WIDTH instead, which a column this
+ * shape has and its height has none of. 18 is what one 11.5px line plus its 8px offset
+ * actually occupies below the ring — at 13 the label at six o'clock was clipped by the
+ * viewBox, which is a bug you only see on the one pillar whose single arc lands there.
+ *
+ * EXPORTED, because PillarSections has to subtract it when it solves for the ring size. It
+ * was written down in both files and that is precisely how two numbers drift apart.
+ */
+export const LABEL_PAD_Y = 18;
+/** Below this a label would be bigger than the thing it labels. The 76px expanded donut and
+ *  the 18px metric rings stay plain; everything above gets named.
+ *
+ *  KEEP THIS BELOW EVERY LABELLED CALLER. It silently switched the labels off twice while
+ *  the collapsed ring was being resized to fit a real screen — the chart went back to being
+ *  unreadable and nothing anywhere said why. */
+const LABEL_MIN_SIZE = 72;
 
 /** Fraction of the circle an unweighted metric gets, so "tracked but not scored" and
  *  "no source yet" still appear instead of silently vanishing at weight 0. */
@@ -425,19 +451,21 @@ export function SegmentedRing({
 
   // The padded box. Geometry is unchanged — the viewBox simply starts negative, so every
   // cx/cy/r below still means what it meant before the labels existed.
-  const pad = labelled ? LABEL_PAD : 0;
-  const box = size + pad * 2;
+  const padX = labelled ? LABEL_PAD_X : 0;
+  const padY = labelled ? LABEL_PAD_Y : 0;
+  const boxW = size + padX * 2;
+  const boxH = size + padY * 2;
 
   return (
     <div
       className="relative inline-flex shrink-0 items-center justify-center"
-      style={{ width: box, maxWidth: "100%" }}
+      style={{ width: boxW, maxWidth: "100%" }}
     >
       <svg
         // Scales as one object in a narrow column: the arcs, the gaps and the type all shrink
         // together, so the chart stays itself rather than reflowing into a different chart.
         width="100%"
-        viewBox={`${-pad} ${-pad} ${box} ${box}`}
+        viewBox={`${-padX} ${-padY} ${boxW} ${boxH}`}
         aria-hidden
       >
         <LitTrack id={trackId} size={size} />
@@ -516,17 +544,15 @@ export function SegmentedRing({
             key={`t-${l.key}`}
             x={l.x}
             y={l.y}
+            dy={l.above ? -2 : 8}
             textAnchor={l.anchor}
             fontSize={11.5}
             style={{ fill: "var(--color-ink)" }}
           >
-            <tspan x={l.x} dy={l.above ? -4 : 4}>
-              {l.label}
-            </tspan>
+            {l.label}
             {l.short && (
               <tspan
-                x={l.x}
-                dy={13}
+                dx={4}
                 fontSize={11}
                 style={{
                   fill: "var(--color-muted)",

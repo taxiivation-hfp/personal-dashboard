@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Ring, { SegmentedRing, toneColor, type RingSegment } from "./PillarRing";
+import Ring, {
+  SegmentedRing,
+  toneColor,
+  LABEL_PAD_Y,
+  type RingSegment,
+} from "./PillarRing";
 import WorkoutLog, { type Workout } from "./WorkoutLog";
 import StatsLink from "./StatsLink";
 import type { GoalView, SkillView, PillarKey } from "@/lib/queries";
@@ -49,7 +54,42 @@ const ORDER: PillarKey[] = ["social_capital", "physical", "portfolio"];
  * is the two rings you did not open, which scale to 0.94: that is the shrink you can see,
  * on transform alone.
  */
-const RING_LARGE = 148;
+/**
+ * The collapsed pillar lies DOWN rather than standing up, and its ring is MEASURED.
+ *
+ * Sized to the screen rather than to a spec. Three labelled donuts stacked vertically cannot
+ * fit a 607px column whatever the ring size — the name, the caption and the label's own
+ * vertical room cost ~116px a pillar before the ring is drawn at all, which leaves 65px for
+ * the ring itself. A 65px donut carrying 11.5px labels is not a chart.
+ *
+ * Turned on its side the arithmetic inverts: the labels spend WIDTH, which this column has,
+ * instead of HEIGHT, which it does not.
+ *
+ * THE SIZE IS COMPUTED FROM THE COLUMN, not written down. Every fixed number tried here was
+ * right for exactly one window: 148 needed a 906px viewport, 116 and 104 both overflowed a
+ * 730px laptop, and anything small enough to be safe there would be a stamp on a desktop
+ * monitor. The owner uses a phone, a tablet, a laptop and a PC — "fill the entire space it
+ * is given" is a different number on each, so it is solved rather than guessed:
+ *
+ *     ring = (column height - the record link - three rows of furniture) / 3 - label room
+ *
+ * Clamped at both ends: below MIN a labelled donut is illegible, above MAX it stops being
+ * secondary to the 176px adherence hero, which it must never rival.
+ */
+const RING_MIN = 76;
+const RING_MAX = 168;
+/**
+ * Name, caption, gaps and row padding — everything in a collapsed row that is not the SVG.
+ *
+ * Measured at 36 and set to 44, and the difference is deliberate slack. A solver that lands
+ * exactly on the budget overflows the moment a caption wraps or a font renders a pixel
+ * taller, and the failure mode is the scroll this whole layout exists to avoid. Eight pixels
+ * of margin costs four pixels of ring and buys the guarantee.
+ */
+const ROW_FURNITURE = 44;
+/** The label's vertical room, top and bottom — taken FROM the ring rather than restated,
+ *  so the two cannot disagree about how much space a label needs. */
+const LABEL_ROOM = LABEL_PAD_Y * 2;
 const RING_SMALL = 76;
 const RING_STROKE = 9;
 const QUICK_ADD = [15, 30, 60];
@@ -126,6 +166,40 @@ export default function PillarSections({
   /** Which pillar is expanded. One at a time, so the column never outgrows its window. */
   const [open, setOpen] = useState<PillarKey | null>(null);
   const [openSkill, setOpenSkill] = useState<number | null>(null);
+
+  /**
+   * The collapsed ring, sized to whatever column it finds itself in.
+   *
+   * Starts at the MIN rather than at a guess: if the observer never fires — a hidden tab, a
+   * browser without ResizeObserver — the pillars are small but complete and legible, which
+   * is the resting state a reveal is allowed to have. Growing into the space is the
+   * enhancement.
+   */
+  const columnRef = useRef<HTMLDivElement>(null);
+  const [ringSize, setRingSize] = useState(RING_MIN);
+
+  useEffect(() => {
+    const el = columnRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      // The scroller is the .window this column sits in; its client height is the budget.
+      const box = el.closest(".window") ?? el.parentElement;
+      if (!box) return;
+      const style = getComputedStyle(box);
+      const pad =
+        parseFloat(style.paddingTop || "0") +
+        parseFloat(style.paddingBottom || "0");
+      const link = el.querySelector("[data-record-link]");
+      const linkH = link ? link.getBoundingClientRect().height : 0;
+      const budget = box.clientHeight - pad - linkH;
+      const per = budget / 3 - ROW_FURNITURE - LABEL_ROOM;
+      setRingSize(Math.round(Math.min(RING_MAX, Math.max(RING_MIN, per))));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el.closest(".window") ?? el);
+    return () => ro.disconnect();
+  }, [open]);
   /** Which session the log dialog is on. `id: null` opens a NEW one — the whole point of
    *  logging per session rather than per day is that a second lift on a Tuesday is a second
    *  session, so the Log button must never reopen the first. */
@@ -152,7 +226,10 @@ export default function PillarSections({
   // them and the last caption lands on its bottom edge. Once something is open the column may
   // outgrow its box and scroll — the detail is what you came for.
   return (
-    <div className={`flex flex-col ${open ? "lg:min-h-full" : "lg:h-full"}`}>
+    <div
+      ref={columnRef}
+      className={`flex flex-col ${open ? "lg:min-h-full" : "lg:h-full"}`}
+    >
       {ORDER.map((pk) => {
         const ring = rings?.find((r) => r.pillar === pk) ?? null;
         const mine = goals.filter(
@@ -233,10 +310,8 @@ export default function PillarSections({
               <button
                 onClick={() => setOpen(expanded ? null : pk)}
                 aria-expanded={expanded}
-                className={`-mx-2 flex w-[calc(100%+1rem)] rounded-lg px-2 transition-colors hover:bg-[var(--color-panel)] ${
-                  open
-                    ? "items-center gap-3.5 py-3.5 text-left"
-                    : "flex-col items-center gap-3 py-4 text-center"
+                className={`-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 text-left transition-colors hover:bg-[var(--color-panel)] ${
+                  open ? "gap-3.5 py-3.5" : "py-3"
                 }`}
               >
                 {/* The two rings you did NOT open scale down as well as shrink, so the
@@ -251,24 +326,30 @@ export default function PillarSections({
                   <SegmentedRing
                     segments={segments}
                     outer={outer}
-                    size={open ? RING_SMALL : RING_LARGE}
+                    size={open ? RING_SMALL : ringSize}
                     stroke={RING_STROKE}
                     tone={pk}
                     color={colors[pk]}
                   />
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-small font-semibold">
-                    {PILLAR_NAME[pk]}
-                  </span>
-                  {/* A fixed minimum height, so a pillar whose caption has not arrived yet
-                      does not sit a line higher than the two beside it. */}
-                  <span className="mt-1 block min-h-[1.35em] text-micro text-[var(--color-muted)]">
-                    {caption}
-                  </span>
+                <span className="min-w-0 flex-1 text-small font-semibold">
+                  {PILLAR_NAME[pk]}
                 </span>
               </button>
             </h2>
+
+            {/* THE CAPTION SITS UNDER THE ROW, not beside the donut.
+                Beside it, the caption and the donut's own labels were competing for the same
+                ~140px and both lost: "no hours logged past fortnight" wrapped to three lines
+                while "Outreach 0/2" was clipped at the box edge. Full width it is one line,
+                and the donut gets the room its labels actually need.
+                A fixed minimum height so a pillar whose caption has not arrived yet does not
+                sit a line higher than the two beside it. */}
+            {!open && (
+              <p className="-mt-1 min-h-[1.35em] truncate pl-1 text-micro text-[var(--color-muted)]">
+                {caption}
+              </p>
+            )}
 
             {expanded && (
               // Settles in rather than appearing. The rings shrinking is the gesture; this

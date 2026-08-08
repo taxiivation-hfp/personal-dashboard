@@ -50,12 +50,15 @@ export default function StatsLink({
     <button
       onClick={onOpen}
       aria-haspopup="dialog"
+      data-record-link
       className="group -mx-2 mt-2 flex w-[calc(100%+1rem)] shrink-0 items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel)]"
     >
-      <span className="min-w-0 flex-1">
-        <span className="block text-small font-semibold">The record</span>
-        <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
-          adherence, hours, weight, calories
+      {/* One line, not two. It sits under three pillars in a column with no height to
+          spare, and the second line was restating what the destination is called. */}
+      <span className="min-w-0 flex-1 truncate">
+        <span className="text-small font-semibold">The record</span>
+        <span className="ml-2 text-micro text-[var(--color-muted)]">
+          everything, over time
         </span>
       </span>
 
