@@ -24,3 +24,6 @@ next-env.d.ts
 
 # Production builds go here so they never collide with the dev server.
 .next-build/
+
+# Agent scratch files.
+scratch-*
