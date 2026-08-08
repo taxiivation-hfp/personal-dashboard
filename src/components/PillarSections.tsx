@@ -379,6 +379,23 @@ export default function PillarSections({
                 : undefined
             }
           >
+            {/* THE WAY BACK, and it only exists when there is somewhere to go back to.
+                Open, the pillar owns the window and the other two are not merely hidden but
+                unmounted — so without this the only route out is knowing that the ring is
+                still a toggle, which is knowledge the screen does not offer anywhere. An ×
+                because this is a window you opened, matching every other window in the app. */}
+            {expanded && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setOpen(null)}
+                  aria-label="Back to all three pillars"
+                  className="-mr-1 rounded-lg px-2 py-1 text-body leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] hover:text-[var(--color-ink)]"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
             {/* The whole header is the control — the donut and its name together are a large,
                 obvious target at 11pm, and a separate chevron would be a smaller one for no
                 gain. The heading stays an h2 so the column keeps a document outline. */}
