@@ -261,7 +261,14 @@ export type RingSegment = {
  * colour — so the only thing that can carry the mapping is POSITION, and the only honest way
  * to use position is to put the name at the arc.
  */
-const LABEL_GAP = 11;
+/**
+ * How far the label sits off the stroke.
+ *
+ * 6, not 11. Every pixel here is paid for TWICE in the vertical budget — once above and once
+ * below — and the column has three of these stacked in it. Pulling the labels in close also
+ * reads better: a name floating a centimetre from its arc has to be traced back to it.
+ */
+const LABEL_GAP = 6;
 /**
  * The box grows ASYMMETRICALLY, and that is the whole reason three pillars fit a laptop.
  *
@@ -278,14 +285,16 @@ const LABEL_PAD_X = 80;
  * ONE LINE of text, so this only has to clear a single 11.5px cap height plus its offset.
  *
  * Putting the count on the same line as the name spends WIDTH instead, which a column this
- * shape has and its height has none of. 18 is what one 11.5px line plus its 8px offset
- * actually occupies below the ring — at 13 the label at six o'clock was clipped by the
- * viewBox, which is a bug you only see on the one pillar whose single arc lands there.
+ * shape has and its height has none of. 16 is what one 11.5px line plus its offset and its
+ * descenders occupy below the ring, once LABEL_GAP stopped holding the label a centimetre
+ * away from the arc it names. Getting this wrong clips the label at SIX O'CLOCK — a bug
+ * visible on exactly one pillar, the one whose single arc lands at the bottom, and invisible
+ * on the other two.
  *
  * EXPORTED, because PillarSections has to subtract it when it solves for the ring size. It
  * was written down in both files and that is precisely how two numbers drift apart.
  */
-export const LABEL_PAD_Y = 18;
+export const LABEL_PAD_Y = 20;
 /** Below this a label would be bigger than the thing it labels. The 76px expanded donut and
  *  the 18px metric rings stay plain; everything above gets named.
  *

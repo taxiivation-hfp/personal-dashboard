@@ -81,12 +81,12 @@ const RING_MAX = 168;
 /**
  * Name, caption, gaps and row padding — everything in a collapsed row that is not the SVG.
  *
- * Measured at 36 and set to 44, and the difference is deliberate slack. A solver that lands
- * exactly on the budget overflows the moment a caption wraps or a font renders a pixel
- * taller, and the failure mode is the scroll this whole layout exists to avoid. Eight pixels
- * of margin costs four pixels of ring and buys the guarantee.
+ * Measured at 28 in the browser and set to 34. A solver that lands exactly on the budget
+ * overflows the moment a caption wraps or a font renders a pixel taller, and the failure
+ * mode is the scroll this layout exists to prevent. Six pixels of insurance; more than that
+ * and the ring pays for cowardice.
  */
-const ROW_FURNITURE = 44;
+const ROW_FURNITURE = 34;
 /** The label's vertical room, top and bottom — taken FROM the ring rather than restated,
  *  so the two cannot disagree about how much space a label needs. */
 const LABEL_ROOM = LABEL_PAD_Y * 2;
@@ -311,7 +311,7 @@ export default function PillarSections({
                 onClick={() => setOpen(expanded ? null : pk)}
                 aria-expanded={expanded}
                 className={`-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 text-left transition-colors hover:bg-[var(--color-panel)] ${
-                  open ? "gap-3.5 py-3.5" : "py-3"
+                  open ? "gap-3.5 py-3.5" : "py-2"
                 }`}
               >
                 {/* The two rings you did NOT open scale down as well as shrink, so the
