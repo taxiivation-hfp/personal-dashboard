@@ -76,7 +76,16 @@ const ORDER: PillarKey[] = ["social_capital", "physical", "portfolio"];
  * Clamped at both ends: below MIN a labelled donut is illegible, above MAX it stops being
  * secondary to the 176px adherence hero, which it must never rival.
  */
+/** Matches .motion-exit in globals.css — how long the two you did not choose take to go. */
+const FLY_MS = 260;
+
 const RING_MIN = 76;
+/** The open ring is big but not unbounded — past this it is a poster, not a chart. */
+const OPEN_RING_MAX = 260;
+/** Both label pads, so the open ring is measured against the room its labels also need. */
+const LABEL_PAD_X_TOTAL = 160;
+/** Name, caption and the metric list the open pillar shows beneath its ring. */
+const OPEN_RESERVED = 230;
 const RING_MAX = 168;
 /**
  * Name, caption, gaps and row padding — everything in a collapsed row that is not the SVG.
@@ -165,6 +174,18 @@ export default function PillarSections({
   const [busy, setBusy] = useState<string | null>(null);
   /** Which pillar is expanded. One at a time, so the column never outgrows its window. */
   const [open, setOpen] = useState<PillarKey | null>(null);
+  /**
+   * The pillar being opened, while the OTHER TWO are still flying out.
+   *
+   * Opening is a sequence, not a swap: the two you did not choose leave the window first, and
+   * only once they are gone does the one you did take the space they were using. Doing both
+   * at once reads as a reflow — three things changing size — where doing it in order reads as
+   * two things leaving and one thing arriving, which is what actually happened.
+   *
+   * Held separately from the open state because during this phase all three are mounted: the
+   * leavers need somewhere to fly to, and an unmounted element cannot travel.
+   */
+  const [leavingFor, setLeavingFor] = useState<PillarKey | null>(null);
   const [openSkill, setOpenSkill] = useState<number | null>(null);
 
   /**
@@ -177,6 +198,14 @@ export default function PillarSections({
    */
   const columnRef = useRef<HTMLDivElement>(null);
   const [ringSize, setRingSize] = useState(RING_MIN);
+  /**
+   * The OPEN ring, which has the whole column to itself.
+   *
+   * Measured from the column WIDTH rather than its height: once the other two have gone the
+   * limit is how wide the window is, not how many rings have to share it. This is the size at
+   * which the arced labels finally have arc to sit on — the collapsed ring never will.
+   */
+  const [openRingSize, setOpenRingSize] = useState(RING_MIN * 2);
 
   useEffect(() => {
     const el = columnRef.current;
@@ -194,6 +223,16 @@ export default function PillarSections({
       const budget = box.clientHeight - pad - linkH;
       const per = budget / 3 - ROW_FURNITURE - LABEL_ROOM;
       setRingSize(Math.round(Math.min(RING_MAX, Math.max(RING_MIN, per))));
+
+      // The open ring is bounded by WIDTH: the box is the ring plus a label pad either side,
+      // and the column cannot give it more than it has. Also capped by the height left after
+      // the name, the caption and the metric list, so a tall thin column cannot produce a ring
+      // taller than the window it lives in.
+      const w = el.clientWidth - LABEL_PAD_X_TOTAL;
+      const h = box.clientHeight - pad - OPEN_RESERVED;
+      setOpenRingSize(
+        Math.round(Math.max(RING_MIN, Math.min(OPEN_RING_MAX, w, h))),
+      );
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -212,6 +251,26 @@ export default function PillarSections({
   // recently. No target and no full state — nothing here is completable.
   const maxMinutes = Math.max(1, ...skills.map((s) => s.minutes14));
   const anyRecent = skills.some((s) => s.minutes14 > 0);
+
+  /**
+   * Open a pillar: the others leave, then it arrives.
+   *
+   * FLY_MS matches the .motion-exit transition in globals.css. It is a timeout rather than a
+   * transitionend listener on purpose — transitionend does not fire in a hidden tab, and a
+   * pillar that never opens because the tab was in the background is a worse bug than a
+   * transition that occasionally finishes early.
+   */
+  const openPillar = (pk: PillarKey) => {
+    if (open === pk) {
+      setOpen(null);
+      return;
+    }
+    setLeavingFor(pk);
+    setTimeout(() => {
+      setOpen(pk);
+      setLeavingFor(null);
+    }, FLY_MS);
+  };
 
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
@@ -290,6 +349,15 @@ export default function PillarSections({
         // heading per pillar would put three more rules on a column that now has three
         // headers. The rule sits on the section rather than as `divide-y` on the parent so
         // the workout dialog, a sibling below the loop, never inherits one.
+        // While one pillar is being opened, the other two are ON THEIR WAY OUT: up if they
+        // sit above it, down if below, so the column parts rather than collapsing to a point.
+        const flying = leavingFor != null && leavingFor !== pk;
+        const goesUp = flying && ORDER.indexOf(pk) < ORDER.indexOf(leavingFor!);
+
+        // Once something is open the other two are gone entirely. Rendering them at zero
+        // height would leave their headings in the tab order and their fetches in the tree.
+        if (open && !expanded) return null;
+
         return (
           <section
             key={pk}
@@ -297,10 +365,18 @@ export default function PillarSections({
             // at the top with dead space beneath. Slack becomes air inside each third, so the
             // last caption meets the bottom of the column instead of floating halfway up it.
             // Rules appear only once something is open, when the column becomes a list again.
-            className={
+            className={`${
               open
-                ? "shrink-0 border-t border-[var(--color-line)] first:border-t-0"
+                ? "flex min-h-0 flex-1 flex-col"
                 : "flex min-h-0 flex-1 flex-col justify-center"
+            } ${flying ? "motion-exit pointer-events-none" : ""}`}
+            style={
+              flying
+                ? {
+                    transform: `translateY(${goesUp ? "-160%" : "160%"})`,
+                    opacity: 0,
+                  }
+                : undefined
             }
           >
             {/* The whole header is the control — the donut and its name together are a large,
@@ -308,31 +384,33 @@ export default function PillarSections({
                 gain. The heading stays an h2 so the column keeps a document outline. */}
             <h2>
               <button
-                onClick={() => setOpen(expanded ? null : pk)}
+                onClick={() => openPillar(pk)}
                 aria-expanded={expanded}
-                className={`-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 text-left transition-colors hover:bg-[var(--color-panel)] ${
-                  open ? "gap-3.5 py-3.5" : "py-2"
+                className={`-mx-2 flex w-[calc(100%+1rem)] rounded-lg px-2 transition-colors hover:bg-[var(--color-panel)] ${
+                  expanded
+                    ? "flex-col items-center gap-2 py-2 text-center"
+                    : "items-center gap-3 py-2 text-left"
                 }`}
               >
-                {/* The two rings you did NOT open scale down as well as shrink, so the
-                    movement says "these stepped back" rather than "these were resized".
-                    Transform only; .motion-slide carries the reduced-motion path. */}
+                {/* OPEN, the ring takes the window: it is the only thing left in the column,
+                    so it is drawn at the width the column can actually give it and its labels
+                    finally have the arc length to be read on. It arrives rather than resizes —
+                    .motion-reveal, after the other two have gone. */}
                 <span
-                  className="motion-slide inline-flex"
-                  style={{
-                    transform: open && !expanded ? "scale(0.94)" : "scale(1)",
-                  }}
+                  className={expanded ? "motion-reveal inline-flex" : "inline-flex"}
                 >
                   <SegmentedRing
                     segments={segments}
                     outer={outer}
-                    size={open ? RING_SMALL : ringSize}
-                    stroke={RING_STROKE}
+                    size={expanded ? openRingSize : ringSize}
+                    stroke={expanded ? RING_STROKE + 3 : RING_STROKE}
                     tone={pk}
                     color={colors[pk]}
                   />
                 </span>
-                <span className="min-w-0 flex-1 text-small font-semibold">
+                <span
+                  className={`min-w-0 ${expanded ? "text-body" : "flex-1 text-small"} font-semibold`}
+                >
                   {PILLAR_NAME[pk]}
                 </span>
               </button>
@@ -345,11 +423,13 @@ export default function PillarSections({
                 and the donut gets the room its labels actually need.
                 A fixed minimum height so a pillar whose caption has not arrived yet does not
                 sit a line higher than the two beside it. */}
-            {!open && (
-              <p className="-mt-1 min-h-[1.35em] truncate pl-1 text-micro text-[var(--color-muted)]">
-                {caption}
-              </p>
-            )}
+            <p
+              className={`min-h-[1.35em] text-micro text-[var(--color-muted)] ${
+                expanded ? "text-center" : "-mt-1 truncate pl-1"
+              }`}
+            >
+              {caption}
+            </p>
 
             {expanded && (
               // Settles in rather than appearing. The rings shrinking is the gesture; this
