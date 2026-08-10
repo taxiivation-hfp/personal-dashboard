@@ -22,6 +22,7 @@ export default function JournalPanel({
   onChanged,
   prompt = false,
   actions = true,
+  shelf = true,
   onPromptHandled,
 }: {
   date: string;
@@ -34,10 +35,18 @@ export default function JournalPanel({
    * Show the inline write / type buttons.
    *
    * False on Today, where the checklist row is the way in and these were the same two
-   * choices offered a second time twenty lines below. The shelf of pages stays either
-   * way — that is the artefact, and it exists nowhere else.
+   * choices offered a second time twenty lines below.
    */
   actions?: boolean;
+  /**
+   * Show the shelf of page thumbnails.
+   *
+   * False on Today: the archive lives at /journal now, kept by month, and the shelf at the
+   * foot of the day was the acting screen carrying the looking-back job. The panel stays
+   * mounted with the shelf off because it owns the chooser and the writing surface the
+   * checklist row opens — the way IN lives here even when the pages do not.
+   */
+  shelf?: boolean;
   onPromptHandled?: () => void;
 }) {
   const [mode, setMode] = useState<Mode>(null);
@@ -96,7 +105,9 @@ export default function JournalPanel({
 
   return (
     <>
-      <div className="flex flex-wrap items-start gap-3">
+      <div
+        className={`flex-wrap items-start gap-3 ${shelf ? "flex" : "hidden"}`}
+      >
         {entries.map((e) => (
           <div key={e.id} className="relative">
             {e.kind === "text" ? (
@@ -221,6 +232,16 @@ export default function JournalPanel({
             not now
           </button>
         </div>
+        {/* The way back through the written ones — the archive lives at /journal, by
+            month. An <a>, not the router: the dialog must close, and a full navigation is
+            the cheapest correct way to guarantee it does. */}
+        <a
+          href="/journal"
+          className="mt-4 inline-flex items-center gap-1.5 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+        >
+          past pages, by month
+          <span aria-hidden>→</span>
+        </a>
       </dialog>
 
       {/* Ink at weight 600, not the accent. The accent is certified at 4.7:1 with WHITE ON

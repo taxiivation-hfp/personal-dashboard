@@ -1,5 +1,11 @@
 import { getDb } from "@/lib/db/client";
-import { setSkillState, touchSkill, TooManyActiveSkills } from "@/lib/engine";
+import {
+  renameSkill,
+  setSkillColor,
+  setSkillState,
+  touchSkill,
+  TooManyActiveSkills,
+} from "@/lib/engine";
 
 export const runtime = "nodejs";
 
@@ -27,6 +33,15 @@ export async function PATCH(
         id,
         b.progress !== undefined ? Number(b.progress) : null,
       );
+    }
+    // The skill's segment hue on the Portfolio ring. null clears back to the default;
+    // anything off the curated palette is refused in the engine.
+    if (b.color !== undefined) {
+      await setSkillColor(db, id, b.color === null ? null : String(b.color));
+    }
+    // Rename by id — skill_time keeps pointing at the same history whatever it is called.
+    if (b.name !== undefined) {
+      await renameSkill(db, id, String(b.name));
     }
     return Response.json({ ok: true });
   } catch (e) {

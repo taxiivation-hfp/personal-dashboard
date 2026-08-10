@@ -63,6 +63,13 @@
    * --color-line-strong measures 1.47:1 and is for strokes only. */
   --color-placeholder: #6e675d;
 
+  /* THE ONE RED, at the owner's explicit direction, for exactly one mark: the dotted
+   * calorie-floor line on the calories charts. It is a brick red desaturated to sit on
+   * this paper — 5.2:1 on the panel, clearing the stroke floor and the small-text floor
+   * both. It is NOT a state colour: no block state, no error, no chip may ever take it,
+   * or the no-red rule that protects honest logging is gone for a chart accent. */
+  --color-floor-line: #b0483a;
+
   /* THE SURFACE RAMP — a masthead band and three windows.
    *
    * --color-bg IS NOT MOVED, and that is the whole constraint. --color-muted needs a
@@ -87,10 +94,10 @@
   --color-surface-1: #fffdf9; /* TODAY    · warm near-white, the hero column */
   /* CALENDAR · cool paper with a faint lilac cast.
    *
-   * Was the green that now belongs to TODAY'S ROW alone. Making the whole window green meant
-   * today — which takes no wash, deliberately — was the same colour as the ground it sat on,
-   * so the live row read as the window rather than as a row. The green does more work as one
-   * row's fill than as several hundred pixels of background.
+   * Was a green, which then belonged to today's row alone, and has since left the app
+   * entirely — today's row is gold now (see --color-today). The lesson stands: making the
+   * whole window the live row's colour meant the live row read as the window rather than
+   * as a row.
    *
    * Cool rather than warm, so the column of days AROUND today reads quieter than the hero
    * column beside it. Still separated from the other two windows by HUE at near-equal
@@ -111,11 +118,13 @@
   --color-recorded: #fdefdc; /* past & completed · ink 14.34:1 · muted 4.93:1 */
   /* TODAY, in the calendar column, and nowhere else.
    *
-   * The green the window used to be, deepened enough to read as a deliberate fill rather
-   * than as bare ground. It sits ~1.05:1 from the window and from the past-row wash, which
-   * is expected: the ratio measures luminance and hue is what separates these. Certified
-   * where it matters — muted 4.75:1, skipped 4.60:1, ink 13.80:1. */
-  --color-today: #e6f0dc;
+   * GOLD now, not green — the owner's call: the green was the one hue in the app with no
+   * relatives, and the day you can act on should speak the house accent's own language.
+   * This is a soft amber in the accent's family, deeper and warmer than the cream the
+   * past rows wear, so today still reads as the only day with a colour of its own.
+   * Separated from --color-recorded by chroma and warmth rather than lightness — same
+   * mechanism the three windows use. Certified: muted 4.69:1, skipped 4.57:1, ink ~13:1. */
+  --color-today: #f8ead0;
   --color-ahead: #fcfbf9; /* upcoming · ink 15.69:1 · muted 5.40:1 */
 
   /* TYPE.
@@ -184,13 +193,37 @@
    * If a second element ever takes this curve, the exception has been misread. A screen
    * where several things overshoot is a screen that bounces.
    */
-  --ease-expand: cubic-bezier(0.34, 1.15, 0.38, 1);
+  /* 1.08, down from 1.15. Overshoot AMPLITUDE is duration-independent, so slowing the
+   * expand by 1.5x did not soften the bounce — it held it on screen half again as long,
+   * which read as a wobble rather than as a settle. The longer the move, the less overshoot
+   * it can carry before it stops feeling smooth. */
+  --ease-expand: cubic-bezier(0.34, 1.08, 0.38, 1);
 
-  /* Opening the record. Past the 280ms ceiling deliberately — that cap exists because this
-   * app is opened dozens of times a day and nothing may make the owner wait, and it bites on
-   * the things you touch constantly. This is a spatial move you make once in a sitting, and
-   * at 280ms it reads as a jump rather than as a window opening. */
-  --dur-expand: 420ms;
+  /* Opening the record, and now opening a pillar. Past the 280ms ceiling deliberately — that
+   * cap exists because this app is opened dozens of times a day and nothing may make the
+   * owner wait, and it bites on the things you touch constantly. This is a spatial move you
+   * make once in a sitting, and at 280ms it reads as a jump rather than as a window opening.
+   *
+   * 630ms, 1.5x the original 420. At 420 both moves still read as a cut with a smear on it;
+   * the eye gets the destination before it has seen the path, which is the thing that makes
+   * an expand feel cheap. The whole point of animating a spatial change is that you can
+   * follow the object, and following takes time. Both surfaces this governs are entered
+   * deliberately and infrequently, so the cost lands nowhere near the taps that matter. */
+  --dur-expand: 630ms;
+
+  /* THE PANEL ROW, opening and closing. One duration shared by all three windows, because
+   * they are one motion: the record window grows leftward by exactly the width the other two
+   * give up, and a difference of even 40ms between them would read as two things happening
+   * near each other rather than as one layout moving.
+   *
+   * 520ms, and --ease-in-out rather than --ease-out. Everything else in this app is a thing
+   * ARRIVING, which wants a fast start; this is a boundary being dragged, and a dragged edge
+   * accelerates and decelerates at both ends. It is the one place the symmetric curve is
+   * right. */
+  --dur-panel: 520ms;
+  /* What the two left-hand windows become. Wide enough for one line of tracking-out caps
+   * turned on its side, and no wider — the rail is a way back, not a navigation. */
+  --rail-w: 2.75rem;
 
   --dur-press: 90ms; /* going down — you */
   --dur-release: 220ms; /* coming back — the button */
@@ -696,136 +729,371 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
-/* THE RECORD, OPENING OUT OF THE PILLAR COLUMN.
+/* THE RECORD, OPENING SIDEWAYS OUT OF THE PILLAR WINDOW.
  *
- * The from-state is declared with @starting-style rather than set from JavaScript, and that
- * is the load-bearing part. The first version mounted the overlay collapsed and released it
- * on a double requestAnimationFrame — which never fires in a hidden tab, so the record
- * opened as a frozen thumbnail with its contents invisible. Here the RESTING state is the
- * open one: if the transition never runs, the element is simply already open, which is the
- * only correct default for a reveal.
+ * It used to be a fixed overlay that scaled up from the column and swallowed the screen. That
+ * read as a thing landing ON the page rather than as a part of the page opening — the other
+ * two windows did not move, they were simply covered, and the record lost its border and its
+ * page margin at the moment it arrived.
  *
- * --record-from is the measured matrix mapping a full-screen box onto the source column.
- * It is inline because only the component can measure it; everything else about the move
- * lives here.
+ * Here nothing is overlaid and nothing leaves the flow. The three windows are flex items in
+ * one row, and opening the record is ONE interpolation of that row: the two on the left give
+ * up their share and the one on the right takes exactly what they gave up. Its right, top and
+ * bottom edges are the row's, so they cannot move — only the left edge travels, which is what
+ * makes it read as dragging a window's edge rather than as a panel appearing.
  *
- * The corner radius travels too — a window that opens should stop being a window only once
- * it has filled the screen. */
-.record-pane {
-  height: 100%;
-  width: 100%;
-  transform: none;
-  border-radius: 0;
-  will-change: transform;
-  transition:
-    transform var(--dur-expand) var(--ease-expand),
-    border-radius var(--dur-expand) var(--ease-expand);
-}
-@starting-style {
-  .record-pane {
-    transform: var(--record-from, scale(0.96));
-    border-radius: 16px;
+ * flex-grow, not width. The three shares stay a ratio the whole way across, so the row always
+ * adds up and no frame can overflow or leave a seam. It is a layout animation, deliberately —
+ * the house rule of transform-and-opacity-only buys you a thing that moves OVER the layout,
+ * and a boundary that pushes its neighbours is the one gesture that cannot be faked that way.
+ *
+ * The mins go to zero WITH the grow. `min-width: 15rem` is what stops the calendar collapsing
+ * during normal use; left in place it would also stop it collapsing here, and the row would
+ * jam a third of the way through the move.
+ *
+ * Below `lg` none of this exists. The phone shows one pane at a time, so there is nothing to
+ * push and nothing to become a rail. */
+@media (min-width: 64rem) {
+  .panel {
+    position: relative;
+    flex: var(--panel-grow, 1) 1 0%;
+    min-width: var(--panel-min, 0px);
+    transition:
+      flex-grow var(--dur-panel) var(--ease-in-out),
+      flex-basis var(--dur-panel) var(--ease-in-out),
+      min-width var(--dur-panel) var(--ease-in-out),
+      padding var(--dur-panel) var(--ease-in-out),
+      border-width var(--dur-panel) var(--ease-in-out);
   }
-}
 
-/* Closing has no overshoot. Opening is the gesture with personality; closing is the system
- * getting out of the way, and it is faster because a system responding should outpace a
- * system presenting. */
-.record-pane.is-closing {
-  transform: var(--record-from, scale(0.96));
-  border-radius: 16px;
-  transition:
-    transform 260ms var(--ease-out),
-    border-radius 260ms var(--ease-out);
-}
+  .panel-row[data-record] .panel {
+    min-width: 0;
+  }
+  /* The calendar window IS the rail — it is not replaced by one. A fourth element would have
+     added a fourth gap to a row that has three, so the row's width would have changed by
+     16px at rest, in both directions, for a strip that is only ever visible in one of the two
+     states. Shrinking the window that is already leftmost costs nothing and says the true
+     thing: the rail is where those windows went. */
+  /* The horizontal padding goes with the width, and it HAS to.
+     `box-sizing: border-box` clamps a box up to its own padding and border, so a window with
+     `lg:p-6` cannot be narrower than 50px however small its flex-basis gets — which is why the
+     first cut of this left a 50px white stub sitting between the rail and the record, and why
+     the rail measured 50px when it was asked for 44. Nothing else needs to know: the rail's
+     label is positioned against the padding box, so it re-centres on whatever is left. */
+  .panel-row[data-record] [data-panel="calendar"] {
+    flex-grow: 0;
+    flex-basis: var(--rail-w);
+    padding-left: 0;
+    padding-right: 0;
+    overflow: hidden;
+  }
+  /* All the way to nothing, border included. This window is not becoming anything — a
+     hairline left behind at zero width is a 2px seam between the rail and the record. */
+  .panel-row[data-record] [data-panel="today"] {
+    flex-grow: 0;
+    flex-basis: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+    overflow: hidden;
+  }
+  .panel-row[data-record] [data-panel="pillars"] {
+    flex-grow: 1;
+  }
 
-/* The content fades in behind the move, so the frames where the non-uniform scale has it
- * stretched are the frames you cannot read. Same rule as the pane: opaque at rest. */
-.record-body {
-  opacity: 1;
-  transition: opacity 240ms var(--ease-out) 120ms;
-}
-@starting-style {
-  .record-body {
+  /* Held empty for the whole open stay, so the return trip has something to bring back. */
+  .panel-row[data-record] [data-panel="calendar"] .panel-fade,
+  .panel-row[data-record] [data-panel="today"] .panel-fade {
     opacity: 0;
+    transform: translateY(5px);
   }
 }
-.record-pane.is-closing .record-body {
+
+/* THE THREE BEATS. Opening the record — and closing it — is a sequence, not a chord:
+ *
+ *   1  CONTENTS OUT   the row carries data-exiting; every window's contents drop 5px and
+ *                     fade, ~180ms, easing IN — they gather speed as they go, so the move
+ *                     that follows feels launched by their departure
+ *   2  WINDOWS MOVE   data-record lands (Today.tsx flips it one beat late); the panels
+ *                     interpolate for --dur-panel over an empty stage
+ *   3  CONTENTS IN    the arriving pane rises into place, ease-out, on a delay sized so it
+ *                     lands as the geometry settles
+ *
+ * The exit curve is written out longhand because the token registry deliberately has no
+ * ease-in — the rule stands for everything ARRIVING, where a delayed first moment reads as
+ * lag. A departure is the one move that may gather speed, the owner asked for exactly that,
+ * and this curve exists for these exit rules alone. Do not promote it to a token.
+ *
+ * OUTSIDE the desktop media query, because beat one and beat three are not about width: the
+ * pillar window swaps contents on a phone too, where no column moves and the swap would
+ * otherwise be a hard cut. */
+.panel-fade {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 240ms var(--ease-out) 380ms,
+    transform 300ms var(--ease-out) 380ms;
+}
+.panel-row[data-exiting] .panel-fade {
   opacity: 0;
-  transition: opacity 140ms var(--ease-out);
+  transform: translateY(5px);
+  transition:
+    opacity 170ms cubic-bezier(0.55, 0, 0.8, 0.4),
+    transform 180ms cubic-bezier(0.55, 0, 0.8, 0.4);
+}
+
+/* The pillar window's own wrapper: same beat-one exit, but the RETURN is instant — its
+ * incoming child is keyed and remounts, and `.pane-enter` below owns that entrance. Two
+ * classes rather than one so the persistent windows (whose contents never remount) can keep
+ * the delayed fade-back that .panel-fade gives them. */
+.panel-swap {
+  opacity: 1;
+}
+.panel-row[data-exiting] .panel-swap {
+  opacity: 0;
+  transition: opacity 170ms cubic-bezier(0.55, 0, 0.8, 0.4);
+}
+
+/* Beat three, for remounting content: @starting-style fires on insertion, the delay holds
+ * the entrance until the window has most of its width back, and the rise is the same 12px
+ * the pillar detail uses — one vocabulary for "arriving". */
+.pane-enter {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 260ms var(--ease-out) 360ms,
+    transform 320ms var(--ease-out) 360ms;
+}
+@starting-style {
+  .pane-enter {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* THE WAY BACK. One word, turned on its side, filling the rail the two windows became.
+ *
+ * Absolutely positioned and always mounted rather than swapped in: a button that mounts at
+ * the end of the move has nothing to fade, and one that mounts at the start would be a
+ * click target sitting invisibly over the calendar for half a second. Opacity carries it,
+ * and pointer-events follow the opacity exactly so it is never hittable while unreadable. */
+.rail-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms var(--ease-out);
+}
+.panel-row[data-record] .rail-label {
+  opacity: 1;
+  pointer-events: auto;
+  /* Arrives last, once the rail is actually rail-width. Fading a word in while the column
+     under it is still 300px wide would put it in the middle of a shrinking box. */
+  transition: opacity 240ms var(--ease-out) 300ms;
+}
+.rail-label > span {
+  writing-mode: vertical-rl;
+  /* Bottom-to-top, the way a spine reads on a shelf. vertical-rl alone runs it downward,
+     which reads as text that fell over rather than as a label with an axis. */
+  rotate: 180deg;
+  letter-spacing: 0.3em;
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* No travel, and no fade to replace it — the record simply IS. Nulling the transition
-   * leaves both at their resting values, which are the visible ones. */
-  .record-pane,
-  .record-pane.is-closing,
-  .record-body,
-  .record-pane.is-closing .record-body {
+  /* The layout still changes — that is the state, not the decoration — it is simply not
+     shown travelling. Nulling the transitions lands every panel on its resting share. */
+  .panel,
+  .panel-fade,
+  .panel-swap,
+  .pane-enter,
+  .rail-label {
     transition: none;
-  }
-  .record-pane.is-closing,
-  .record-pane.is-closing .record-body {
-    transform: none;
-    opacity: 1;
   }
 }
 
-/* A PANEL ARRIVING. Opening a pillar, and anything else that appears in place.
+/* THE DETAIL, ARRIVING IN READING ORDER. The open pillar's metric rows, its goals and its
+ * skills each rise ~12px into place on a small per-item delay — `--enter-delay`, set inline
+ * by the component — so the content reads as following the ring in rather than as one sheet
+ * switched on. From BELOW, because it is subordinate content taking its seat under the ring
+ * that summoned it.
  *
  * Declared with @starting-style rather than driven from JavaScript, for the reason the
- * record's expansion learned the hard way: a reveal gated on a rAF or a state flip never
- * fires in a hidden tab and ships the content invisible. The resting state here is the
- * VISIBLE one — if the transition never runs, the panel is simply there.
- *
- * It travels 6px, which is a settle rather than a slide. The panel is not arriving from
- * somewhere; it is arriving, and the difference is about five pixels. */
-.motion-reveal {
+ * record's old expansion learned the hard way: a reveal gated on a rAF never fires in a
+ * hidden tab and ships the content invisible. The resting state here is the VISIBLE one —
+ * if the transition never runs, the detail is simply there. */
+.detail-enter {
   opacity: 1;
   transform: none;
   transition:
-    opacity var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
+    opacity 240ms var(--ease-out) var(--enter-delay, 0ms),
+    transform 300ms var(--ease-out) var(--enter-delay, 0ms);
 }
 @starting-style {
-  .motion-reveal {
+  .detail-enter {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateY(12px);
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  /* Nulled, not zeroed: the resting values are the visible ones, so removing the
-   * transition leaves the panel present rather than collapsed. */
-  .motion-reveal {
-    transition: none;
-  }
+/* THE DONUT THAT TRAVELS. One ring, moving between the two layouts it appears in.
+ *
+ * The previous version scaled the open ring up from `ringSize / openRingSize` with
+ * @starting-style, which got the SIZE right and the POSITION wrong — collapsed, the donut
+ * sits at the left of a row with its name beside it; open, it is centred with its name below.
+ * A ring that grows without travelling is two rings, one fading out where the other appears,
+ * and that is exactly what it looked like.
+ *
+ * So the transform is MEASURED now, in PillarSections: the ring's rect is taken before the
+ * state change and again after it, and the difference — translate and scale together — is
+ * applied and released. Position and size are one motion because they are one matrix.
+ *
+ * Only the transition lives here; the from-state is set imperatively, because only JavaScript
+ * can know a rectangle. That is a deliberate exception to this file's @starting-style rule and
+ * it is safe for the reason the rule exists: the from-state is applied and released inside a
+ * single synchronous layout effect with no rAF anywhere, so a hidden tab lands the ring at its
+ * resting transform — `none`, the correct size and place — rather than stranding it. */
+.ring-flip {
+  transform-origin: center;
+  will-change: transform;
 }
 
-/* LEAVING. The two pillars you did not choose, on their way out of the window.
+/* THE OTHER SIDE OF THE SAME GESTURE. Closing a pillar re-mounts the two that were not
+ * chosen, and a fresh mount with nothing on it is the pop this pass exists to remove — just
+ * pointed the other way. Each arrives FROM the side it was pushed to — `--enter-dy`, set
+ * inline from which side of the closing pillar it sits on — so the pair reads as coming back
+ * from where it went, not as materialising.
  *
- * Opening a pillar is a SEQUENCE rather than a swap: the others go first, and only once they
- * are gone does the chosen one take the space. Doing it at once reads as a reflow — three
- * things changing size — where doing it in order reads as two things leaving and one arriving,
- * which is what actually happened.
+ * @starting-style rather than a measured transform, because these genuinely ARE arriving:
+ * they have no previous rectangle to come from, unlike the ring, which does. It fires on
+ * insertion only, so the chosen pillar — the one node that survives the toggle — is untouched
+ * and keeps its FLIP. On a cold page load all three mount at once with --enter-dy at zero and
+ * simply fade in together, which is the same statement and costs nothing.
  *
- * 260ms matches FLY_MS in PillarSections, which schedules the swap. They travel up or down
- * depending on which side of the chosen pillar they sat on, so the column parts rather than
- * collapsing to a point.
+ * The 120ms delay lets the big ring commit to shrinking before its neighbours appear, so the
+ * eye follows the ring rather than the two things materialising beside it.
  *
- * Transform and opacity only, and pointer-events go the moment it starts — a control halfway
- * out of the window is not a control. */
-.motion-exit {
+ * DECLARED BEFORE `.pillar-ghost` deliberately. A section leaving carries both classes for one
+ * commit and they both set opacity at equal specificity, so source order is what decides that
+ * the push-OUT wins. */
+.pillar-enter {
+  opacity: 1;
+  transform: none;
   transition:
-    transform 260ms var(--ease-out),
-    opacity 200ms var(--ease-out);
+    opacity 260ms var(--ease-out) 120ms,
+    transform 320ms var(--ease-out) 120ms;
+}
+@starting-style {
+  .pillar-enter {
+    opacity: 0;
+    transform: translateY(var(--enter-dy, 0px));
+  }
+}
+
+/* THE TWO YOU DID NOT CHOOSE, pushed out of the expanding ring's way.
+ *
+ * They used to fly out on a 390ms timer and only THEN did the chosen pillar open, which made
+ * one gesture into two beats — the thing leaves, you wait, the thing arrives. Here everything
+ * happens at once: these give ground while the chosen ring travels through them — up if they
+ * sat above it, down if below (`--ghost-dy`, set inline), so the column PARTS around the
+ * arrival rather than dimming under it.
+ *
+ * Pinned absolutely at the offsets they already occupied, so leaving the flow costs them no
+ * movement; the push is the only travel they make. Pointer-events go immediately — a control
+ * halfway out of the way is not a control. */
+.pillar-ghost {
+  position: absolute;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  transform: translateY(var(--ghost-dy, 0px)) scale(0.98);
+  pointer-events: none;
+  transition:
+    opacity 240ms var(--ease-out),
+    transform 320ms var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* No travel. They still leave — the state change is the point — they simply are not shown
-   * doing it. Nulling the transition lands them at the transform they were given, which is
-   * off-screen, and the swap that follows unmounts them anyway. */
-  .motion-exit {
+  /* Nulled, not zeroed. Every resting value here is the visible one — `transform: none` on the
+   * ring, opacity 1 on an arriving section — so removing the transition lands each element
+   * where it belongs, present and simply not shown getting there. The ghost is the exception
+   * and needs none: it rests at opacity 0 and is unmounted on a timer either way.
+   * The rotation loop is the JavaScript half of this setting and asks matchMedia itself. */
+  .ring-flip,
+  .pillar-enter,
+  .pillar-ghost,
+  .detail-enter {
     transition: none;
   }
 }
+
+/* THE PILLAR BLOOM. The adherence ring's lamp, lent to the three donuts beside it.
+ *
+ * The One Lamp Rule's load-bearing clause is the SECOND one — no gradient may encode a value —
+ * and this keeps it exactly: the bloom takes the pillar's hue and nothing else. It reads no
+ * fill, it is pixel-identical at 0/8 sessions and at 11/8, and it never animates. A glow that
+ * brightened as a ring filled would turn a fortnight's minimum into a prize, which is the one
+ * thing this layer may not do.
+ *
+ * ANNULAR like the hero's, and for the same reason: light comes off the lit object, so it
+ * peaks at the ring's own radius and falls away both ways. The box is 1.24x the ring, which
+ * puts `closest-side` at 0.62x and the 76% stop at 0.471x — the stroke's own radius at every
+ * size the solver produces. The inner half is held clear so nothing ever sits on tint.
+ *
+ * The hero's own stops, 0.05 / 0.13 / 0.045, and taken rather than reduced deliberately. A
+ * first pass ran them at 0.04 / 0.10 / 0.035 on the theory that three rings sharing a window
+ * should each carry less than the one that has a window to itself — and it disappeared. The
+ * pillar window's ground is --color-surface-3, a gold that is already tinted, where the same
+ * alpha reads weaker than it does on the hero's near-white. Equal numbers are what produce
+ * equal light here; lower ones produced none.
+ *
+ * color-mix rather than an rgb channel token, because a pillar hue is OWNER-EDITABLE at
+ * /colours and arrives as an arbitrary value from the curated palette — there is no token to
+ * pre-split into channels. Premultiplied by definition, so no stop greys out on the way to
+ * zero. */
+.pillar-bloom {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle closest-side,
+    color-mix(in oklab, var(--bloom-hue) 0%, transparent) 0%,
+    color-mix(in oklab, var(--bloom-hue) 0%, transparent) 50%,
+    color-mix(in oklab, var(--bloom-hue) 5%, transparent) 62%,
+    color-mix(in oklab, var(--bloom-hue) 13%, transparent) 76%,
+    color-mix(in oklab, var(--bloom-hue) 4.5%, transparent) 88%,
+    color-mix(in oklab, var(--bloom-hue) 0%, transparent) 97%
+  );
+}
+
+/* `.motion-exit` and `.motion-reveal` lived here: the unchosen pillars flying out on a
+ * timer before anything could open, and the open pillar's detail arriving as one slab. Both
+ * are gone with their gestures — the ring now travels through sections that are PUSHED
+ * aside (.pillar-ghost), and the detail arrives item by item (.detail-enter). */
+
+/* A CHART CARD on the record. The window's own treatment at a smaller scale — the same
+ * three-step bevel, a tighter radius, the same top light with a shorter throw — so the four
+ * chart cards read as smaller panes of the same glass rather than as a new component.
+ * `--card-bg` is set inline per card from CARD_TINTS in Dashboard.tsx: four grounds a few
+ * points apart, distinct side by side, one family. No shadow — the count in this app is
+ * zero, and the bevel already does the lifting. */
+.record-card {
+  border-radius: 14px;
+  border: 1px solid var(--color-line-strong);
+  border-top-color: var(--color-line);
+  border-bottom-color: var(--color-line-edge);
+  background-color: var(--card-bg, var(--color-panel));
+  background-image: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.3) 0,
+    rgb(255 255 255 / 0) 120px
+  );
+  padding: 1rem 1.25rem 1.25rem;
+}
+

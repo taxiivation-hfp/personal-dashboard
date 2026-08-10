@@ -55,6 +55,12 @@ export const PILLAR_DEFAULT_VAR: Record<PillarKey, string> = {
 export const isPaletteHex = (hex: string): boolean =>
   PILLAR_PALETTE.some((p) => p.hex === hex);
 
+/** A skill's fallback hue when the owner has not chosen one: cycled from the palette by
+ *  id, so it is STABLE — a skill keeps the same colour across sessions and screens until
+ *  a choice is made, and two skills only collide once there are more than eight. */
+export const skillDefaultHex = (id: number): string =>
+  PILLAR_PALETTE[Math.abs(id) % PILLAR_PALETTE.length]!.hex;
+
 export const WINDOW_DAYS = 14;
 
 export type MetricSource =
@@ -199,10 +205,12 @@ export const METRICS: Metric[] = [
     // by 16px. Shorter is also just better here — the context is never in doubt.
     label: "Events",
     source: "calendar_social",
-    // Graphite in the calendar means a social event — Church, a night out. Counted from
-    // the calendar rather than ticked, because they are already scheduled there and a
-    // second place to record them is a second place to forget.
-    required: 2,
+    // Graphite in the calendar means a weekly-occurring social event — Church, a night
+    // out. Counted from the calendar rather than ticked, because they are already
+    // scheduled there and a second place to record them is a second place to forget.
+    // ADHERED events only, since the marks pivot: an event on the calendar you drifted
+    // from is not a social fortnight you had.
+    required: 6, // ~6 / 14 days, the owner's revised minimum (was 2)
     unit: "sessions",
     perDayCapped: false,
     weight: 1,

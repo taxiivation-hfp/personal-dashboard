@@ -44,37 +44,43 @@ export default function GoalEditor({
   }
 
   return (
-    <main className="mx-auto w-full max-w-[46rem] px-6 pb-24 pt-12 sm:px-8">
-      <header className="flex items-baseline justify-between gap-4">
-        <h1 className="text-heading font-serif font-semibold">Goals</h1>
-        <Link
-          href="/"
-          aria-label="Close"
-
-          className="shrink-0 rounded-lg px-2 py-1 text-body leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] hover:text-[var(--color-ink)]"
-
+    // The WINDOW LOOK, joining the record, the journal and the sessions log: masthead
+    // band, one window on the page ground, each goal a card inside it. This page was bare
+    // type floating on the beige — the last deeper screen outside the family.
+    <div className="flex min-h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-ink)]">
+      <header className="shrink-0 border-b border-[var(--color-line-strong)] bg-[var(--color-bar)]">
+        <div className="mx-auto flex w-full max-w-[64rem] items-baseline justify-between gap-4 px-6 py-5 sm:px-8">
+          <h1 className="font-serif text-heading">Goals</h1>
+          <Link
+            href="/"
+            aria-label="Close"
+            className="shrink-0 rounded-lg px-2 py-1 text-body leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] hover:text-[var(--color-ink)]"
           >
-
             ×
-
           </Link>
+        </div>
       </header>
 
-      <p className="mt-3 max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
+      {/* Gold, the pillar window's own surface — goals are read from that window on Today,
+          so their deeper screen keeps its ground. */}
+      <main className="mx-auto w-full max-w-[64rem] flex-1 px-6 pb-16 pt-6 sm:px-8">
+        <div className="window bg-[var(--color-surface-3)] p-5 lg:p-8">
+      <p className="max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
         Subgoals split a goal evenly unless you set a weight. Leave one blank
         and it takes an equal share of whatever the others leave behind.
         Progress comes from what you&apos;ve ticked — there&apos;s nothing to
         set by hand.
       </p>
 
-      {/* Ruled rows, not cards. Every goal used to be its own rounded panel, which made the
-          list look like a board of tiles waiting to be filled — exactly the reading this app
-          refuses. A hairline is enough to say where one goal ends. */}
-      <div className="mt-10 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+      {/* Each goal a CARD — the record's card treatment. The old ruling here was hairlines
+          over cards, made when cards meant floating tiles on bare page; inside a window the
+          card is a smaller pane of the same glass, which is the family look the owner asked
+          every deeper screen to keep. */}
+      <div className="mt-8 flex flex-col gap-5">
         {goals.map((g) => (
           // The percentage hangs in the page margin, where it sits on Today too, so one goal
           // reads as one object across both screens instead of two different layouts.
-          <section key={g.id} className="page-margin py-5">
+          <section key={g.id} className="record-card page-margin">
             <div className="pt-1.5 text-right text-micro tabular-nums text-[var(--color-muted)]">
               {Math.round(g.progress * 100)}%
             </div>
@@ -258,6 +264,8 @@ export default function GoalEditor({
           ))}
         </select>
       </form>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }

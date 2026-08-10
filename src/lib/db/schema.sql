@@ -85,6 +85,24 @@ CREATE TABLE IF NOT EXISTS habits (
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
+-- ONE DAY'S dressing of a non-negotiable — a different name, a different pillar — without
+-- touching the default. The habits table stays the every-day truth; a row here says "on
+-- this DATE, habit X reads as Y". The id is what history hangs off, so an override never
+-- orphans a tick: habit_entries keep pointing at the same habit_id whatever it was called
+-- that day. Rows are meaningful for any date but the UI only writes TOMORROW's — the
+-- customising screen is for the day you are planning, not the one you are in.
+CREATE TABLE IF NOT EXISTS habit_overrides (
+  id         INTEGER PRIMARY KEY,
+  date       TEXT NOT NULL CHECK (date GLOB '????-??-??'),
+  habit_id   INTEGER NOT NULL REFERENCES habits(id),
+  -- Either may be NULL: override just the name, just the pillar, or both.
+  name       TEXT,
+  pillar_id  INTEGER REFERENCES pillars(id),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  UNIQUE (date, habit_id)
+);
+CREATE INDEX IF NOT EXISTS idx_habit_overrides_date ON habit_overrides(date);
+
 CREATE TABLE IF NOT EXISTS habit_entries (
   id         INTEGER PRIMARY KEY,
   habit_id   INTEGER NOT NULL REFERENCES habits(id),
@@ -202,6 +220,10 @@ CREATE TABLE IF NOT EXISTS skills (
   id         INTEGER PRIMARY KEY,
   name       TEXT NOT NULL UNIQUE,
   pillar_id  INTEGER REFERENCES pillars(id),
+  -- Owner-chosen hue from the curated palette, for this skill's segment on the Portfolio
+  -- ring. NULL = a stable default cycled from the palette by id. Enforced in
+  -- engine.setSkillColor, same as pillars.color; never a free hex.
+  color      TEXT,
   state      TEXT NOT NULL DEFAULT 'parked' CHECK (state IN ('always_on','active','parked')),
   progress   REAL NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 1),
   note       TEXT,

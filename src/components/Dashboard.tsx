@@ -3,13 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import DayChart, { type ChartPoint } from "./DayChart";
 import WeightEntry from "./WeightEntry";
-import { SegmentedRing, toneColor, type RingSegment } from "./PillarRing";
+import CalorieLog from "./CalorieLog";
+import {
+  SegmentedRing,
+  bandsForPillar,
+  toneColor,
+  type EventItem,
+} from "./PillarRing";
 import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
-import type { ProductivitySegment } from "@/lib/productivity";
-import type { GoalView } from "@/lib/queries";
+import {
+  CALENDAR_RATES,
+  CALORIE_FLOOR,
+  type ProductivitySegment,
+} from "@/lib/productivity";
+import type { GoalView, SkillSlice } from "@/lib/queries";
 import {
   pillarCaption,
-  type MetricRing,
   type PillarFactInput,
   type PillarKey,
   type PillarRingView,
@@ -40,6 +49,23 @@ const WINDOWS = [
   { days: 90, label: "3 months" },
   { days: 365, label: "a year" },
 ] as const;
+
+/**
+ * Each chart card's ground — the same off-white panel, nudged a few points toward a
+ * NEIGHBOURING token so the four read as distinct sheets without introducing a single new
+ * colour. Derived, not invented: the accent, the calendar surface and the page ground are
+ * already certified, and 6–8% of any of them moves the panel's lightness by under a point,
+ * so every ink that passes on --color-panel still passes here.
+ *
+ * The variance is deliberately SUBTLE — four loud tints would be four category colours,
+ * and these cards are not categories of anything.
+ */
+const CARD_TINTS = {
+  adherence: "color-mix(in oklab, var(--color-panel) 93%, var(--color-accent) 7%)",
+  hours: "var(--color-panel)",
+  weight: "color-mix(in oklab, var(--color-panel) 92%, var(--color-surface-2) 8%)",
+  calories: "color-mix(in oklab, var(--color-panel) 94%, var(--color-bg) 6%)",
+} as const;
 
 const PILLAR_NAME: Record<PillarKey, string> = {
   social_capital: "Social",
@@ -85,6 +111,10 @@ export default function Dashboard({
   const [trends, setTrends] = useState<TrendDay[] | null>(null);
   const [rings, setRings] = useState<PillarRingView[] | null>(null);
   const [facts, setFacts] = useState<PillarFactInput | null>(null);
+  /** The band data the fortnight rings draw from — same feed the Today column reads. */
+  const [socialEvents, setSocialEvents] = useState<EventItem[] | null>(null);
+  const [birchEvents, setBirchEvents] = useState<EventItem[] | null>(null);
+  const [skills14, setSkills14] = useState<SkillSlice[] | null>(null);
   const [colors, setColors] = useState<Partial<Record<PillarKey, string | null>>>({});
   const [streak, setStreak] = useState<number | null>(null);
   const [goals, setGoals] = useState<GoalView[] | null>(null);
@@ -99,6 +129,9 @@ export default function Dashboard({
         if (!alive || d.error) return;
         setRings(d.pillars ?? []);
         setFacts(d.facts ?? null);
+        setSocialEvents(d.socialEventList ?? null);
+        setBirchEvents(d.birchEventList ?? null);
+        setSkills14(d.skills14 ?? null);
       })
       .catch(() => {});
     fetch("/api/goals")
@@ -123,6 +156,8 @@ export default function Dashboard({
   /** Bumped to re-run the two time series after something is written into them. */
   const [reloadKey, setReloadKey] = useState(0);
   const reloadTrends = () => setReloadKey((n) => n + 1);
+  /** The food log, opened from the Calories card — the same dialog Today's row opens. */
+  const [calOpen, setCalOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -158,6 +193,13 @@ export default function Dashboard({
             s.kind === "time"
               ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL)
               : SLAB_NEUTRAL,
+          // Named the way the week strip names them, from the same table, so the chart's
+          // legend and the strip's swatches can never call one colour two things.
+          label:
+            s.kind === "time"
+              ? (CALENDAR_RATES.find((c) => c.id === s.colorId)?.label ??
+                "Other")
+              : "Non-negotiables",
         })),
       })),
     [strip],
@@ -305,45 +347,30 @@ export default function Dashboard({
             <div className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {ORDER.map((pk) => {
                 const ring = rings?.find((r) => r.pillar === pk) ?? null;
-                const asSeg = (m: MetricRing): RingSegment => ({
-                  key: m.key,
-                  label: m.label,
-                  fill: m.fill,
-                  weight: m.weight,
-                  ghost: m.state === "ghost",
-                  short:
-                    m.state === "ghost"
-                      ? "—"
-                      : m.required != null
-                        ? `${m.count}/${m.required}`
-                        : String(m.count),
-                });
+                // The SAME bands, the SAME motion, the SAME lamp as the Today column —
+                // one object in two places, so opening the record never means relearning
+                // the chart. bandsForPillar is the single constructor both call.
+                const b = bandsForPillar(
+                  pk,
+                  ring,
+                  { social: socialEvents, birch: birchEvents, skills: skills14 },
+                  PILLAR_NAME[pk],
+                );
                 return (
                   <div
                     key={pk}
                     className="flex flex-col items-center border-t border-[var(--color-line)] pt-5"
                   >
                     <SegmentedRing
-                      segments={
-                        ring
-                          ? ring.metrics.filter((m) => !m.lap).map(asSeg)
-                          : [
-                              {
-                                key: "pending",
-                                label: PILLAR_NAME[pk],
-                                fill: null,
-                                weight: 1,
-                                ghost: false,
-                              },
-                            ]
-                      }
-                      outer={
-                        ring ? ring.metrics.filter((m) => m.lap).map(asSeg) : []
-                      }
+                      segments={b.segments}
+                      mid={b.mid}
+                      outer={b.outer}
                       size={170}
                       stroke={11}
                       tone={pk}
                       color={colors[pk]}
+                      spin
+                      glow
                     />
                     <p className="mt-2 text-small font-semibold">
                       {PILLAR_NAME[pk]}
@@ -388,9 +415,10 @@ export default function Dashboard({
                         {PILLAR_NAME[p.pillar]}
                       </span>
                       <span className="w-24 shrink-0 text-small">{m.label}</span>
+                      {/* The fact alone — the window slides, so "day x of 14" is gone
+                          here as on the pillars. See PillarSections. */}
                       <span className="order-last w-full text-micro tabular-nums text-[var(--color-muted)] sm:order-none sm:w-auto sm:flex-1">
                         {m.fact}
-                        {m.window ? ` · ${m.window}` : ""}
                       </span>
                       <span className="h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
                         {m.fill != null && m.fill > 0 && (
@@ -532,9 +560,10 @@ export default function Dashboard({
               Loading…
             </p>
           ) : (
-            <div className="mt-10 grid gap-x-8 gap-y-10 lg:grid-cols-2">
+            <div className="mt-10 grid gap-6 lg:grid-cols-2">
               <Panel
                 title="Adherence"
+                tint={CARD_TINTS.adherence}
                 note="Did I do what I said I'd do. A sum of what was earned, so it only ever climbs through a day."
               >
                 <DayChart
@@ -548,6 +577,7 @@ export default function Dashboard({
 
               <Panel
                 title="Hours"
+                tint={CARD_TINTS.hours}
                 note="Time spent, never results produced — stacked in the colours those hours had in the calendar."
               >
                 <DayChart
@@ -560,6 +590,7 @@ export default function Dashboard({
 
               <Panel
                 title="Weight"
+                tint={CARD_TINTS.weight}
                 note="Drawn on the range actually observed. A morning that went unweighed is a gap, not a zero."
               >
                 <DayChart
@@ -576,16 +607,40 @@ export default function Dashboard({
 
               <Panel
                 title="Calories"
+                tint={CARD_TINTS.calories}
                 note="Bars from zero — a line would imply Tuesday's intake flowed into Wednesday's."
               >
                 <DayChart
                   points={calories}
                   form="bars"
                   unit="kcal"
+                  marker={CALORIE_FLOOR}
                   emptyNote="Nothing logged in this window."
                 />
+                {/* The way into the writing surface, under the chart it feeds — the same
+                    pairing the Weight card draws with its backfill entry. */}
+                <button
+                  onClick={() => setCalOpen(true)}
+                  aria-haspopup="dialog"
+                  className="mt-4 inline-flex items-center gap-1.5 border-t border-[var(--color-line)] pt-3 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                >
+                  open logs
+                  <span aria-hidden>→</span>
+                </button>
               </Panel>
             </div>
+          )}
+
+          {/* The food log, from the Calories card. Mounted only while open, and its
+              writes re-run the two time series so the chart it sits over stays true. */}
+          {calOpen && (
+            <CalorieLog
+              date={date}
+              total={null}
+              entries={[]}
+              onChanged={reloadTrends}
+              onClose={() => setCalOpen(false)}
+            />
           )}
 
           <p className="mt-10 max-w-[62ch] border-t border-[var(--color-line)] pt-4 text-micro leading-relaxed text-[var(--color-muted)]">
@@ -627,20 +682,34 @@ function Figure({
   );
 }
 
-/** One chart and the sentence that says what it is. Every chart here encodes a decision —
- *  a ceiling, a floor, a gap that draws nothing — and a reader who does not know the
- *  decision will misread the shape. */
+/**
+ * One chart and the sentence that says what it is. Every chart here encodes a decision —
+ * a ceiling, a floor, a gap that draws nothing — and a reader who does not know the
+ * decision will misread the shape.
+ *
+ * A CARD now, not a ruled section. The broadsheet grid held while the whole record was one
+ * sheet; four charts deep it read as one undifferentiated column, and a chart is the one
+ * content here dense enough to earn its own ground. `.record-card` wears the window's own
+ * treatment — bevel, radius, top light — so the cards read as smaller panes of the same
+ * glass, and each takes a slightly different tint so neighbours part without a rule.
+ */
 function Panel({
   title,
   note,
+  tint,
   children,
 }: {
   title: string;
   note: string;
+  /** This card's ground, from CARD_TINTS. */
+  tint?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section>
+    <section
+      className="record-card"
+      style={{ "--card-bg": tint } as React.CSSProperties}
+    >
       <div className="section-head">
         <h2 className="text-small font-semibold">{title}</h2>
       </div>

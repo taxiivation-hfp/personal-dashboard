@@ -65,7 +65,11 @@ export default function NextUp({
   const accent = projectedColour(upcoming.colorId);
 
   return (
-    <div className="min-w-0 max-w-[15rem] shrink-0 text-right">
+    // The CARD travels with the content, not with the slot: this component is null for
+    // most of a day's life (day over, other day viewed), and a bordered card around an
+    // absence would be furniture saying nothing. record-card is the house treatment the
+    // owner asked this screen's pieces to wear.
+    <div className="record-card min-w-0 max-w-[16rem] shrink-0 self-start text-right">
       <p className="text-micro text-[var(--color-muted)]">next</p>
       <p className="mt-0.5 flex items-baseline justify-end gap-2">
         <span className="shrink-0 text-small tabular-nums text-[var(--color-muted)]">

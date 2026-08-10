@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/client";
-import { getPillars } from "@/lib/queries";
+import { getPillars, skillColours } from "@/lib/queries";
 import ColourEditor from "@/components/ColourEditor";
 
 export const dynamic = "force-dynamic";
@@ -11,5 +11,9 @@ export const metadata = { title: "Colours" };
 
 export default async function ColoursPage() {
   const db = await getDb();
-  return <ColourEditor initial={await getPillars(db)} />;
+  const [pillars, skills] = await Promise.all([
+    getPillars(db),
+    skillColours(db),
+  ]);
+  return <ColourEditor initial={pillars} skills={skills} />;
 }

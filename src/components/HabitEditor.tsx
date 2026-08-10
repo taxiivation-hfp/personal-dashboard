@@ -1,15 +1,84 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { HabitView } from "@/lib/queries";
+import { addDays, todayISO } from "@/lib/dates";
+import type { HabitView, PillarKey } from "@/lib/queries";
 
 const DAYS = ["M", "T", "W", "T", "F", "S", "S"]; // bit0=Mon … bit6=Sun
 const ALL = 127;
 
+/** The categories tomorrow's rows may be re-filed under. "None" keeps the accent tick. */
+const PILLAR_CHOICES: { key: PillarKey | ""; label: string }[] = [
+  { key: "", label: "None" },
+  { key: "social_capital", label: "Social" },
+  { key: "physical", label: "Physical" },
+  { key: "portfolio", label: "Portfolio" },
+];
+
+/** One row of tomorrow's checklist, as /api/habits/override reads it: the default, and
+ *  whatever the owner has dressed it as for that one day. */
+type TomorrowHabit = {
+  id: number;
+  name: string;
+  pillar: PillarKey | null;
+  input: "check" | "number";
+  override: { name: string | null; pillar: PillarKey | null } | null;
+};
+
 export default function HabitEditor({ initial }: { initial: HabitView[] }) {
   const [habits, setHabits] = useState(initial);
   const [name, setName] = useState("");
+  /** Tomorrow's list with its overrides. null until the fetch lands. */
+  const [tomorrow, setTomorrow] = useState<TomorrowHabit[] | null>(null);
+  const tomorrowDate = addDays(todayISO(), 1);
+
+  const loadTomorrow = () => {
+    fetch(`/api/habits/override?date=${tomorrowDate}`)
+      .then((r) => r.json())
+      .then((d) => !d.error && setTomorrow(d.habits ?? []))
+      .catch(() => setTomorrow([]));
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(loadTomorrow, [tomorrowDate]);
+
+  /** Write one habit's dressing for tomorrow. Name and pillar travel together — the
+   *  upsert replaces the whole override, so the current value of BOTH is always sent. */
+  async function override(
+    h: TomorrowHabit,
+    patch: { name?: string | null; pillar?: PillarKey | "" | null },
+  ) {
+    const nextName =
+      patch.name !== undefined ? patch.name : (h.override?.name ?? null);
+    const nextPillar =
+      patch.pillar !== undefined
+        ? patch.pillar || null
+        : (h.override?.pillar ?? null);
+    await fetch("/api/habits/override", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        date: tomorrowDate,
+        habit_id: h.id,
+        // A value equal to the default is not an override — sending null keeps the row
+        // honest, so "reset" never prints beside a day that is just the default. (One
+        // consequence: a habit whose default HAS a pillar cannot be overridden to none
+        // for a day — the override table reads null as "no opinion", and a fourth state
+        // to say "explicitly nothing" is not worth a column until it is ever wanted.)
+        name: nextName && nextName !== h.name ? nextName : null,
+        pillar: nextPillar && nextPillar !== h.pillar ? nextPillar : null,
+      }),
+    }).catch(() => {});
+    loadTomorrow();
+  }
+
+  async function resetOverride(h: TomorrowHabit) {
+    await fetch(
+      `/api/habits/override?date=${tomorrowDate}&habit_id=${h.id}`,
+      { method: "DELETE" },
+    ).catch(() => {});
+    loadTomorrow();
+  }
 
   async function reload() {
     const d = await fetch("/api/habits").then((r) => r.json());
@@ -142,6 +211,96 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
           Add
         </button>
       </div>
+
+      {/* TOMORROW, SPECIFICALLY. The defaults above stay the every-day truth; this dresses
+          single rows differently for ONE day — a different wording, a different pillar —
+          and the day after, everything is back to the default with nothing to undo. It is
+          the planning move the day-title makes, extended to the checklist: tomorrow is the
+          day you can still shape, so tomorrow is the one day this screen lets you shape. */}
+      <section className="mt-12">
+        <div className="section-head">
+          <h2 className="text-small font-semibold">Tomorrow, specifically</h2>
+          <span className="text-micro text-[var(--color-muted)]">
+            one day only · back to the defaults after
+          </span>
+        </div>
+
+        {tomorrow == null && (
+          <p className="pt-3 text-small text-[var(--color-muted)]">Loading…</p>
+        )}
+
+        {tomorrow != null && tomorrow.length === 0 && (
+          <p className="pt-3 text-small text-[var(--color-muted)]">
+            Nothing is scheduled for tomorrow.
+          </p>
+        )}
+
+        {tomorrow != null && tomorrow.length > 0 && (
+          <ul className="mt-1 divide-y divide-[var(--color-line)]">
+            {tomorrow.map((h) => {
+              const overridden = h.override != null;
+              return (
+                <li
+                  key={h.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3"
+                >
+                  {/* What tomorrow will SAY. Defaults to the override when set, else the
+                      every-day name — and writing the default back clears the override
+                      rather than storing a copy of it. */}
+                  <input
+                    key={`${h.id}-${h.override?.name ?? h.name}`}
+                    defaultValue={h.override?.name ?? h.name}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v && v !== (h.override?.name ?? h.name))
+                        override(h, { name: v });
+                    }}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && (e.target as HTMLInputElement).blur()
+                    }
+                    aria-label={`Tomorrow's wording for ${h.name}`}
+                    className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)]"
+                  />
+
+                  {/* The category, as the app's own word for it — a select, because four
+                      known choices are a setting, not writing. */}
+                  <select
+                    value={h.override?.pillar ?? h.pillar ?? ""}
+                    onChange={(e) =>
+                      override(h, {
+                        pillar: e.target.value as PillarKey | "",
+                      })
+                    }
+                    aria-label={`Tomorrow's pillar for ${h.name}`}
+                    className="shrink-0 border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-small outline-none transition-colors focus:border-[var(--color-accent)]"
+                  >
+                    {PILLAR_CHOICES.map((p) => (
+                      <option key={p.key} value={p.key}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Only when something IS different — a reset beside an unchanged row
+                      would imply there was something to undo. */}
+                  {overridden ? (
+                    <button
+                      onClick={() => resetOverride(h)}
+                      className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                    >
+                      reset
+                    </button>
+                  ) : (
+                    <span className="shrink-0 text-micro text-[var(--color-muted)]">
+                      default
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }

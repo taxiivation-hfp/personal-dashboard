@@ -332,7 +332,7 @@ test("thresholds match the owner's stated minimums", () => {
   assert.equal(by.strength, 8);
   assert.equal(by.cardio, 2);
   assert.equal(by.misc, 1); // one a fortnight, as an outer lap rather than a slice
-  assert.equal(by.social_events, 2); // graphite in the calendar
+  assert.equal(by.social_events, 6); // adhered graphite, ~6 / 14 days — revised from 2
 });
 
 // --- the plain-words fortnight ------------------------------------------------------------

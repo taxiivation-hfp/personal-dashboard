@@ -2,20 +2,22 @@
 
 import { useState } from "react";
 import HabitBox from "./HabitBox";
+import CalorieLog from "./CalorieLog";
 import { CALORIE_FLOOR } from "@/lib/productivity";
 import type { CalorieEntry } from "@/lib/queries";
 
 /**
- * Calories, added through the day.
+ * Calories, as one row of the checklist: the box, the word, and the total against its
+ * floor. The total IS a button — it opens the food log, which is where the writing
+ * happens now.
  *
- * No food database, no barcode, no API — those measured OUTPUT (what exactly you ate, how
- * precisely you hit a target), which this app deliberately doesn't score. The only thing
- * tracked here is that you stayed aware enough to write a number down.
+ * The inline increment field is gone, and the collision went with it. This row used to
+ * hold the label, the running total, the floor AND an input on one 170px line, and the
+ * total was pressed up against "/2500" with the field jammed after both. One control
+ * remains: the number you read is the thing you tap to change it.
  *
- * ADDITIVE. 400 in the morning and 800 later reads 1200. The field is an increment, not
- * the day's value, so it clears after each entry rather than holding the total — a field
- * that shows 1200 and then adds 1200 when you tab away is the obvious way to get this
- * wrong.
+ * Still no food database, no barcode, no API. The log takes a NAME now, but the name is
+ * plain text for the owner's own memory — nothing reads it, nothing scores it.
  */
 export default function CalorieInput({
   date,
@@ -28,107 +30,51 @@ export default function CalorieInput({
   entries: CalorieEntry[];
   onChanged: () => void;
 }) {
-  const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   const met = (calories ?? 0) >= CALORIE_FLOOR;
 
-  async function add() {
-    const n = Number(value.replace(/[,\s]/g, ""));
-    if (!value.trim() || !Number.isFinite(n) || n < 1) return;
-    setBusy(true);
-    await fetch("/api/calories", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ date, kcal: n }),
-    }).catch(() => {});
-    setValue("");
-    setBusy(false);
-    onChanged();
-  }
-
-  /**
-   * Undo is not a nicety here. In an additive field a mistyped 20000 is otherwise
-   * unrecoverable, and a field you are afraid to touch is a field you stop using — which
-   * is exactly the honest-logging failure the whole app is built to avoid.
-   */
-  async function undo() {
-    const last = entries[entries.length - 1];
-    if (!last) return;
-    setBusy(true);
-    await fetch(`/api/calories?id=${last.id}&date=${date}`, {
-      method: "DELETE",
-    }).catch(() => {});
-    setBusy(false);
-    onChanged();
-  }
-
   return (
-    // A ROW OF THE CHECKLIST, and it has to survive a 170px column. The history that used
-    // to hang off the end of this row lives on /stats now; what is left is the total, which
-    // is the state, and the field, which is the only control.
-    //
-    // Undo drops to its own line rather than competing for the row, and appears only once
-    // there is something to undo — so the row is one line on a fresh day and two only after
-    // you have typed. It is not a nicety: in an additive field a mistyped 20000 is otherwise
-    // unrecoverable, and a field you are afraid to touch is a field you stop using.
-    <div className="py-2.5">
-      <div className="flex items-center gap-2.5">
-        {/* A FLOOR, not a ceiling — the direction is the whole point for someone training,
-            where under-eating is the failure and there is no upper bound worth drawing. The
-            box is dashed until it is met, which is this app's existing word for "not yet"
-            rather than "failed"; most of the day is legitimately spent below the line. */}
-        <HabitBox
-          done={met}
-          pending
-          tone="var(--color-physical)"
-        />
-        <label
-          htmlFor="kcal"
-          className={`min-w-0 flex-1 font-serif text-small leading-snug ${met ? "text-[var(--color-muted)]" : ""}`}
-        >
-          Calories
-        </label>
+    <div className="flex items-center gap-2.5 py-2.5">
+      {/* A FLOOR, not a ceiling — the direction is the whole point for someone training,
+          where under-eating is the failure and there is no upper bound worth drawing. The
+          box is dashed until it is met, which is this app's existing word for "not yet"
+          rather than "failed"; most of the day is legitimately spent below the line. */}
+      <HabitBox done={met} pending tone="var(--color-physical)" />
+      <span
+        className={`min-w-0 flex-1 font-serif text-small leading-snug ${met ? "text-[var(--color-muted)]" : ""}`}
+      >
+        Calories
+      </span>
 
-        {/* The total is the value — the field beside it is only an increment. Tabular so it
-            doesn't jitter as it climbs through the day. */}
-        {/* The total is the value; the field beside it is only an increment. Tabular so it
-            doesn't jitter as it climbs. The floor is printed beside it in muted — a number
-            you are walking toward is more use than a number on its own. */}
-        <span className="shrink-0 text-small tabular-nums">
-          {calories == null ? (
-            <span className="text-[var(--color-muted)]">—</span>
-          ) : (
-            calories
-          )}
-          <span className="text-micro text-[var(--color-muted)]">
-            /{CALORIE_FLOOR}
-          </span>
+      {/* The total against its floor, as the way in. A bordered pill rather than bare
+          type, so it reads as a control — the bare number here looked like a reading and
+          hid the fact that anything could be done about it. Tabular so it doesn't jitter
+          as the day climbs. */}
+      <button
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-label="Open the food log"
+        className="shrink-0 rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-small tabular-nums transition-colors hover:bg-[var(--color-panel)]"
+      >
+        {calories == null ? (
+          <span className="text-[var(--color-muted)]">—</span>
+        ) : (
+          calories
+        )}
+        <span className="text-micro text-[var(--color-muted)]">
+          /{CALORIE_FLOOR}
         </span>
+      </button>
 
-        {/* Written on a line, not typed into a chip: the underline is the field, and it
-            darkens to the accent on focus rather than growing a box. */}
-        <input
-          id="kcal"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={add}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-          disabled={busy}
-          inputMode="numeric"
-          placeholder="+"
-          aria-label="Add calories"
-          className="w-[2.75rem] shrink-0 border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-small tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+      {/* Mounted only while open, so its history fetch never runs behind a closed row. */}
+      {open && (
+        <CalorieLog
+          date={date}
+          total={calories}
+          entries={entries}
+          onChanged={onChanged}
+          onClose={() => setOpen(false)}
         />
-      </div>
-
-      {entries.length > 0 && (
-        <button
-          onClick={undo}
-          disabled={busy}
-          className="mt-1 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
-        >
-          undo last
-        </button>
       )}
     </div>
   );

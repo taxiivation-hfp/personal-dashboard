@@ -97,6 +97,26 @@ export type JournalView = {
   preview: string | null;
 };
 
+/** A page with its date — the archive's unit. The image itself is never listed; a year of
+ *  handwriting as data URLs in one JSON response is the whole reason /api/journal/[id]/image
+ *  exists. */
+export type JournalPage = JournalView & { date: string };
+
+/** EVERY page, newest first, metadata only — the /journal archive. Deliberately
+ *  unpaginated, same ruling as the gym log: years of pages are a few hundred rows of text
+ *  and thumbnails fetch their own images lazily. */
+export async function allJournalPages(db: Client): Promise<JournalPage[]> {
+  const r = await db.execute(
+    "SELECT id, date, kind, substr(COALESCE(body,''),1,140) AS preview FROM journal_entries ORDER BY date DESC, id DESC",
+  );
+  return r.rows.map((x) => ({
+    id: Number(x.id),
+    date: String(x.date),
+    kind: String(x.kind),
+    preview: x.preview == null ? null : String(x.preview),
+  }));
+}
+
 export type DayView = {
   date: string;
   calendarConnected: boolean;
@@ -115,7 +135,80 @@ export type DayView = {
   pillars: PillarView[];
 };
 
-export type CalorieEntry = { id: number; kcal: number };
+/** One addition to a day's total. `note` is the food's name, or null — the schema always
+ *  had the column; the UI only started writing it when logging grew a name field. */
+export type CalorieEntry = { id: number; kcal: number; note: string | null };
+
+/** One past day of the calorie log, for the dialog's sidebar. */
+export type CalorieDay = { date: string; total: number; entries: CalorieEntry[] };
+
+/**
+ * Calendar events the owner ADHERED to, by event id, over a window.
+ *
+ * What the Social ring counts now: an event on the calendar you drifted from is not a
+ * social fortnight you had. Unmarked events do not count either — the mark is the record,
+ * and the ring reads the record, not the plan.
+ */
+export async function adheredEventIds(
+  db: Client,
+  from: string,
+  to: string,
+): Promise<Set<string>> {
+  const r = await db.execute({
+    sql: `SELECT event_id FROM block_marks
+          WHERE date BETWEEN ? AND ? AND state='adhered'`,
+    args: [from, to],
+  });
+  return new Set(r.rows.map((x) => String(x.event_id)));
+}
+
+/** One skill's slice of the Portfolio ring: who it is, how it stands, and how many
+ *  sessions the window holds. Only skills with at least one session appear — the ring is
+ *  a record of the fortnight, not a roster. */
+export type SkillSlice = {
+  id: number;
+  name: string;
+  state: string;
+  /** Owner-chosen palette hex, or null for the id-cycled default. */
+  color: string | null;
+  sessions: number;
+};
+
+export async function skillSlices(
+  db: Client,
+  from: string,
+  to: string,
+): Promise<SkillSlice[]> {
+  const r = await db.execute({
+    sql: `SELECT s.id, s.name, s.state, s.color, COUNT(t.id) AS sessions
+          FROM skill_time t JOIN skills s ON s.id = t.skill_id
+          WHERE t.date BETWEEN ? AND ?
+          GROUP BY s.id ORDER BY sessions DESC, s.sort_order`,
+    args: [from, to],
+  });
+  return r.rows.map((x) => ({
+    id: Number(x.id),
+    name: String(x.name),
+    state: String(x.state),
+    color: x.color == null ? null : String(x.color),
+    sessions: num(x.sessions),
+  }));
+}
+
+/** Every skill's name and chosen colour, for the /colours page. */
+export async function skillColours(
+  db: Client,
+): Promise<{ id: number; name: string; state: string; color: string | null }[]> {
+  const r = await db.execute(
+    "SELECT id, name, state, color FROM skills ORDER BY sort_order, id",
+  );
+  return r.rows.map((x) => ({
+    id: Number(x.id),
+    name: String(x.name),
+    state: String(x.state),
+    color: x.color == null ? null : String(x.color),
+  }));
+}
 
 /** Day titles across a range, for the strip and the day ahead. */
 export async function dayTitlesBetween(
@@ -141,16 +234,54 @@ export async function caloriesForDate(
   date: string,
 ): Promise<{ total: number | null; entries: CalorieEntry[] }> {
   const r = await db.execute({
-    sql: "SELECT id,kcal FROM calorie_entries WHERE date=? ORDER BY id",
+    sql: "SELECT id,kcal,note FROM calorie_entries WHERE date=? ORDER BY id",
     args: [date],
   });
-  const entries = r.rows.map((x) => ({ id: Number(x.id), kcal: num(x.kcal) }));
+  const entries = r.rows.map((x) => ({
+    id: Number(x.id),
+    kcal: num(x.kcal),
+    note: x.note == null ? null : String(x.note),
+  }));
   // Summed in JS rather than by SQL SUM(): the rows are already loaded, and it keeps the
   // BigInt conversion in exactly one place.
   return {
     total: entries.length ? entries.reduce((s, e) => s + e.kcal, 0) : null,
     entries,
   };
+}
+
+/**
+ * The calorie log's recent past, grouped by day, newest first — the dialog's sidebar.
+ *
+ * Days with no entries simply do not appear: a day you logged nothing is a gap in the
+ * record, not a zero, which is the same rule every chart here draws by. The totals are
+ * derived exactly as caloriesForDate derives today's, so the two can never disagree.
+ */
+export async function calorieDays(
+  db: Client,
+  from: string,
+  to: string,
+): Promise<CalorieDay[]> {
+  const r = await db.execute({
+    sql: `SELECT id,date,kcal,note FROM calorie_entries
+          WHERE date BETWEEN ? AND ? ORDER BY date DESC, id`,
+    args: [from, to],
+  });
+  const byDate = new Map<string, CalorieEntry[]>();
+  for (const x of r.rows) {
+    const d = String(x.date);
+    if (!byDate.has(d)) byDate.set(d, []);
+    byDate.get(d)!.push({
+      id: Number(x.id),
+      kcal: num(x.kcal),
+      note: x.note == null ? null : String(x.note),
+    });
+  }
+  return [...byDate.entries()].map(([date, entries]) => ({
+    date,
+    total: entries.reduce((s, e) => s + e.kcal, 0),
+    entries,
+  }));
 }
 
 // ---------------------------------------------------------------- adherence config
@@ -231,7 +362,12 @@ async function loadMarks(db: Client, date: string) {
   return m;
 }
 
-/** Today's non-negotiables: only those scheduled for this weekday. */
+/**
+ * Today's non-negotiables: only those scheduled for this weekday, wearing any per-date
+ * OVERRIDE the owner set for it — a different name, a different pillar, for that day
+ * only. COALESCE keeps the default the truth everywhere no override exists, and the id
+ * stays the habit's own, so ticks land on the same history whatever it was called today.
+ */
 export async function habitsForDate(
   db: Client,
   date: string,
@@ -239,11 +375,16 @@ export async function habitsForDate(
   const { byId } = await pillarMaps(db);
   const bit = weekdayBit(date);
   const r = await db.execute({
-    sql: `SELECT h.id,h.name,h.pillar_id,h.days_mask,h.system_key,h.input,h.unit, he.value AS v
-          FROM habits h LEFT JOIN habit_entries he ON he.habit_id=h.id AND he.date=?
+    sql: `SELECT h.id,
+                 COALESCE(o.name, h.name) AS name,
+                 COALESCE(o.pillar_id, h.pillar_id) AS pillar_id,
+                 h.days_mask,h.system_key,h.input,h.unit, he.value AS v
+          FROM habits h
+          LEFT JOIN habit_entries he ON he.habit_id=h.id AND he.date=?
+          LEFT JOIN habit_overrides o ON o.habit_id=h.id AND o.date=?
           WHERE h.active=1 AND (h.days_mask & ?) != 0
           ORDER BY h.sort_order, h.id`,
-    args: [date, bit],
+    args: [date, date, bit],
   });
   return r.rows.map((h) => ({
     id: num(h.id),
@@ -256,6 +397,29 @@ export async function habitsForDate(
     unit: str(h.unit),
     value: h.v == null ? null : Number(h.v),
   }));
+}
+
+/** The raw overrides for one date, keyed by habit id — the editor needs to know which
+ *  fields are actually overridden, which the COALESCEd view above cannot say. */
+export async function habitOverridesFor(
+  db: Client,
+  date: string,
+): Promise<Map<number, { name: string | null; pillar: PillarKey | null }>> {
+  const { byId } = await pillarMaps(db);
+  const r = await db.execute({
+    sql: "SELECT habit_id, name, pillar_id FROM habit_overrides WHERE date=?",
+    args: [date],
+  });
+  return new Map(
+    r.rows.map((x) => [
+      num(x.habit_id),
+      {
+        name: x.name == null ? null : String(x.name),
+        pillar:
+          x.pillar_id == null ? null : (byId.get(num(x.pillar_id)) ?? null),
+      },
+    ]),
+  );
 }
 
 /** Every habit, for the editor — including ones not scheduled today. */

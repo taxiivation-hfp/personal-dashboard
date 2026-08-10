@@ -81,10 +81,14 @@ export default function SessionHistory({ today }: { today: string }) {
   const hue = toneColor("physical", null);
 
   return (
+    // The WINDOW LOOK, the same architecture the record and the journal wear: the masthead
+    // band, then one window on the page ground, with each day a card inside it. This page
+    // used to be bare rules on the page — the one deeper screen that had not joined the
+    // family.
     <div className="flex min-h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-ink)]">
-      <header className="border-b border-[var(--color-line)] bg-[var(--color-bar)]">
-        <div className="mx-auto flex max-w-[52rem] items-baseline justify-between gap-4 px-5 py-4 lg:px-8">
-          <h1 className="font-serif text-body font-semibold">Sessions</h1>
+      <header className="shrink-0 border-b border-[var(--color-line-strong)] bg-[var(--color-bar)]">
+        <div className="mx-auto flex w-full max-w-[64rem] items-baseline justify-between gap-4 px-6 py-5 sm:px-8">
+          <h1 className="font-serif text-heading">Sessions</h1>
           <Link
             href="/"
             aria-label="Close"
@@ -95,7 +99,11 @@ export default function SessionHistory({ today }: { today: string }) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[52rem] flex-1 px-5 pb-28 pt-6 lg:px-8 lg:pb-12">
+      {/* Gold, because this is the Physical pillar's record — the same surface its window
+          wears on Today, so arriving here reads as stepping deeper into that window rather
+          than leaving the app. */}
+      <main className="mx-auto w-full max-w-[64rem] flex-1 px-6 pb-16 pt-6 sm:px-8">
+        <div className="window bg-[var(--color-surface-3)] p-5 lg:p-8">
         <div className="flex flex-wrap items-center gap-1.5">
           {/* "All" first and selected by default: the page is the record, and a filter is
               something you reach for rather than something you arrive inside. */}
@@ -143,9 +151,11 @@ export default function SessionHistory({ today }: { today: string }) {
         )}
 
         {byDate.length > 0 && (
-          <div className="mt-8 flex flex-col gap-8">
+          <div className="mt-8 flex flex-col gap-5">
+            {/* Each day a CARD — the record's own card treatment, so a day of training
+                reads as one sheet with its sessions on it rather than a run of rules. */}
             {byDate.map(([date, rows]) => (
-              <section key={date}>
+              <section key={date} className="record-card">
                 <div className="section-head">
                   <h2 className="text-small font-semibold">{heading(date)}</h2>
                   <span className="text-micro tabular-nums text-[var(--color-muted)]">
@@ -153,13 +163,15 @@ export default function SessionHistory({ today }: { today: string }) {
                   </span>
                 </div>
 
-                <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                <ul className="divide-y divide-[var(--color-line)]">
                   {rows.map((s) => (
                     <li key={s.id}>
                       <button
                         onClick={() => setOpen({ kind: s.kind, id: s.id })}
                         aria-haspopup="dialog"
-                        className="-mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel)]"
+                        // panel-2, not panel: the card's own ground IS panel now, so the
+                        // old hover was invisible on it.
+                        className="-mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel-2)]"
                       >
                         <span className="flex items-center gap-2">
                           <span
@@ -192,6 +204,7 @@ export default function SessionHistory({ today }: { today: string }) {
             ))}
           </div>
         )}
+        </div>
       </main>
 
       {open && (

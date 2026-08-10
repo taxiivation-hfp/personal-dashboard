@@ -1,20 +1,28 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useRef, useState } from "react";
 import { brokenRuns, runPoints } from "@/lib/chart";
 
 /**
- * One series over a run of days. The only chart primitive on /stats.
+ * One series over a run of days. The only chart primitive on /stats — and now in the
+ * weight and food dialogs, which is why it learned to answer a pointer.
  *
  * A RECORD, not a verdict. There is no average line, no target, no trend arrow, no
  * seven-day smoothing and no comparison between windows. Those are all judgements about a
  * number, and this app judges adherence to a plan, never the numbers the plan produced.
  *
+ * INTERACTIVE, not decorated: pointing at a day answers "what exactly was this" — the date
+ * and the reading, which is the one question a shape cannot. The crosshair, the marker and
+ * the tooltip exist only under the pointer and never rank, colour-code or compare; they
+ * print the fact at the finger and nothing else.
+ *
  * THE FORM IS CHOSEN BY WHAT THE QUANTITY IS, not by what looks best:
  *
  *   line     a continuous measurement that PERSISTS between readings — weight. Drawn on
  *            the range actually observed, because a weight chart pinned to zero is a flat
- *            line that says nothing. Broken at every gap.
+ *            line that says nothing. Broken at every gap. (A caller may still fix the axis
+ *            with floor+ceiling — the weight dialog's 0–100 is the owner's own ruling for
+ *            that surface.)
  *   bars     a total that accumulates and then starts again — calories, adherence. From
  *            ZERO, because a bar that doesn't start at zero lies about its proportions,
  *            and because a line would imply Tuesday's intake flowed into Wednesday's.
@@ -23,10 +31,18 @@ import { brokenRuns, runPoints } from "@/lib/chart";
  * A DAY WITH NO ENTRY DRAWS NOTHING. Not a zero-height bar, not a line through it. An
  * unweighed morning is not a morning that weighed nothing, and this app is new enough that
  * most days in a 90-day window are blank — a chart that drew them as zeros would report a
- * catastrophe that never happened.
+ * catastrophe that never happened. Pointing at such a day says "no entry", which is the
+ * same statement out loud.
  */
 
-export type ChartSegment = { key: string; points: number; fill: string };
+export type ChartSegment = {
+  key: string;
+  points: number;
+  fill: string;
+  /** Names the slice in the legend and the tooltip. Optional — a caller that cannot name
+   *  its colours simply gets no legend rather than a legend of hex codes. */
+  label?: string;
+};
 
 export type ChartPoint = {
   date: string;
@@ -45,18 +61,39 @@ const onDay = (iso: string) => new Date(`${iso}T12:00:00`);
 const short = (iso: string) =>
   onDay(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 
+/** The tooltip carries the weekday too — out of the axis's context, "Sat 8 Aug" is the
+ *  form a day is actually remembered in. */
+const longer = (iso: string) =>
+  onDay(iso).toLocaleDateString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+
 /**
  * Past this many days the bars are thinner than the gap between them, so the gap goes.
  * Ninety hairlines with a pixel between each is a texture, not a chart.
  */
 const GAP_LIMIT = 70;
 
+/** Where the horizontal gridlines sit, as fractions of the span. Quarters, because the
+ *  reader's question is "roughly where is this" and quarters answer it without turning
+ *  the plot into graph paper. */
+const GRID_AT = [0.25, 0.5, 0.75] as const;
+
 export default function DayChart({
   points,
   form,
   unit,
-  /** Fixed ceiling, for a quantity that has one. Adherence is 100; nothing else has one. */
+  marker = null,
+  /** Fixed ceiling, for a quantity that has one. Adherence is 100. */
   ceiling = null,
+  /**
+   * Fixed bottom, for a LINE a caller wants on an absolute axis rather than the observed
+   * range — the weight dialog's 0–100kg. Only meaningful with `ceiling`; bars are always
+   * from zero regardless.
+   */
+  floor = null,
   height = 160,
   colour = "var(--color-accent)",
   emptyNote,
@@ -65,11 +102,25 @@ export default function DayChart({
   form: ChartForm;
   unit: string;
   ceiling?: number | null;
+  floor?: number | null;
+  /**
+   * A horizontal reference line at this value — the calorie FLOOR, and nothing else so
+   * far. The house rule against target lines stands for every judged quantity; this one
+   * exists at the owner's explicit direction, for the one number that is already a floor
+   * everywhere else in the app (the dashed calorie box, the /2500 print). Dotted and red
+   * — the app's only red, reserved for this line — so it reads as the floor's own mark
+   * rather than as another data series.
+   */
+  marker?: number | null;
   height?: number;
   colour?: string;
   emptyNote: string;
 }) {
   const gradId = useId();
+  const boxRef = useRef<HTMLDivElement>(null);
+  /** Index of the day under the pointer, or null. The only interaction state there is. */
+  const [hover, setHover] = useState<number | null>(null);
+
   const present = points
     .map((p) => p.value)
     .filter((v): v is number => v != null);
@@ -86,9 +137,13 @@ export default function DayChart({
 
   // The line floats on its own range with a slice of it as headroom; everything else is
   // measured from zero. See the docblock — this is the whole reason the two forms exist.
+  // A caller-fixed floor+ceiling overrides both: that is an absolute axis, theirs to rule.
   const pad = form === "line" ? Math.max((hi - lo) * 0.15, 0.5) : 0;
-  const top = ceiling ?? (form === "line" ? hi + pad : Math.max(hi, 1));
-  const bottom = form === "line" ? lo - pad : 0;
+  let top = ceiling ?? (form === "line" ? hi + pad : Math.max(hi, 1));
+  // The marker must be ON the chart to mean anything: a floor above every bar so far
+  // would otherwise sit outside the box, invisible exactly when it matters most.
+  if (marker != null && ceiling == null) top = Math.max(top, marker * 1.04);
+  const bottom = floor ?? (form === "line" ? lo - pad : 0);
   const span = Math.max(top - bottom, 0.001);
 
   const n = points.length;
@@ -117,15 +172,75 @@ export default function DayChart({
 
   const latest = [...points].reverse().find((p) => p.value != null);
 
+  /**
+   * Pointer → day index. Bars own a column each, so the pointer is IN one; the line's
+   * points sit at column edges, so the NEAREST one answers. Clamped, because a pointer a
+   * pixel past the padding must mean the last day rather than a day that does not exist.
+   */
+  const indexAt = (clientX: number): number => {
+    const r = boxRef.current?.getBoundingClientRect();
+    if (!r || r.width === 0) return 0;
+    const t = (clientX - r.left) / r.width;
+    const i = form === "line" ? Math.round(t * (n - 1)) : Math.floor(t * n);
+    return Math.min(n - 1, Math.max(0, i));
+  };
+
+  const hovered = hover == null ? null : points[hover]!;
+  /** The hover x, at the point for a line and mid-column for a bar. */
+  const hoverX = hover == null ? 0 : form === "line" ? x(hover) : ((hover + 0.5) / n) * 100;
+
+  /**
+   * The LEGEND, for a stacked chart whose caller named its colours: one swatch per
+   * distinct fill, in first-appearance order. Drawn by the chart rather than by every
+   * caller so the record's hours chart and any future stacked surface cannot disagree
+   * about what a legend looks like.
+   */
+  const legend = (() => {
+    if (form !== "stacked") return [];
+    const seen = new Map<string, string>();
+    for (const p of points)
+      for (const s of p.segments ?? [])
+        if (s.label && !seen.has(s.fill)) seen.set(s.fill, s.label);
+    return [...seen.entries()].map(([fill, label]) => ({ fill, label }));
+  })();
+
   return (
     <>
       <div
+        ref={boxRef}
         className="relative border-b border-[var(--color-line-strong)]"
-        style={{ height }}
+        style={{ height, touchAction: "pan-y" }}
+        onPointerMove={(e) => setHover(indexAt(e.clientX))}
+        onPointerDown={(e) => setHover(indexAt(e.clientX))}
+        onPointerLeave={() => setHover(null)}
       >
+        {/* THE GRID, behind everything: three hairlines at the quarter marks, each naming
+            its value at the left edge. What turns a silhouette into a chart you can read a
+            number off — the ends were already printed under the axis; these carry the
+            middle. First in DOM order so the data paints over them. */}
+        {GRID_AT.map((k) => (
+          <div
+            key={k}
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0"
+            style={{ top: `${100 - k * 100}%` }}
+          >
+            <div className="h-px w-full bg-[var(--color-line)]" />
+            {/* text-micro, not a smaller ad-hoc size — the type scale has five steps and
+                a chart does not get a sixth. */}
+            <span className="absolute left-0 top-0 -translate-y-full pr-1 text-micro tabular-nums text-[var(--color-muted)]">
+              {fmt(bottom + span * k)}
+            </span>
+          </div>
+        ))}
+
         {form === "line" ? (
           <svg
-            className="h-full w-full"
+            // POSITIONED, and that is the gridline z-fix: the gridlines above are
+            // absolutely positioned, and a static element paints UNDER positioned ones
+            // whatever the DOM order says. `relative` puts the data back in the same
+            // stacking order as the grid, where later-in-DOM wins.
+            className="relative h-full w-full"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             aria-hidden
@@ -154,7 +269,10 @@ export default function DayChart({
             </defs>
           </svg>
         ) : (
-          <div className="flex h-full items-end" style={{ gap }}>
+          // `relative` for the same gridline z-fix the line's svg carries: bars must
+          // paint OVER the grid, and only a positioned box competes with positioned
+          // gridlines on DOM order.
+          <div className="relative flex h-full items-end" style={{ gap }}>
             {points.map((p) => {
               // Share of the box, from zero. A real total below 1.5% of the peak still gets
               // a hairline, so a light day is a light day rather than an absent one.
@@ -195,15 +313,116 @@ export default function DayChart({
             })}
           </div>
         )}
+
+        {/* THE FLOOR LINE — see the `marker` prop. Positioned after the data so it stays
+            visible over the bars; its value rides at the right edge so the line never has
+            to be traced back to the axis. */}
+        {marker != null && marker >= bottom && marker <= top && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0"
+            style={{
+              top: `${100 - ((marker - bottom) / span) * 100}%`,
+              borderTop: "2px dotted var(--color-floor-line)",
+            }}
+          >
+            <span className="absolute right-0 top-0 pl-1 text-micro tabular-nums text-[var(--color-floor-line)]">
+              {fmt(marker)}
+            </span>
+          </div>
+        )}
+
+        {/* THE POINTER'S ANSWER. A crosshair on the day, a marker on the reading, and the
+            fact itself in a small panel pinned to the top of the plot. All of it exists
+            only under the pointer, prints only what is recorded, and compares nothing. */}
+        {hover != null && hovered && (
+          <>
+            {/* The day's vertical, full height, behind the tooltip. For bars it is a wash
+                over the day's whole column, so the bar reads as picked out rather than
+                pointed near. */}
+            {form === "line" ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 w-px bg-[var(--color-line-strong)]"
+                style={{ left: `${hoverX}%` }}
+              />
+            ) : (
+              <div
+                aria-hidden
+                // Borders, not an inset box-shadow standing in for them — the shadow
+                // count in this app is zero and stays zero.
+                className="pointer-events-none absolute inset-y-0 border-x border-[var(--color-line-strong)]"
+                style={{
+                  left: `${(hover / n) * 100}%`,
+                  width: `${100 / n}%`,
+                  background:
+                    "color-mix(in oklab, var(--color-ink) 7%, transparent)",
+                }}
+              />
+            )}
+
+            {/* The marker, on the reading itself — line form only, where the value is a
+                point rather than a column. Panel-filled so the line passes visibly under
+                a ring rather than through a blot. */}
+            {form === "line" && hovered.value != null && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-[var(--color-panel)]"
+                style={{
+                  left: `${hoverX}%`,
+                  top: `${y(hovered.value)}%`,
+                  borderColor: colour,
+                }}
+              />
+            )}
+
+            {/* The fact: date, then the reading — or "no entry", said plainly. Clamped to
+                the plot's edges so the first and last days stay readable. */}
+            <div
+              className="pointer-events-none absolute top-1 z-10 whitespace-nowrap rounded-lg border border-[var(--color-line)] bg-[var(--color-panel)] px-2.5 py-1.5 text-micro"
+              style={{
+                left: `${hoverX}%`,
+                transform:
+                  hoverX < 14
+                    ? "none"
+                    : hoverX > 86
+                      ? "translateX(-100%)"
+                      : "translateX(-50%)",
+              }}
+            >
+              <span className="text-[var(--color-muted)]">
+                {longer(hovered.date)}
+              </span>{" "}
+              <span className="font-semibold tabular-nums">
+                {hovered.value == null
+                  ? "no entry"
+                  : `${fmt(hovered.value)}${unit ? ` ${unit}` : ""}`}
+              </span>
+              {/* The composition, for a stacked day: each named slice and its share, the
+                  same facts the bar's bands already draw. */}
+              {form === "stacked" &&
+                hovered.value != null &&
+                (hovered.segments ?? []).filter((s) => s.label).length > 0 && (
+                  <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
+                    {(hovered.segments ?? [])
+                      .filter((s) => s.label)
+                      .map((s) => `${s.label} ${fmt(s.points)}`)
+                      .join(" · ")}
+                  </span>
+                )}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Two dates and the observed range. Ninety labels under ninety days is a ruler; the
-          reader needs to know which end is which and what the shape is scaled against. */}
+      {/* Two dates and the range. Ninety labels under ninety days is a ruler; the reader
+          needs to know which end is which and what the shape is scaled against — the
+          gridlines above carry the values in between. */}
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-micro tabular-nums text-[var(--color-muted)]">
         <span>{short(points[0]!.date)}</span>
         <span>
           {ceiling != null
-            ? `0–${fmt(ceiling)}${unit ? ` ${unit}` : ""}`
+            ? `${fmt(bottom)}–${fmt(ceiling)}${unit ? ` ${unit}` : ""}`
             : `${fmt(lo)}–${fmt(hi)}${unit ? ` ${unit}` : ""}`}
           {/* Only when some days are MISSING. Adherence has a figure for every day in the
               window by construction, so "30 days logged" there would be counting the axis
@@ -227,6 +446,26 @@ export default function DayChart({
         </span>
         <span>{short(points[points.length - 1]!.date)}</span>
       </div>
+
+      {/* The legend, when the caller named its colours. Swatches on one line, not a boxed
+          key — the same treatment the week strip's legend settled on. */}
+      {legend.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+          {legend.map((k) => (
+            <li
+              key={k.fill}
+              className="flex items-center gap-1.5 text-micro text-[var(--color-muted)]"
+            >
+              <span
+                aria-hidden
+                className="h-2 w-2 shrink-0 rounded-[2px]"
+                style={{ background: k.fill }}
+              />
+              {k.label}
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   );
 }

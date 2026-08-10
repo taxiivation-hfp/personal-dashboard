@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db/client";
 import { saveJournalEntry } from "@/lib/engine";
+import { allJournalPages } from "@/lib/queries";
 import { isISODate, todayISO } from "@/lib/dates";
 
 export const runtime = "nodejs";
@@ -13,6 +14,20 @@ export const dynamic = "force-dynamic";
 // typed. The two kinds never convert into each other.
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_BODY_CHARS = 20000;
+
+/** Every page's METADATA, newest first, for the /journal archive. Never the images —
+ *  a year of handwriting as data URLs in one response is why [id]/image exists. */
+export async function GET() {
+  try {
+    const db = await getDb();
+    return Response.json({ pages: await allJournalPages(db) });
+  } catch (e) {
+    return Response.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
+}
 
 export async function POST(req: Request) {
   try {

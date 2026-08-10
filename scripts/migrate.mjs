@@ -58,6 +58,14 @@ async function main() {
     await client.execute("ALTER TABLE habits ADD COLUMN escalate INTEGER NOT NULL DEFAULT 0");
     console.log("added habits.escalate");
   }
+
+  // Per-skill segment colour on the Portfolio ring, picked at /colours. Nullable —
+  // NULL means the stable palette default — so this is purely additive.
+  const skillCols = await client.execute("PRAGMA table_info(skills)");
+  if (!skillCols.rows.some((r) => String(r.name) === "color")) {
+    await client.execute("ALTER TABLE skills ADD COLUMN color TEXT");
+    console.log("added skills.color");
+  }
   // Created here rather than in schema.sql: on an existing database schema.sql runs
   // before the ALTER above, so an index over `escalate` would reference a column that
   // doesn't exist yet and abort the whole migration.

@@ -1,12 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import Link from "next/link";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
 import HabitBox from "./HabitBox";
 import NextUp from "./NextUp";
-import ExpandingRecord from "./ExpandingRecord";
+import WeightLog from "./WeightLog";
+import Dashboard from "./Dashboard";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
@@ -17,7 +24,13 @@ import type { Workout } from "./WorkoutLog";
 import { prettyDate, todayISO } from "@/lib/dates";
 import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
 import { CALENDAR_RATES, type ProductivitySegment } from "@/lib/productivity";
-import type { DayView, GoalView, SkillView, PillarKey } from "@/lib/queries";
+import type {
+  DayView,
+  GoalView,
+  SkillView,
+  SkillSlice,
+  PillarKey,
+} from "@/lib/queries";
 import type {
   PillarFactInput,
   PillarRingView,
@@ -66,6 +79,19 @@ const slabFill = (s: ProductivitySegment): string =>
 // the fold. On mobile these are inert — the page scrolls as one, as it should.
 const colScroll = "lg:h-full lg:overflow-y-auto lg:[scrollbar-gutter:stable]";
 
+/**
+ * BEAT ONE of the record's three-beat choreography: how long the outgoing contents get to
+ * leave before the geometry starts. Matches the exit leg of `.panel-fade` / `.panel-swap`
+ * in globals.css — the sequence is contents OUT (this), windows MOVE (--dur-panel), new
+ * contents IN (the entrance delays riding on `.panel-fade` and `.pane-enter`).
+ *
+ * A timeout rather than a transitionend listener, for the reason every other timed hand-off
+ * in this app gives: transitionend does not fire in a hidden tab, and a record that never
+ * appears because the tab was in the background is worse than a beat that occasionally runs
+ * a frame early.
+ */
+const RECORD_EXIT_MS = 180;
+
 /** Hours to one decimal, with no trailing ".0" — "3.5 of 8h" reads; "3.50 of 8.00h" does not. */
 const round1 = (n: number) => String(Math.round(n * 10) / 10);
 
@@ -105,6 +131,17 @@ export default function Today({
    *  is a different kind of statement — see pillarCaption. */
   const [facts, setFacts] = useState<PillarFactInput | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  /** The fortnight's ADHERED graphite events — the Social ring's inner band and its
+   *  drill-down. null until /api/rings lands or when the calendar could not be reached. */
+  const [socialEvents, setSocialEvents] = useState<
+    { date: string; title: string }[] | null
+  >(null);
+  /** The adhered birch (one-off) events — the Social ring's mid band. */
+  const [birchEvents, setBirchEvents] = useState<
+    { date: string; title: string }[] | null
+  >(null);
+  /** Per-skill sessions in the window — the Portfolio ring's segments. */
+  const [skills14, setSkills14] = useState<SkillSlice[] | null>(null);
   // Phone only: which of the three panes is showing. Opens on the day's work, and a
   // reload returns there rather than wherever you last wandered.
   const [tab, setTab] = useState<PhoneTab>("today");
@@ -114,13 +151,42 @@ export default function Today({
   const [titleDraft, setTitleDraft] = useState("");
   // Raised by the Journal row in the checklist — the journal is written, not ticked.
   const [journalPrompt, setJournalPrompt] = useState(false);
+  /** The weight trend dialog, raised from the Weight row's name. */
+  const [weightOpen, setWeightOpen] = useState(false);
   /**
-   * The record, open over the top. Held HERE rather than in the pillar column because the
-   * thing it expands out of is that column's own window, and a component cannot measure
-   * the box it is inside.
+   * The record. Held HERE rather than in the pillar column because it is not a thing that
+   * column contains — it is a change to the whole ROW, and only the row's owner can widen one
+   * window by narrowing two others.
    */
   const [recordOpen, setRecordOpen] = useState(false);
-  const pillarWindow = useRef<HTMLDivElement>(null);
+  /**
+   * The GEOMETRY, one beat behind the intent.
+   *
+   * `recordOpen` is what the owner asked for and flips on the click; this is what the row
+   * is currently shaped as, and it follows RECORD_EXIT_MS later. The gap between them is
+   * beat one: the row carries `data-exiting`, every window's contents fade down and out,
+   * and only then does the layout start to move — a window that reflows while its text is
+   * still readable reads as the text being crushed, not as the window travelling. This
+   * state also decides WHICH content the pillar window holds, so the swap happens behind
+   * an opacity that is already zero.
+   */
+  const [recordGeom, setRecordGeom] = useState(false);
+  useEffect(() => {
+    if (recordGeom === recordOpen) return;
+    const t = setTimeout(() => setRecordGeom(recordOpen), RECORD_EXIT_MS);
+    return () => clearTimeout(t);
+  }, [recordOpen, recordGeom]);
+
+  /** Escape closes the record — it is a window you opened, and that is what closes windows.
+   *  Bound only while it is open, so it never competes with a dialog's own handler. */
+  useEffect(() => {
+    if (!recordOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRecordOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recordOpen]);
 
   // ENDS on the day being viewed. There is no future half: the calendar column says what
   // tomorrow holds, and a strip that reserved three columns for it spent a third of its
@@ -141,6 +207,11 @@ export default function Today({
         setRings(s.pillars ?? []);
         setFacts(s.facts ?? null);
         setWorkouts(s.workouts ?? []);
+        // undefined on a calendar failure, and passed through as such — the Events
+        // drill-down says "unavailable" rather than showing an empty fortnight.
+        setSocialEvents(s.socialEventList ?? null);
+        setBirchEvents(s.birchEventList ?? null);
+        setSkills14(s.skills14 ?? null);
       })
       .catch(() => {});
   }, [data.date]);
@@ -303,37 +374,37 @@ export default function Today({
           INTEND the day to be, in your own words. The intention is deliberately connected
           to nothing: it feeds no rate, no ring and no score, because the moment naming a
           day becomes something you can fail at, it stops being a plan. */}
-      <header>
-        <p className="text-micro text-[var(--color-muted)]">
-          {prettyDate(data.date)}
-        </p>
-        {editingTitle ? (
-          <input
-            autoFocus
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={() => saveDayTitle(data.date, titleDraft)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              if (e.key === "Escape") setEditingTitle(false);
-            }}
-            maxLength={80}
-            placeholder="What is today for?"
-            aria-label="What is today for?"
-            className="mt-1 w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-heading outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
-          />
-        ) : (
-          // ONE ROW: what you meant today to be, and the next thing that is actually going
-          // to happen. The space to the right of a short title was empty, and the schedule
-          // is the most useful thing that could go in it — it answers the question you open
-          // the app to ask between blocks.
-          <div className="mt-1 flex items-end justify-between gap-6">
+      {/* CARDS now, not bare type on the window — the owner asked this screen for more
+          structure and weight, and the record's card is the house word for it: the day's
+          name in one card, the next thing that will happen in its own beside it. Same
+          smaller-pane-of-the-same-glass the chart cards established. */}
+      <header className="flex flex-wrap items-stretch gap-4">
+        <div className="record-card min-w-0 flex-1">
+          <p className="text-micro text-[var(--color-muted)]">
+            {prettyDate(data.date)}
+          </p>
+          {editingTitle ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={() => saveDayTitle(data.date, titleDraft)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") setEditingTitle(false);
+              }}
+              maxLength={80}
+              placeholder="What is today for?"
+              aria-label="What is today for?"
+              className="mt-1 w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-heading outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+            />
+          ) : (
             <button
               onClick={() => {
                 setTitleDraft(data.title ?? "");
                 setEditingTitle(true);
               }}
-              className="min-w-0 flex-1 truncate text-left font-serif text-heading transition-colors hover:text-[var(--color-accent)]"
+              className="mt-1 w-full min-w-0 truncate text-left font-serif text-heading transition-colors hover:text-[var(--color-accent)]"
             >
               {data.title ?? (
                 <span className="text-[var(--color-muted)]">
@@ -341,9 +412,12 @@ export default function Today({
                 </span>
               )}
             </button>
-            <NextUp blocks={data.blocks} date={data.date} today={todayISO()} />
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* NextUp wears its own card and returns null when there is nothing next, so no
+            empty frame ever stands here at 11pm. */}
+        <NextUp blocks={data.blocks} date={data.date} today={todayISO()} />
       </header>
 
       {/* THE HERO. The ring keeps the left side to itself and stays the largest thing on
@@ -396,6 +470,18 @@ export default function Today({
             of those is a viewport width. minmax lets the grid answer for itself — two
             columns when there is room for two, one when there is not. */}
         <div className="min-w-[15rem] flex-1">
+          {/* The way into the editor — and into "Tomorrow, specifically". This used to
+              exist only in the empty state, which meant that the moment you had habits
+              there was no path to the screen that edits them. Quiet, right-aligned, the
+              same word Goals and Skills use. */}
+          <div className="mb-1 flex justify-end">
+            <Link
+              href="/habits"
+              className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+            >
+              edit · tomorrow
+            </Link>
+          </div>
           {/* 9rem and a 20px gutter, which is what makes two columns land at 308px — the
               width this block actually gets beside the ring. At 10.5rem it needed 364px and
               silently stayed one column, which is the failure mode of auto-fit: it does not
@@ -415,12 +501,26 @@ export default function Today({
                 <li key={h.id} className={CHECK_ROW}>
                   <div className="flex w-full items-center gap-2.5 py-2.5">
                     <HabitBox done={h.done} tone={habitTone(h.pillar)} />
-                    <label
-                      htmlFor={`h${h.id}`}
-                      className={`min-w-0 flex-1 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
-                    >
-                      {h.name}
-                    </label>
+                    {/* WEIGHT's name is the way into its trend — the same pattern the
+                        Calories row set: the field logs, the row opens the record. Other
+                        number habits keep the plain label; a control that opens nothing
+                        must not dress as one. */}
+                    {h.system_key === "weight" ? (
+                      <button
+                        onClick={() => setWeightOpen(true)}
+                        aria-haspopup="dialog"
+                        className={`min-w-0 flex-1 text-left font-serif text-small leading-snug underline-offset-4 transition-colors hover:underline ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                      >
+                        {h.name}
+                      </button>
+                    ) : (
+                      <label
+                        htmlFor={`h${h.id}`}
+                        className={`min-w-0 flex-1 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                      >
+                        {h.name}
+                      </label>
+                    )}
                     {/* A value written on a line, not typed into a chip. The underline is
                         the field; it darkens on focus rather than growing a box. */}
                     <span className="flex shrink-0 items-baseline gap-1">
@@ -531,8 +631,11 @@ export default function Today({
 
           The window ENDS ON TODAY. There is no future half any more — the calendar column
           is what says what tomorrow holds, and a week strip that reserved three empty
-          columns for it was spending a third of its width on nothing. */}
-      <section>
+          columns for it was spending a third of its width on nothing.
+
+          A CARD, like the record's charts — the owner's ask for weight and structure on
+          this screen. The strip is this screen's one chart, so it wears the chart's frame. */}
+      <section className="record-card">
         <div className="mb-2.5 flex items-baseline justify-between gap-3">
           {/* "adherence" has left this line: it prints its own number above its own bar
               now, and a caption naming it as well would be the third time. What is left is
@@ -731,26 +834,33 @@ export default function Today({
         </div>
       </section>
 
-      {/* The JOURNAL, as a shelf of pages and nothing else.
+      {/* The JOURNAL'S MACHINERY, and nothing visible.
 
-          Its write / type buttons used to sit here as well as behind the checklist row
-          above, which offered the same two choices twice; the row is the way in now. The
-          pages stay, because they are the artefact and they exist nowhere else. The panel
-          is always mounted whether or not there are any — it owns the chooser and the
-          writing surface the row opens.
+          The shelf of pages that sat here moved to /journal, kept by month — Today is
+          where tonight's page gets written, and an archive at the foot of the acting
+          screen was the looking-back job in the wrong place, the same split /stats
+          draws. The panel stays mounted with the shelf off because it owns the chooser
+          and the writing surface the checklist's Journal row opens, and the chooser now
+          carries the way through to the archive. */}
+      <JournalPanel
+        date={data.date}
+        entries={data.journal}
+        onChanged={refresh}
+        prompt={journalPrompt}
+        actions={false}
+        shelf={false}
+        onPromptHandled={() => setJournalPrompt(false)}
+      />
 
-          Non-negotiables and calories were repeated here verbatim and are simply gone:
-          both now sit beside the ring, where they are read. */}
-      <section>
-        <JournalPanel
+      {/* The weight trend, raised from the Weight row's name. Mounted only while open so
+          its trends fetch never runs behind a closed checklist. */}
+      {weightOpen && (
+        <WeightLog
           date={data.date}
-          entries={data.journal}
           onChanged={refresh}
-          prompt={journalPrompt}
-          actions={false}
-          onPromptHandled={() => setJournalPrompt(false)}
+          onClose={() => setWeightOpen(false)}
         />
-      </section>
+      )}
     </div>
   );
 
@@ -762,6 +872,9 @@ export default function Today({
       facts={facts}
       colors={colors}
       workouts={workouts}
+      socialEvents={socialEvents}
+      birchEvents={birchEvents}
+      skills14={skills14}
       date={data.date}
       onSubgoal={(id, done) =>
         mutateGoals(`/api/subgoals/${id}`, {
@@ -788,8 +901,18 @@ export default function Today({
 
   // Below `lg` only ONE pane is mounted, so the phone never pays to render the other two.
   // Above it every pane is shown and the tab is ignored entirely.
+  //
+  // `lg:h-full` on the wrapper is LOAD-BEARING, not decoration. A percentage height resolves
+  // against the parent's, and this div sits between a window that has a definite height
+  // (grid + items-stretch) and a column asking for `h-full`. Left at auto it broke the chain:
+  // the column's own h-full computed to auto, so the pillars stopped at their content and
+  // left ~130px of bare window beneath them — and the ring solver, which divides that same
+  // height by three, sized every donut against a column that was never given the room.
+  //
+  // Invisible from the pillar tab, because that pane is the unwrapped branch. On desktop the
+  // selected tab is `today`, so the broken branch is the one that always renders.
   const pane = (t: PhoneTab, node: React.ReactNode) =>
-    tab === t ? node : <div className="hidden lg:block">{node}</div>;
+    tab === t ? node : <div className="hidden lg:block lg:h-full">{node}</div>;
 
   return (
     <PhoneSwipe tab={tab} onTab={setTab}>
@@ -835,22 +958,78 @@ export default function Today({
             Three WINDOWS now, each on its own surface with a hairline and a gutter of page
             ground between them. Their tones differ by only 1.03–1.07:1 — the hairline and
             the gutter do the separating; the tone just says which one you are in. */}
-          <div className="flex flex-col gap-6 lg:grid lg:h-full lg:grid-cols-[minmax(15rem,1fr)_minmax(26rem,1.9fr)_minmax(16rem,1.15fr)] lg:items-stretch lg:gap-4">
+          {/* FLEX, not grid, and the change is what makes the record open at all.
+              A grid's tracks are `minmax(15rem, 1fr)` — two values that do not interpolate
+              into a rail width, so opening the record could only ever have been a jump or an
+              overlay. As flex items the same three shares are `flex: <n> 1 0%`, which IS
+              interpolable: the row keeps summing to itself at every frame of the move, so the
+              record window grows by exactly what the other two give up and no gap opens.
+              The ratios are unchanged — 1 / 1.9 / 1.15 with the same minimums. */}
+          <div
+            className="panel-row flex flex-col gap-6 lg:h-full lg:flex-row lg:items-stretch lg:gap-4"
+            data-record={recordGeom ? "" : undefined}
+            // Beat one, both directions: intent and geometry disagree, so contents leave.
+            data-exiting={recordOpen !== recordGeom ? "" : undefined}
+          >
             <div
-              className={`window bg-[var(--color-surface-1)] p-5 lg:order-2 lg:p-6 ${colScroll}`}
+              data-panel="today"
+              style={{ "--panel-grow": 1.9, "--panel-min": "26rem" } as CSSProperties}
+              className={`panel window bg-[var(--color-surface-1)] p-5 lg:order-2 lg:p-6 ${colScroll}`}
             >
-              {pane("today", middle)}
+              <div className="panel-fade lg:h-full">{pane("today", middle)}</div>
             </div>
+
             <div
-              className={`window bg-[var(--color-surface-2)] p-5 lg:order-1 lg:p-6 ${colScroll}`}
+              data-panel="calendar"
+              style={{ "--panel-grow": 1, "--panel-min": "15rem" } as CSSProperties}
+              className={`panel window bg-[var(--color-surface-2)] p-5 lg:order-1 lg:p-6 ${colScroll}`}
             >
-              {pane("calendar", <CalendarColumn date={data.date} />)}
+              <div className="panel-fade lg:h-full">
+                {pane("calendar", <CalendarColumn date={data.date} />)}
+              </div>
+
+              {/* THE RAIL. What both left-hand windows became, and the way back out.
+                  Desktop only: the phone shows one pane at a time, so there is nothing there
+                  for a rail to be the remains of — the record's own × closes it instead. */}
+              <button
+                type="button"
+                onClick={() => setRecordOpen(false)}
+                aria-label="Back to the three windows"
+                aria-expanded={recordOpen}
+                className="rail-label hidden text-micro font-semibold text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] lg:flex"
+              >
+                <span>DASHBOARD</span>
+              </button>
             </div>
+
             <div
-              ref={pillarWindow}
-              className={`window bg-[var(--color-surface-3)] p-5 lg:order-3 lg:p-6 ${colScroll}`}
+              data-panel="pillars"
+              style={{ "--panel-grow": 1.15, "--panel-min": "16rem" } as CSSProperties}
+              className={`panel window bg-[var(--color-surface-3)] p-5 lg:order-3 lg:p-6 ${colScroll}`}
             >
-              {pane("pillars", pillarPane)}
+              {/* The record is rendered IN this window rather than over the page, so the
+                  window's own border, radius and page margin are never lost — it is the same
+                  window, wider. Three beats, not a cross-fade: the outgoing pane leaves in
+                  beat one (`.panel-swap`, on the row's data-exiting), the window travels in
+                  beat two, and the incoming pane — KEYED, so it genuinely remounts — arrives
+                  in beat three on `.pane-enter`'s delayed entrance. Mounted only while
+                  shown, so the record's fetches never run behind the pillars and the
+                  pillars' never run behind the record. */}
+              <div className="panel-swap lg:h-full">
+                <div
+                  key={recordGeom ? "record" : "pillars"}
+                  className="pane-enter lg:h-full"
+                >
+                  {recordGeom ? (
+                    <Dashboard
+                      date={data.date}
+                      onClose={() => setRecordOpen(false)}
+                    />
+                  ) : (
+                    pane("pillars", pillarPane)
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -858,16 +1037,10 @@ export default function Today({
 
       <PhoneTabBar tab={tab} onTab={setTab} />
 
-      {/* The record, opening out of the pillar column. Mounted only while open so its
-          fetches do not run behind a screen nobody asked for. */}
-      {recordOpen && (
-        <ExpandingRecord
-          date={data.date}
-          from={pillarWindow.current}
-          onClose={() => setRecordOpen(false)}
-        />
-      )}
-
+      {/* The record used to be mounted HERE, as a fixed overlay covering the page. It now
+          lives inside the pillar window itself — see the panel row above — because a record
+          that covers the two windows it summarises is not the pillar column opening, it is a
+          different screen arriving on top of one. */}
     </PhoneSwipe>
   );
 }

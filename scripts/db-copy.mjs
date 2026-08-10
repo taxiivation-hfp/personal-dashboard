@@ -85,6 +85,8 @@ const TABLES = [
   "tasks",
   "habits",
   "habit_entries",
+  // One day's dressing of the checklist — see habit_overrides in schema.sql.
+  "habit_overrides",
   "daily_log",
   "xp_log",
   "coach_messages",

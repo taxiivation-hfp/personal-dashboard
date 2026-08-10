@@ -201,6 +201,52 @@ export async function deleteHabit(db: Client, id: number): Promise<void> {
   });
 }
 
+/**
+ * Dress a habit differently for ONE date — a different name, a different pillar, or
+ * both. The default row is never touched: this is an overlay, and clearing it (both
+ * fields null, or clearHabitOverride) returns the day to the default with nothing to
+ * undo. Upserted per (date, habit), so re-editing revises rather than stacks.
+ */
+export async function setHabitOverride(
+  db: Client,
+  date: string,
+  habitId: number,
+  o: { name?: string | null; pillarKey?: string | null },
+): Promise<void> {
+  const name = o.name?.trim() || null;
+  let pillarId: number | null = null;
+  if (o.pillarKey) {
+    const p = await db.execute({
+      sql: "SELECT id FROM pillars WHERE key=?",
+      args: [o.pillarKey],
+    });
+    if (!p.rows.length) throw new Error("unknown pillar");
+    pillarId = Number(p.rows[0]!.id);
+  }
+  // Both fields empty is not an override — it is the default wearing a row for no
+  // reason, and a row that changes nothing still prints "tomorrow only" in the UI.
+  if (name == null && pillarId == null) {
+    await clearHabitOverride(db, date, habitId);
+    return;
+  }
+  await db.execute({
+    sql: `INSERT INTO habit_overrides (date,habit_id,name,pillar_id) VALUES (?,?,?,?)
+          ON CONFLICT(date,habit_id) DO UPDATE SET name=excluded.name, pillar_id=excluded.pillar_id`,
+    args: [date, habitId, name, pillarId],
+  });
+}
+
+export async function clearHabitOverride(
+  db: Client,
+  date: string,
+  habitId: number,
+): Promise<void> {
+  await db.execute({
+    sql: "DELETE FROM habit_overrides WHERE date=? AND habit_id=?",
+    args: [date, habitId],
+  });
+}
+
 // ---------------------------------------------------------------- journal
 
 /** Save a handwritten page and tick the Journal non-negotiable, atomically. */
@@ -827,6 +873,54 @@ export async function setPillarColor(
   await db.execute({
     sql: "UPDATE pillars SET color=?, updated_at=? WHERE key=?",
     args: [hex, now(), key],
+  });
+}
+
+/**
+ * A new skill, born PARKED under Portfolio — every skill lives there by ruling, and
+ * parked is the honest starting state: promoting it to active is its own decision,
+ * gated by the pick-two cap, not a side effect of naming it.
+ */
+export async function createSkill(db: Client, name: string): Promise<number> {
+  const n = name.trim();
+  if (!n) throw new Error("name required");
+  const ts = now();
+  const r = await db.execute({
+    sql: `INSERT INTO skills (name, pillar_id, state, sort_order, created_at, updated_at)
+          VALUES (?, (SELECT id FROM pillars WHERE key='portfolio'),'parked',
+                  (SELECT COALESCE(MAX(sort_order),0)+1 FROM skills), ?, ?)`,
+    args: [n, ts, ts],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+/** Rename only. The id is what skill_time hangs off, so a rename never orphans a minute
+ *  of logged practice — the same reason habits rename by id. */
+export async function renameSkill(
+  db: Client,
+  id: number,
+  name: string,
+): Promise<void> {
+  const n = name.trim();
+  if (!n) throw new Error("name required");
+  await db.execute({
+    sql: "UPDATE skills SET name=?, updated_at=? WHERE id=?",
+    args: [n, now(), id],
+  });
+}
+
+/** A skill's segment hue on the Portfolio ring. Same rule as the pillars: the curated
+ *  palette or nothing — null falls back to the stable default cycled by id. */
+export async function setSkillColor(
+  db: Client,
+  id: number,
+  hex: string | null,
+): Promise<void> {
+  if (hex !== null && !isPaletteHex(hex))
+    throw new Error("colour must come from the palette");
+  await db.execute({
+    sql: "UPDATE skills SET color=?, updated_at=? WHERE id=?",
+    args: [hex, now(), id],
   });
 }
 
