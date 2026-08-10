@@ -8,6 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
 import HabitBox from "./HabitBox";
@@ -153,6 +154,45 @@ export default function Today({
   const [journalPrompt, setJournalPrompt] = useState(false);
   /** The weight trend dialog, raised from the Weight row's name. */
   const [weightOpen, setWeightOpen] = useState(false);
+
+  const router = useRouter();
+  /** The pillars window's box — measured when the phone's record expansion launches. */
+  const pillarPanel = useRef<HTMLDivElement>(null);
+  /**
+   * The phone's record move: the from-transform mapping a full-screen overlay down onto
+   * the pillars window. Non-null while the expansion is playing; the navigation to
+   * /stats fires on a timer underneath it, so the record page appears exactly where the
+   * expansion lands. Desktop never sets this — it has the in-place lateral move.
+   */
+  const [phoneExpand, setPhoneExpand] = useState<string | null>(null);
+  useEffect(() => {
+    if (phoneExpand == null) return;
+    // A timeout, not transitionend — the reveal rule every timed hand-off here follows:
+    // in a hidden tab the transition never runs and the navigation must still happen.
+    const t = setTimeout(() => router.push("/stats"), 660);
+    return () => clearTimeout(t);
+  }, [phoneExpand, router]);
+
+  /**
+   * One button, two moves. Desktop: the row's lateral expansion, in place. Phone: the
+   * pillars window grows on ALL FOUR sides into the record PAGE — the inline swap was a
+   * desktop shape that read as a glitch inside a phone-height window, so below lg the
+   * gesture became route-shaped: expand, then arrive at /stats.
+   */
+  const openRecord = () => {
+    if (window.matchMedia("(min-width: 64rem)").matches) {
+      setRecordOpen(true);
+      return;
+    }
+    const r = pillarPanel.current?.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth || 1;
+    const vh = document.documentElement.clientHeight || 1;
+    setPhoneExpand(
+      r && r.width && r.height
+        ? `translate(${r.left}px, ${r.top}px) scale(${r.width / vw}, ${r.height / vh})`
+        : "scale(0.96)",
+    );
+  };
   /**
    * The record. Held HERE rather than in the pillar column because it is not a thing that
    * column contains — it is a change to the whole ROW, and only the row's owner can widen one
@@ -895,7 +935,7 @@ export default function Today({
       }
       onSaveWorkout={saveWorkout}
       onDeleteWorkout={deleteWorkout}
-      onOpenRecord={() => setRecordOpen(true)}
+      onOpenRecord={openRecord}
     />
   );
 
@@ -923,9 +963,11 @@ export default function Today({
           390px screen.
           Only ink and muted may appear here — --color-skipped measures 4.39:1 on this
           surface and fails, so no block-state chip belongs in the band. */}
-      {/* The shell is a full-height flex column on desktop so the columns can fill
-          whatever the masthead leaves, rather than a calc() that goes stale. */}
-      <div className="lg:flex lg:h-dvh lg:flex-col">
+      {/* The shell is a full-height flex column on EVERY size now — desktop so the
+          columns fill what the masthead leaves, and the phone so the accordion has a
+          height to divide. The page itself no longer scrolls on the phone; the open
+          window does, which is the same contract the desktop columns keep. */}
+      <div className="flex h-dvh flex-col">
         <div className="shrink-0 border-b border-[var(--color-line-strong)] bg-[var(--color-bar)]">
           {/* The title is CENTRED on the page, not on the space left over beside the
               link — hence a three-column grid with an empty cell mirroring the link. A
@@ -951,7 +993,9 @@ export default function Today({
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-[92rem] px-6 pb-28 pt-6 sm:px-8 lg:min-h-0 lg:flex-1 lg:pb-6">
+        {/* pb-20 on the phone clears the fixed tab bar; the old pb-28 was page-scroll
+            clearance, which the accordion made into dead height. */}
+        <div className="mx-auto min-h-0 w-full max-w-[92rem] flex-1 px-4 pb-20 pt-4 sm:px-8 lg:px-6 lg:pb-6 lg:pt-6">
           {/* Source order is middle → left → right, which IS the stacked mobile order, so
             the phone needs no reordering and the day's work leads the document. Desktop
             only moves the columns spatially.
@@ -966,24 +1010,53 @@ export default function Today({
               record window grows by exactly what the other two give up and no gap opens.
               The ratios are unchanged — 1 / 1.9 / 1.15 with the same minimums. */}
           <div
-            className="panel-row flex flex-col gap-6 lg:h-full lg:flex-row lg:items-stretch lg:gap-4"
+            // h-full on every size: the desktop columns and the phone accordion both
+            // divide the same measured column. Order is calendar → today → pillars in
+            // both worlds — one set of order classes, no lg: fork.
+            className="panel-row flex h-full min-h-0 flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4"
             data-record={recordGeom ? "" : undefined}
             // Beat one, both directions: intent and geometry disagree, so contents leave.
             data-exiting={recordOpen !== recordGeom ? "" : undefined}
           >
             <div
               data-panel="today"
+              data-open={tab === "today" ? "" : undefined}
               style={{ "--panel-grow": 1.9, "--panel-min": "26rem" } as CSSProperties}
-              className={`panel window bg-[var(--color-surface-1)] p-5 lg:order-2 lg:p-6 ${colScroll}`}
+              className={`panel window order-2 bg-[var(--color-surface-1)] p-5 lg:p-6 ${colScroll}`}
             >
+              {/* THE COLLAPSED BAR, phone only: the window's own title as the way into
+                  it. The whole bar is the target; tapping it grows this window and
+                  shrinks the open one in the same motion. Hidden while open — the
+                  content is its own title then. */}
+              <button
+                type="button"
+                onClick={() => setTab("today")}
+                className={`w-full items-baseline justify-between text-left lg:hidden ${tab === "today" ? "hidden" : "flex"}`}
+              >
+                <span className="text-small font-semibold">Today</span>
+                <span aria-hidden className="text-micro text-[var(--color-muted)]">
+                  open
+                </span>
+              </button>
               <div className="panel-fade lg:h-full">{pane("today", middle)}</div>
             </div>
 
             <div
               data-panel="calendar"
+              data-open={tab === "calendar" ? "" : undefined}
               style={{ "--panel-grow": 1, "--panel-min": "15rem" } as CSSProperties}
-              className={`panel window bg-[var(--color-surface-2)] p-5 lg:order-1 lg:p-6 ${colScroll}`}
+              className={`panel window order-1 bg-[var(--color-surface-2)] p-5 lg:p-6 ${colScroll}`}
             >
+              <button
+                type="button"
+                onClick={() => setTab("calendar")}
+                className={`w-full items-baseline justify-between text-left lg:hidden ${tab === "calendar" ? "hidden" : "flex"}`}
+              >
+                <span className="text-small font-semibold">Calendar</span>
+                <span aria-hidden className="text-micro text-[var(--color-muted)]">
+                  open
+                </span>
+              </button>
               <div className="panel-fade lg:h-full">
                 {pane("calendar", <CalendarColumn date={data.date} />)}
               </div>
@@ -1003,10 +1076,22 @@ export default function Today({
             </div>
 
             <div
+              ref={pillarPanel}
               data-panel="pillars"
+              data-open={tab === "pillars" ? "" : undefined}
               style={{ "--panel-grow": 1.15, "--panel-min": "16rem" } as CSSProperties}
-              className={`panel window bg-[var(--color-surface-3)] p-5 lg:order-3 lg:p-6 ${colScroll}`}
+              className={`panel window order-3 bg-[var(--color-surface-3)] p-5 lg:p-6 ${colScroll}`}
             >
+              <button
+                type="button"
+                onClick={() => setTab("pillars")}
+                className={`w-full items-baseline justify-between text-left lg:hidden ${tab === "pillars" ? "hidden" : "flex"}`}
+              >
+                <span className="text-small font-semibold">Pillars</span>
+                <span aria-hidden className="text-micro text-[var(--color-muted)]">
+                  open
+                </span>
+              </button>
               {/* The record is rendered IN this window rather than over the page, so the
                   window's own border, radius and page margin are never lost — it is the same
                   window, wider. Three beats, not a cross-fade: the outgoing pane leaves in
@@ -1037,10 +1122,18 @@ export default function Today({
 
       <PhoneTabBar tab={tab} onTab={setTab} />
 
-      {/* The record used to be mounted HERE, as a fixed overlay covering the page. It now
-          lives inside the pillar window itself — see the panel row above — because a record
-          that covers the two windows it summarises is not the pillar column opening, it is a
-          different screen arriving on top of one. */}
+      {/* The record used to be mounted HERE, as a fixed overlay covering the page. On
+          desktop it now lives inside the pillar window itself — see the panel row above.
+          On the PHONE the overlay is back for one job only: the moment of travel. It
+          expands from the pillars window to the whole screen while the route changes
+          underneath it, so /stats appears exactly where the expansion lands. */}
+      {phoneExpand && (
+        <div
+          aria-hidden
+          className="phone-expand lg:hidden"
+          style={{ ["--expand-from" as string]: phoneExpand }}
+        />
+      )}
     </PhoneSwipe>
   );
 }

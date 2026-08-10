@@ -810,6 +810,70 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
+/* THE PHONE: the three windows are a vertical ACCORDION — the desktop record's flex
+ * interpolation turned ninety degrees. The open window takes the column; the other two
+ * collapse to titled bars that ARE the way to them, in calendar → today → pillars order.
+ * Tapping a bar grows it and shrinks the open one in the same motion, exactly the
+ * one-continuous-layout move the record established; the bottom tab bar drives the same
+ * state, so a tab tap animates identically.
+ *
+ * 63.9375rem, not 64: Tailwind's lg applies AT 64rem, and a shared boundary would let a
+ * 1024px viewport match both worlds at once. */
+@media (max-width: 63.9375rem) {
+  .panel {
+    position: relative;
+    /* Collapsed: a titled bar. The basis is the bar's height — window padding plus one
+     * line of type — and overflow clips the hidden pane cleanly while it shrinks. */
+    flex: 0 0 4rem;
+    min-height: 0;
+    overflow: hidden;
+    transition:
+      flex-grow var(--dur-panel) var(--ease-in-out),
+      flex-basis var(--dur-panel) var(--ease-in-out);
+  }
+  .panel[data-open] {
+    flex: 1 1 0px;
+    /* The open window owns the scroll — the page itself no longer scrolls on the phone,
+     * the same contract the desktop columns keep. */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* THE PHONE'S WAY INTO THE RECORD. The pillars window grows on ALL FOUR SIDES to
+ * swallow the screen, and the route changes underneath the moment it lands — so the
+ * record page appears exactly where the expansion finished. A fixed overlay carrying the
+ * window's own surface, mapped onto the source rectangle by --expand-from and released
+ * to inset-0; origin top-left so the translate+scale matrix lands on the rect exactly.
+ *
+ * @starting-style, not JavaScript frames: in a hidden tab the transition never runs, the
+ * overlay is simply already full-screen, and the navigation happens regardless. */
+.phone-expand {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-line-strong);
+  transform: none;
+  transform-origin: 0 0;
+  border-radius: 0;
+  will-change: transform;
+  transition:
+    transform var(--dur-expand) var(--ease-expand),
+    border-radius var(--dur-expand) var(--ease-expand);
+}
+@starting-style {
+  .phone-expand {
+    transform: var(--expand-from, scale(0.96));
+    border-radius: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phone-expand {
+    transition: none;
+  }
+}
+
 /* THE THREE BEATS. Opening the record — and closing it — is a sequence, not a chord:
  *
  *   1  CONTENTS OUT   the row carries data-exiting; every window's contents drop 5px and
