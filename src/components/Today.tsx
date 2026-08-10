@@ -956,23 +956,39 @@ export default function Today({
     />
   );
 
-  // Below `lg` only ONE pane is mounted, so the phone never pays to render the other two.
-  // Above it every pane is shown and the tab is ignored entirely.
+  // Every pane is ALWAYS mounted. On desktop all three show and the tab is ignored; on
+  // the phone the unselected panes sit in a grid collapsed to 0fr — see .pane-grid —
+  // which is what lets both the opening AND the closing window animate to auto height.
   //
-  // `lg:h-full` on the wrapper is LOAD-BEARING, not decoration. A percentage height resolves
-  // against the parent's, and this div sits between a window that has a definite height
-  // (grid + items-stretch) and a column asking for `h-full`. Left at auto it broke the chain:
-  // the column's own h-full computed to auto, so the pillars stopped at their content and
-  // left ~130px of bare window beneath them — and the ring solver, which divides that same
-  // height by three, sized every donut against a column that was never given the room.
-  //
-  // Invisible from the pillar tab, because that pane is the unwrapped branch. On desktop the
-  // selected tab is `today`, so the broken branch is the one that always renders.
-  const pane = (t: PhoneTab, node: React.ReactNode) =>
-    tab === t ? node : <div className="hidden lg:block lg:h-full">{node}</div>;
+  // `lg:h-full` on both wrappers is LOAD-BEARING, not decoration. A percentage height
+  // resolves against the parent's, and these divs sit between a window that has a
+  // definite height (flex + items-stretch) and a column asking for `h-full`. Left at
+  // auto they break the chain: the pillar column stops at its content and the ring
+  // solver sizes every donut against a column that was never given the room.
+  const pane = (t: PhoneTab, node: React.ReactNode) => (
+    <div
+      className="pane-grid lg:h-full"
+      data-open={tab === t ? "" : undefined}
+    >
+      <div className="lg:h-full">{node}</div>
+    </div>
+  );
+
+  /**
+   * The phone's tab switch: flip the state, then bring the page back to the top. The
+   * accordion keeps calendar → today → pillars order, so after a switch at most two
+   * collapsed bars sit above the open window — the top IS where the content is. Without
+   * this, opening Pillars from the bottom of a long Today leaves the viewport parked on
+   * empty space the collapse just vacated.
+   */
+  const switchTab = (t: PhoneTab) => {
+    setTab(t);
+    if (!window.matchMedia("(min-width: 64rem)").matches)
+      window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
-    <PhoneSwipe tab={tab} onTab={setTab}>
+    <PhoneSwipe tab={tab} onTab={switchTab}>
       {/* THE MASTHEAD. Full-bleed, one step darker than the windows below it, so the page
           reads as a document with a head rather than three panels adrift.
           Not sticky: on desktop the columns scroll inside the viewport so it never leaves
@@ -980,11 +996,10 @@ export default function Today({
           390px screen.
           Only ink and muted may appear here — --color-skipped measures 4.39:1 on this
           surface and fails, so no block-state chip belongs in the band. */}
-      {/* The shell is a full-height flex column on EVERY size now — desktop so the
-          columns fill what the masthead leaves, and the phone so the accordion has a
-          height to divide. The page itself no longer scrolls on the phone; the open
-          window does, which is the same contract the desktop columns keep. */}
-      <div className="flex h-dvh flex-col">
+      {/* The shell is a full-height flex column on DESKTOP only, where the columns fill
+          what the masthead leaves. The phone scrolls as one page — the owner's ruling:
+          the open window shows all of itself and never scrolls inside. */}
+      <div className="lg:flex lg:h-dvh lg:flex-col">
         <div className="shrink-0 border-b border-[var(--color-line-strong)] bg-[var(--color-bar)]">
           {/* The title is CENTRED on the page, not on the space left over beside the
               link — hence a three-column grid with an empty cell mirroring the link. A
@@ -1010,9 +1025,9 @@ export default function Today({
           </div>
         </div>
 
-        {/* pb-20 on the phone clears the fixed tab bar; the old pb-28 was page-scroll
-            clearance, which the accordion made into dead height. */}
-        <div className="mx-auto min-h-0 w-full max-w-[92rem] flex-1 px-4 pb-20 pt-4 sm:px-8 lg:px-6 lg:pb-6 lg:pt-6">
+        {/* pb-24 on the phone clears the fixed tab bar at the end of the page's own
+            scroll; the desktop column height machinery is all lg-scoped. */}
+        <div className="mx-auto w-full max-w-[92rem] px-4 pb-24 pt-4 sm:px-8 lg:min-h-0 lg:flex-1 lg:px-6 lg:pb-6 lg:pt-6">
           {/* Source order is middle → left → right, which IS the stacked mobile order, so
             the phone needs no reordering and the day's work leads the document. Desktop
             only moves the columns spatially.
@@ -1027,10 +1042,10 @@ export default function Today({
               record window grows by exactly what the other two give up and no gap opens.
               The ratios are unchanged — 1 / 1.9 / 1.15 with the same minimums. */}
           <div
-            // h-full on every size: the desktop columns and the phone accordion both
-            // divide the same measured column. Order is calendar → today → pillars in
-            // both worlds — one set of order classes, no lg: fork.
-            className="panel-row flex h-full min-h-0 flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4"
+            // Order is calendar → today → pillars in both worlds — one set of order
+            // classes, no lg: fork. Height is desktop's concern only: the phone column
+            // is as tall as its content, and the page scrolls it.
+            className="panel-row flex flex-col gap-3 lg:h-full lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-4"
             data-record={recordGeom ? "" : undefined}
             // Beat one, both directions: intent and geometry disagree, so contents leave.
             data-exiting={recordOpen !== recordGeom ? "" : undefined}
@@ -1047,7 +1062,7 @@ export default function Today({
                   content is its own title then. */}
               <button
                 type="button"
-                onClick={() => setTab("today")}
+                onClick={() => switchTab("today")}
                 className={`w-full items-baseline justify-between text-left lg:hidden ${tab === "today" ? "hidden" : "flex"}`}
               >
                 <span className="text-small font-semibold">Today</span>
@@ -1066,7 +1081,7 @@ export default function Today({
             >
               <button
                 type="button"
-                onClick={() => setTab("calendar")}
+                onClick={() => switchTab("calendar")}
                 className={`w-full items-baseline justify-between text-left lg:hidden ${tab === "calendar" ? "hidden" : "flex"}`}
               >
                 <span className="text-small font-semibold">Calendar</span>
@@ -1101,7 +1116,7 @@ export default function Today({
             >
               <button
                 type="button"
-                onClick={() => setTab("pillars")}
+                onClick={() => switchTab("pillars")}
                 className={`w-full items-baseline justify-between text-left lg:hidden ${tab === "pillars" ? "hidden" : "flex"}`}
               >
                 <span className="text-small font-semibold">Pillars</span>
@@ -1137,7 +1152,7 @@ export default function Today({
         </div>
       </div>
 
-      <PhoneTabBar tab={tab} onTab={setTab} />
+      <PhoneTabBar tab={tab} onTab={switchTab} />
 
       {/* The record used to be mounted HERE, as a fixed overlay covering the page. On
           desktop it now lives inside the pillar window itself — see the panel row above.

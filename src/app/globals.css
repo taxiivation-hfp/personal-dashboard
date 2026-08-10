@@ -810,33 +810,47 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
-/* THE PHONE: the three windows are a vertical ACCORDION — the desktop record's flex
- * interpolation turned ninety degrees. The open window takes the column; the other two
- * collapse to titled bars that ARE the way to them, in calendar → today → pillars order.
- * Tapping a bar grows it and shrinks the open one in the same motion, exactly the
- * one-continuous-layout move the record established; the bottom tab bar drives the same
- * state, so a tab tap animates identically.
+/* THE PHONE: the three windows are a vertical ACCORDION. The open window shows ALL of
+ * itself — the owner's ruling: no scrolling inside a window, the PAGE scrolls — so the
+ * animation cannot be a flex split of a fixed column. It is the grid-rows move instead:
+ * each pane sits in a one-row grid animating 0fr ↔ 1fr, which is the one CSS mechanism
+ * that interpolates to an AUTO height. Same duration, same easing, same
+ * one-continuous-motion read as the desktop record — the tapped window grows to its
+ * content while the open one closes.
+ *
+ * Both directions animate because all three panes are genuinely mounted at all times
+ * (they always were — the old phone treatment merely display:none'd the others).
+ * `visibility` flips at the transition's end on the way shut, so a closed pane's
+ * controls are unreachable by keyboard without being yanked out mid-animation.
  *
  * 63.9375rem, not 64: Tailwind's lg applies AT 64rem, and a shared boundary would let a
  * 1024px viewport match both worlds at once. */
 @media (max-width: 63.9375rem) {
-  .panel {
-    position: relative;
-    /* Collapsed: a titled bar. The basis is the bar's height — window padding plus one
-     * line of type — and overflow clips the hidden pane cleanly while it shrinks. */
-    flex: 0 0 4rem;
+  .pane-grid {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--dur-panel) var(--ease-in-out);
+  }
+  .pane-grid[data-open] {
+    grid-template-rows: 1fr;
+  }
+  .pane-grid > div {
     min-height: 0;
     overflow: hidden;
-    transition:
-      flex-grow var(--dur-panel) var(--ease-in-out),
-      flex-basis var(--dur-panel) var(--ease-in-out);
+    visibility: hidden;
+    /* Discrete property: hold the old value for the length of the close, flip at the
+     * end — so content stays visible while its window shuts over it. */
+    transition: visibility 0s var(--dur-panel);
   }
-  .panel[data-open] {
-    flex: 1 1 0px;
-    /* The open window owns the scroll — the page itself no longer scrolls on the phone,
-     * the same contract the desktop columns keep. */
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+  .pane-grid[data-open] > div {
+    visibility: visible;
+    transition-delay: 0s;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pane-grid,
+  .pane-grid > div {
+    transition: none;
   }
 }
 
