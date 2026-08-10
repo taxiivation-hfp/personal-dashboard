@@ -209,6 +209,17 @@ the weight chart on the record, where you already are when you notice a gap in i
 **Neither lives on Today.** That screen is for the day in front of you, and a date picker on
 it is one more thing between waking up and typing a number.
 
+**A weight reading can be CORRECTED or REMOVED, for any past day.** It always overwrote in
+place — `habit_entries` is `UNIQUE (habit_id, date)` and `setHabitValue` upserts on that
+pair, so a second reading for a day has never been a second row — but nothing on screen said
+so, and a scale misread as 92.4 instead of 82.4 is a permanent kink in a line you will later
+trust. `WeightEntry` now PREFILLS the reading for the chosen date and says `editing 3 Aug`,
+Save becomes Update, and Delete appears only where there is something to delete. Deleting
+asks first, in the app's own two-step — never a native `confirm()`, which in a standalone
+PWA is a system sheet dropped on the page. Under the control sit the recent readings, each
+one a tap that selects its date, because reaching a bad reading used to mean recognising its
+date off the chart's axis and typing it in from memory.
+
 `/sessions` is the whole gym log — every session ever, newest first, grouped by day, filtered
 by kind, deliberately unpaginated. Two lifts on one Tuesday read as one Tuesday with two
 entries. It is a COUNT, never a score: no streaks, no personal bests, no volume totals.
@@ -219,21 +230,30 @@ A route, not a fourth pane, reached from the fourth phone tab and from `StatsLin
 the pillar rings. Today is where you ACT; this is where you look back, and the split is
 deliberate — a screen showing both invites reading the past as a verdict on the present.
 
-Four charts, and the order is the argument: **adherence** first because it is the app's
-question, **hours** second because it is the sanctioned exception, **weight** and
-**calories** last because they are facts about a body rather than about a plan.
+Five charts, and the order is the argument: **adherence** first because it is the app's
+question, **hours** second because it is the sanctioned exception, **weight**, **calories**
+and **steps** last because they are facts about a body rather than about a plan.
 
 `DayChart` is the one primitive, and the FORM follows what the quantity IS:
 
 | Form | For | Why |
 |---|---|---|
 | **line** | weight | it persists between readings. On the range observed — pinned to zero it is a flat line saying nothing. Broken at every gap; a run of one is drawn as a dot. |
-| **bars** | calories, adherence | accumulates then restarts. From ZERO, and a line would imply Tuesday's intake flowed into Wednesday's. |
+| **bars** | calories, adherence, steps | accumulates then restarts. From ZERO, and a line would imply Tuesday's intake flowed into Wednesday's. |
 | **stacked** | hours | bars with composition, split by where the hours went. |
 
 **A day with no entry draws NOTHING** in all three — not a zero-height bar, not a line
 through it. Most days in a 90-day window are blank in an app this new, and drawing them as
-zeros would report a catastrophe that never happened.
+zeros would report a catastrophe that never happened. It bites hardest on steps: the source
+is a phone that can simply be left on a desk, and a day it never reported is not a day
+nobody walked.
+
+`DayChart`'s `marker` — the dotted red floor line, the app's only red — now serves **two**
+quantities: calories at 2,500 and steps at 7,000. Both already wear a dashed checklist box
+and print `/floor` beside their figure, so the line says on the chart what the row already
+says. That is the whole permitted set, and the rule that keeps it small is DIRECTION: a
+floor is a line you climb to, so a day under it reads "not yet". A ceiling or a goal is a
+line you can be found wanting against, and this app draws none.
 
 Adherence is the one series with a real ceiling, so it is scaled to 100 rather than to its
 own high: scaling it to itself would make a week of 40s look like a week of 100s.
@@ -357,13 +377,45 @@ Light beige, premium, clean.
   the total is derived on read. Still no food database, no barcode, no API.
 - Render the calendar view (Google OAuth is already connected).
 
-## Planned, source pending
+## Steps — the one figure this app does not write
 
-- **Steps.** The `steps` metric exists in `src/lib/rings.ts` with `sourceReady: false`, so
-  it renders as a dashed ghost ring and is EXCLUDED from the Physical pillar's average —
-  never counted as a zero, which would read as failure no behaviour could fix. Threshold
-  is 7k/day, 12 qualifying days of 14. Wiring a source (an iOS Shortcut POSTing one
-  number to `/api/health`) is separate work and is not started.
+LIVE. An iOS Shortcut POSTs the day's count hourly to `/api/health`, which upserts
+`health_logs` — one row per day, a later push REVISING rather than accumulating. That route
+is the phone's one way in and is the only entry in `proxy.ts`'s `MACHINE_ROUTES`,
+authenticating with `x-app-secret` because a Shortcut cannot hold a session cookie. **Do
+not change how that push works**; everything below is additive to it.
+
+`STEPS_FLOOR` (7,000) is exported from `rings.ts`, derived from the metric — the checklist
+row, the chart's floor line and the ring read the same constant, and there is deliberately
+no second `METRICS.find` anywhere. The ring wants 12 qualifying days of 14 at `weight: 0`,
+so like Misc it draws as a thin outer lap and a phone sensor can never move the Physical
+mean.
+
+- **The count is READ-ONLY everywhere.** The phone is the instrument, and a hand-typed step
+  count is a number nobody measured. The step dialog therefore has no entry control — the
+  one way it differs from the weight dialog it is otherwise copied from.
+- **Its AGE is always printed** (`StepsRefresh`, beside the count). A figure between a
+  minute and an hour old that does not say which is a number you act on wrongly; past two
+  hours — two missed hourly pushes — the label goes DASHED and ink. Stale is said in FORM,
+  never in colour: dashed is already this app's word for "not yet", and a warning hue on a
+  step count would be the app grading a body. `sinceLabel` in `dates.ts` is pure and tested.
+- **On iOS that label is a BUTTON that runs the Shortcut.** `window.location.href =
+  "shortcuts://run-shortcut?name=…"`, assigned in an `onClick` — never an `<a href>`, which
+  a standalone PWA can silently swallow. The name must match the Shortcuts app EXACTLY;
+  there is no id, no fuzzy match and no error to catch. iOS is FEATURE-DETECTED via
+  `"standalone" in navigator` — a WebKit-on-iOS property that exists nowhere else — not by
+  reading a UA string, which iPadOS lies in by design. Elsewhere the same label renders as
+  plain text: nothing to tap on a laptop, but the age is still worth knowing.
+- **Coming back re-reads it.** Tapping the button means LEAVING the app, so
+  `visibilitychange` (with `focus` as the desktop fallback) re-pulls the count, throttled to
+  5s so the pair a single return fires is one read. A second read follows 2.5s later,
+  because iOS hands the screen back before the Shortcut's POST has crossed the network and
+  one read would show the old number — which is the "I assume it failed" the button exists
+  to prevent.
+- It goes through `GET /api/health/steps`, a SIBLING path and not a GET on `/api/health`:
+  that path's exemption from the session gate is an exact-path match, so a GET hung off it
+  would serve the health record to anyone who asked. It is also tiny, where re-reading
+  Today would re-read the Google Calendar on every glance at the screen.
 - **Sleep is not planned.** It has no source and no ring. Do not add one.
 
 ## Explicitly cut — do not build, do not half-build
@@ -390,3 +442,13 @@ Light beige, premium, clean.
   through `num()` at the query boundary.
 - The rolling window is `addDays(anchor, -13)` .. anchor, `BETWEEN` both ends. The anchor
   comes from the date being VIEWED, never a server-side `todayISO()`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

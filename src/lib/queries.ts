@@ -128,6 +128,16 @@ export type DayView = {
   /** Today's step count as the phone last pushed it. null = no push yet — the checklist
    *  row prints "—", never a zero the phone didn't say. */
   steps: number | null;
+  /**
+   * WHEN the phone last pushed this day, as the UTC instant health_logs stamped.
+   *
+   * The count on its own cannot say whether it is this minute's or this morning's, and a
+   * step count you assume is current when it is four hours old is worse than no count —
+   * it is a number you act on. Carried beside the figure so the row can print its age.
+   *
+   * null when nothing has ever been pushed for the day.
+   */
+  stepsUpdatedAt: string | null;
   /** The day's running total, derived from calorieEntries. null when nothing is logged,
    *  so the screen can render "—" rather than a zero nobody entered. */
   calories: number | null;
@@ -470,10 +480,11 @@ export async function getDayView(
   const cal = await caloriesForDate(db, date);
   const titles = await dayTitlesBetween(db, date, date);
   const { count } = await getStreak(db, date);
-  // The phone's last push for this day. null when it never pushed — the row prints "—",
-  // never a zero the phone didn't say.
+  // The phone's last push for this day, and WHEN it landed. null when it never pushed —
+  // the row prints "—", never a zero the phone didn't say. `updated_at` comes back on the
+  // same row rather than from a second read: the age of a figure is part of the figure.
   const health = await db.execute({
-    sql: "SELECT steps FROM health_logs WHERE date=?",
+    sql: "SELECT steps, updated_at FROM health_logs WHERE date=?",
     args: [date],
   });
 
@@ -492,6 +503,21 @@ export async function getDayView(
     steps:
       health.rows.length && health.rows[0]!.steps != null
         ? num(health.rows[0]!.steps)
+        : null,
+    // Tied to the COUNT, not to the row: a health_logs row written by a sleep-only push
+    // has an updated_at but no steps, and dating a step count that does not exist would
+    // be the one thing an honest staleness label must not do.
+    //
+    // What this canNOT catch, and it is worth knowing: `updated_at` is a ROW stamp, and
+    // the POST bumps it for whatever field arrived. Today that is only ever the steps
+    // Shortcut — it is the single writer of this table — so the row's age and the count's
+    // age are the same number. The day something pushes sleep or a resting heart rate,
+    // they stop being, and an unchanged count would start reading "just now". The fix at
+    // that point is a `steps_updated_at` column written only when a steps value is
+    // present; it is a migration, so it waits for a reason to exist.
+    stepsUpdatedAt:
+      health.rows.length && health.rows[0]!.steps != null
+        ? str(health.rows[0]!.updated_at)
         : null,
     calories: cal.total,
     calorieEntries: cal.entries,

@@ -14,6 +14,8 @@ import CalorieInput from "./CalorieInput";
 import HabitBox from "./HabitBox";
 import NextUp from "./NextUp";
 import WeightLog from "./WeightLog";
+import StepsLog from "./StepsLog";
+import StepsRefresh from "./StepsRefresh";
 import Dashboard from "./Dashboard";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
@@ -32,7 +34,7 @@ import type {
   SkillSlice,
   PillarKey,
 } from "@/lib/queries";
-import { METRICS } from "@/lib/rings";
+import { STEPS_FLOOR } from "@/lib/rings";
 import type {
   PillarFactInput,
   PillarRingView,
@@ -107,10 +109,32 @@ const round1 = (n: number) => String(Math.round(n * 10) / 10);
  */
 const CHECK_ROW = "border-t border-[var(--color-line)]";
 
-/** The steps floor, read FROM the registry so the checklist row and the ring cannot
- *  disagree about what a qualifying day is. */
-const STEPS_FLOOR =
-  METRICS.find((m) => m.key === "steps")?.dailyThreshold ?? 7000;
+/**
+ * How long the step re-read waits before it will run again.
+ *
+ * Coming back to the app fires visibilitychange AND focus a moment apart, and on a phone
+ * it fires every time you glance at the thing. Five seconds collapses the pair into one
+ * read and swallows an incidental flick away and back.
+ *
+ * A TAP OF THE REFRESH BUTTON IS EXEMPT — see `stepsWanted`. That is not belt and braces,
+ * it is the difference between the throttle working and the feature not: the clock here
+ * starts at the last READ, so a tap a few seconds after resuming the app fell inside the
+ * window and produced no request at all. No length of window fixes that, because the
+ * problem is that the throttle could not see the tap.
+ */
+const STEPS_REFETCH_MS = 5_000;
+
+/**
+ * The SECOND look, after the app is already back.
+ *
+ * Returning from Shortcuts is a race the first read usually loses: iOS hands the screen
+ * back the moment the shortcut is done on the phone, which is before its POST has
+ * finished crossing the network. One read on return would therefore show the OLD count —
+ * exactly the "I assume it failed" the button exists to prevent — so a single follow-up
+ * read runs a beat later. Two reads, not a poll: if it is still not there after this, it
+ * genuinely did not arrive.
+ */
+const STEPS_SETTLE_MS = 2_500;
 
 /** The one numeric field shape, so the weight row and the calorie row cannot drift apart. */
 const NUM_FIELD =
@@ -160,6 +184,17 @@ export default function Today({
   const [journalPrompt, setJournalPrompt] = useState(false);
   /** The weight trend dialog, raised from the Weight row's name. */
   const [weightOpen, setWeightOpen] = useState(false);
+  /** The step trend dialog, raised from the Steps row's count. */
+  const [stepsOpen, setStepsOpen] = useState(false);
+  /**
+   * Set the moment the refresh button is tapped, cleared by the read that answers it.
+   *
+   * A ref and not state, because nothing on screen depends on it and a re-render between
+   * the tap and the departure would be a re-render for no one to see. What it buys is the
+   * difference between "the app came back" and "the app was SENT somewhere and came back",
+   * which the throttle below cannot otherwise tell apart.
+   */
+  const stepsWanted = useRef(false);
 
   const router = useRouter();
   /** The pillars window's box — measured when the phone's record expansion launches. */
@@ -271,6 +306,81 @@ export default function Today({
 
   useEffect(loadStrip, [loadStrip]);
   useEffect(loadRings, [loadRings]);
+
+  /**
+   * COMING BACK — re-read the step count, and only the step count.
+   *
+   * The Steps row is the one figure on this screen written by something that is not this
+   * screen: an iOS Shortcut, which runs in another app. Tapping refresh therefore means
+   * LEAVING, and without this the owner comes back to the number they left behind and
+   * concludes the shortcut failed. It did not; nothing asked.
+   *
+   * A dedicated endpoint rather than refresh(): that one re-reads the whole day INCLUDING
+   * the Google Calendar, and this fires every time the app comes to the front, which on a
+   * phone is many times an hour and mostly for reasons that have nothing to do with steps.
+   *
+   * `focus` is the fallback and not the signal. visibilitychange is the event that
+   * actually describes returning to a PWA; focus catches the desktop case of clicking back
+   * into a window that never went hidden. Both are guarded on the document being visible
+   * and both go through the same throttle, so the pair that fires on a single return is
+   * one read.
+   *
+   * Nothing here touches adherence, the strip or the rings. A step count feeds the Physical
+   * ring's own fortnight, which is /api/rings' business on its own schedule — it is not
+   * something a glance at the screen should recompute.
+   */
+  useEffect(() => {
+    let alive = true;
+    let settle: ReturnType<typeof setTimeout> | null = null;
+    let last = 0;
+
+    const read = () => {
+      fetch(`/api/health/steps?date=${data.date}`)
+        .then((r) => r.json())
+        .then((h: { error?: unknown; steps?: number | null; updatedAt?: string | null }) => {
+          if (!alive || h.error) return;
+          const steps = h.steps ?? null;
+          const at = h.updatedAt ?? null;
+          // Same answer, same object: an unchanged count must not re-render the checklist
+          // and must not restart the number fields' uncontrolled defaults underneath a
+          // cursor. Most returns to the app find exactly what they left.
+          setData((d) =>
+            d.steps === steps && d.stepsUpdatedAt === at
+              ? d
+              : { ...d, steps, stepsUpdatedAt: at },
+          );
+        })
+        .catch(() => {});
+    };
+
+    const onReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      const t = Date.now();
+      // A TAP IS NEVER THROTTLED. The throttle exists to collapse the visibilitychange and
+      // focus pair a single return fires, and to ignore an idle glance at the phone — it
+      // was never meant to reach a refresh the owner actually asked for. It could: the
+      // clock starts at the LAST READ, so a tap made a few seconds after resuming the app
+      // came back inside the window and was dropped, silently, producing no request at
+      // all. That is precisely the "I assume it failed" this button exists to prevent, and
+      // it happened only in the sequence the button is used in.
+      const asked = stepsWanted.current;
+      if (!asked && t - last < STEPS_REFETCH_MS) return;
+      stepsWanted.current = false;
+      last = t;
+      read();
+      if (settle) clearTimeout(settle);
+      settle = setTimeout(read, STEPS_SETTLE_MS);
+    };
+
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      alive = false;
+      if (settle) clearTimeout(settle);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [data.date]);
 
   async function toggleHabit(id: number, done: boolean) {
     await fetch("/api/habits/log", {
@@ -649,15 +759,53 @@ export default function Today({
                 >
                   Steps
                 </span>
-                <span className="shrink-0 text-small tabular-nums">
-                  {data.steps == null ? (
-                    <span className="text-[var(--color-muted)]">—</span>
-                  ) : (
-                    data.steps.toLocaleString()
-                  )}
-                  <span className="text-micro text-[var(--color-muted)]">
-                    /{STEPS_FLOOR.toLocaleString()}
-                  </span>
+                {/* THE COUNT, and its age beneath it — STACKED, not wrapped.
+                    These columns are about 150px wide, which two pills side by side do not
+                    fit into, and a flex-wrap would have dropped the age to a second line at
+                    some widths and not others. Stacking it deliberately also says the right
+                    thing: the number is the reading and the age is a fact ABOUT the reading,
+                    which is a hierarchy and not two equal figures. */}
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                  {/* The count IS the way into the trend — the same move the Calories row
+                      makes with its total. A number you can only read is a number you
+                      cannot ask a question of, and the question a step count raises is
+                      always "is that normal for me", which one day cannot answer. */}
+                  <button
+                    onClick={() => setStepsOpen(true)}
+                    aria-haspopup="dialog"
+                    // The name is BUILT FROM THE COUNT, not put in place of it. A bare
+                    // aria-label replaces an element's contents in the accessible name, so
+                    // labelling this "Open the step record" would have made the figure —
+                    // which was plain text in the row until it became a control — the one
+                    // number on the checklist a screen reader could not reach. The row's
+                    // rule is that the count is always printed; printing it only in pixels
+                    // is not printing it.
+                    aria-label={`Steps ${
+                      data.steps == null
+                        ? "not pushed yet"
+                        : data.steps.toLocaleString()
+                    } of ${STEPS_FLOOR.toLocaleString()} — open the step record`}
+                    className="rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-small tabular-nums transition-colors hover:bg-[var(--color-panel)]"
+                  >
+                    {data.steps == null ? (
+                      <span className="text-[var(--color-muted)]">—</span>
+                    ) : (
+                      data.steps.toLocaleString()
+                    )}
+                    <span className="text-micro text-[var(--color-muted)]">
+                      /{STEPS_FLOOR.toLocaleString()}
+                    </span>
+                  </button>
+                  {/* How old that figure is — and on a phone, the way to go and fix it. The
+                      count is printed directly above, so this carries the age alone: saying
+                      "12,431" twice in one row would be the row arguing with itself about
+                      which of the two is the reading. */}
+                  <StepsRefresh
+                    updatedAt={data.stepsUpdatedAt}
+                    onRun={() => {
+                      stepsWanted.current = true;
+                    }}
+                  />
                 </span>
               </div>
             </li>
@@ -917,6 +1065,12 @@ export default function Today({
           onChanged={refresh}
           onClose={() => setWeightOpen(false)}
         />
+      )}
+
+      {/* The step trend, raised from the Steps row's count. Read-only — the phone is the
+          only writer — so unlike the weight dialog it hands nothing back to refresh. */}
+      {stepsOpen && (
+        <StepsLog date={data.date} onClose={() => setStepsOpen(false)} />
       )}
     </div>
   );

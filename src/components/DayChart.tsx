@@ -104,12 +104,20 @@ export default function DayChart({
   ceiling?: number | null;
   floor?: number | null;
   /**
-   * A horizontal reference line at this value — the calorie FLOOR, and nothing else so
-   * far. The house rule against target lines stands for every judged quantity; this one
-   * exists at the owner's explicit direction, for the one number that is already a floor
-   * everywhere else in the app (the dashed calorie box, the /2500 print). Dotted and red
-   * — the app's only red, reserved for this line — so it reads as the floor's own mark
-   * rather than as another data series.
+   * A horizontal reference line at this value — A FLOOR, and only ever a floor.
+   *
+   * The house rule against target lines stands for every judged quantity. What may take
+   * this line is the narrow set the app already draws a floor for elsewhere: calories at
+   * 2,500 and steps at 7,000, both of which wear a dashed box on the checklist and print
+   * "/floor" beside their figure. The line here says the same thing those already say, in
+   * the one place the shape of a fortnight is visible.
+   *
+   * That is the whole permitted set, and the distinction that keeps it small is the
+   * DIRECTION: a floor is a line you climb to, so a day under it is "not yet". A ceiling
+   * or a goal would be a line you can be found wanting against, and this app draws none.
+   *
+   * Dotted and red — the app's only red, reserved for this line — so it reads as the
+   * floor's own mark rather than as another data series.
    */
   marker?: number | null;
   height?: number;

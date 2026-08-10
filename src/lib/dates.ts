@@ -84,6 +84,54 @@ export function rfc3339(
   return `${date}T${time.length === 5 ? time + ":00" : time}${tzOffset(date, tz)}`;
 }
 
+/**
+ * How long ago an instant was, in words: "just now", "47m ago", "4h ago", "3d ago".
+ *
+ * `now` is passed in rather than read, for the reason every other pure thing in this file
+ * gives: a function that reads the clock cannot be tested and cannot be rendered twice
+ * with the same answer. Returns null for anything unparseable or absent, so a caller
+ * always has to say out loud what "no reading" looks like rather than getting a plausible
+ * "0m ago" for a push that never happened.
+ *
+ * DELIBERATELY TIMEZONE-FREE. The gap between two instants is the same number of minutes
+ * in Melbourne and in UTC, so a timezone here would be a parameter that changed nothing.
+ * The app timezone matters to the health log in the place it actually bites — which DAY a
+ * push belongs to, decided by todayISO() in the route — and to `stampInAppTz` below, which
+ * is the one part of this that prints a clock.
+ *
+ * Coarse ON PURPOSE. "47m" and "4h" are the two facts worth having: is this number from
+ * this hour, or is it from this morning. "3h 12m ago" is a precision nobody acts on.
+ */
+export function sinceLabel(iso: string | null, now: number): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  // Clamped at zero. A clock skew between the database host and the phone can put a
+  // stamp a few seconds in the future, and "in 4 seconds" is a bug report, not a label.
+  const mins = Math.max(0, Math.floor((now - t) / 60_000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+/** An instant as a plain day and clock time in the app timezone — "Sat 9 Aug, 6:12 am".
+ *  For the hover title behind a relative label: "4h ago" is what you read, and this is
+ *  what you check when 4h ago matters. */
+export function stampInAppTz(iso: string, tz: string = APP_TZ): string {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "";
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: tz,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(t);
+}
+
 /** A friendly heading like "Friday, 19 June". */
 export function prettyDate(iso: string, tz: string = APP_TZ): string {
   const [y, m, d] = iso.split("-").map(Number);

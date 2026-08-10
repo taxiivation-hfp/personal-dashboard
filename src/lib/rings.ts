@@ -233,6 +233,20 @@ export const METRICS: Metric[] = [
   },
 ];
 
+/**
+ * What a qualifying step day is, read FROM the registry above.
+ *
+ * The checklist row, the record's chart and the ring must never disagree about where the
+ * line sits, and the way that used to be guaranteed was every caller writing its own
+ * `METRICS.find(m => m.key === "steps")` — which is one lookup per caller and one chance
+ * each to fall out of step. Derived once, here, beside the metric it comes from.
+ *
+ * A FLOOR to reach, exactly as calories are: 15k steps is the same day as 7k, so there is
+ * no upper bound worth drawing and nothing above the line scores twice.
+ */
+export const STEPS_FLOOR: number =
+  METRICS.find((m) => m.key === "steps")?.dailyThreshold ?? 7000;
+
 const PILLAR_ORDER: PillarKey[] = ["social_capital", "physical", "portfolio"];
 
 /** What a reader returns for one metric. `resolved` is whether the SOURCE wired up —

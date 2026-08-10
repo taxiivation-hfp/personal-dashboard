@@ -5,16 +5,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Weight and calories, day by day.
+ * Weight, calories and steps, day by day.
  *
- * TWO SERIES OF FACTS, and deliberately nothing else. No average, no delta, no target
- * line, no seven-day smoothing — every one of those is a judgement about the number, and
- * this app scores adherence, not the body it belongs to. The chart's whole job is to let
- * the owner see their own record.
+ * THREE SERIES OF FACTS, and deliberately nothing else. No average, no delta, no
+ * seven-day smoothing — every one of those is a judgement about the number, and this app
+ * scores adherence, not the body it belongs to. The chart's whole job is to let the owner
+ * see their own record.
+ *
+ * Steps join calories and weight here rather than getting a route of their own for the
+ * reason the two of them share one already: they are the same KIND of statement — a fact
+ * about a body on a date — and a second endpoint would be a second place for the window
+ * arithmetic to be got subtly differently.
  *
  * A day with no entry is `null`, never 0. A morning that went unweighed is not a morning
- * that weighed nothing, and a day with no food logged is not a fast; drawing either as
- * zero would invent a reading that was never taken.
+ * that weighed nothing, a day with no food logged is not a fast, and a day the phone
+ * never pushed is not a day nobody walked; drawing any of them as zero would invent a
+ * reading that was never taken.
  */
 
 /** The weight non-negotiable is found by system_key — the owner can rename it. */
@@ -62,6 +68,17 @@ export async function GET(req: Request) {
     const calBy = new Map<string, number>();
     for (const r of calRows.rows) calBy.set(String(r.date), Number(r.total));
 
+    // One row per date by construction (health_logs.date is the primary key), so no
+    // grouping and no aggregate — the phone's last push for a day IS that day's count.
+    // A row whose steps column is null is a push that carried something else, and it must
+    // stay a gap rather than becoming a zero.
+    const stepRows = await db.execute({
+      sql: "SELECT date, steps FROM health_logs WHERE date BETWEEN ? AND ? AND steps IS NOT NULL",
+      args: [from, to],
+    });
+    const stepsBy = new Map<string, number>();
+    for (const r of stepRows.rows) stepsBy.set(String(r.date), Number(r.steps));
+
     // Every day in the window is emitted, present or not, so the chart's x-axis is time
     // rather than "the days that happened to have data" — a gap has to look like a gap.
     const series = [];
@@ -71,6 +88,7 @@ export async function GET(req: Request) {
         date: d,
         weight: weightBy.get(d) ?? null,
         calories: calBy.get(d) ?? null,
+        steps: stepsBy.get(d) ?? null,
       });
     }
 

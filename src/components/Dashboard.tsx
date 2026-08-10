@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import DayChart, { type ChartPoint } from "./DayChart";
+import StepsChart from "./StepsChart";
 import WeightEntry from "./WeightEntry";
 import CalorieLog from "./CalorieLog";
 import {
@@ -65,6 +66,10 @@ const CARD_TINTS = {
   hours: "var(--color-panel)",
   weight: "color-mix(in oklab, var(--color-panel) 92%, var(--color-surface-2) 8%)",
   calories: "color-mix(in oklab, var(--color-panel) 94%, var(--color-bg) 6%)",
+  // The gold window's own ground, at the same few points as its neighbours. Derived from
+  // a certified token like the rest — not a fifth invented colour, which at five cards is
+  // exactly when a set of tints would start reading as a category key.
+  steps: "color-mix(in oklab, var(--color-panel) 93%, var(--color-surface-3) 7%)",
 } as const;
 
 const PILLAR_NAME: Record<PillarKey, string> = {
@@ -86,7 +91,13 @@ type StripDay = {
     segments: ProductivitySegment[];
   } | null;
 };
-type TrendDay = { date: string; weight: number | null; calories: number | null };
+type TrendDay = {
+  date: string;
+  weight: number | null;
+  calories: number | null;
+  /** The phone's push for that day. null is a day it never reported — never a zero. */
+  steps: number | null;
+};
 
 /** 640 -> "10h 40m". Time is shown as time — an abstract number would invite reading it as
  *  a score, which is the one thing these figures are not. */
@@ -159,10 +170,28 @@ export default function Dashboard({
   /** The food log, opened from the Calories card — the same dialog Today's row opens. */
   const [calOpen, setCalOpen] = useState(false);
 
+  /**
+   * BLANK THE SERIES ONLY WHEN THE WINDOW MOVES — never on a reload after a write.
+   *
+   * These two nulls are what put the whole page into `loading`, and `loading` replaces the
+   * entire chart block with one word. Switching from 30 days to a year genuinely has no
+   * answer yet, so blanking is right there: charts drawn from the old window while the new
+   * one loads would be charts lying about their axis.
+   *
+   * A WRITE is not a new question. It used to run through the same effect, which meant
+   * saving a weight reading tore down the block containing the control you had just used —
+   * WeightEntry remounted with its selected date reset to today, its readings list empty
+   * and its "saved to 3 Aug" gone, so correcting the same past day twice meant finding it
+   * again. Split in two so the reload path re-fetches over the top of what is already
+   * drawn, which is what the weight dialog has always done.
+   */
   useEffect(() => {
-    let alive = true;
     setStrip(null);
     setTrends(null);
+  }, [date, days]);
+
+  useEffect(() => {
+    let alive = true;
     fetch(`/api/adherence?days=${days}&to=${date}`)
       .then((r) => r.json())
       .then((d) => alive && !d.error && setStrip(d.days ?? []))
@@ -211,6 +240,10 @@ export default function Dashboard({
   );
   const calories: ChartPoint[] = useMemo(
     () => (trends ?? []).map((d) => ({ date: d.date, value: d.calories })),
+    [trends],
+  );
+  const steps: ChartPoint[] = useMemo(
+    () => (trends ?? []).map((d) => ({ date: d.date, value: d.steps })),
     [trends],
   );
 
@@ -628,6 +661,28 @@ export default function Dashboard({
                   <span aria-hidden>→</span>
                 </button>
               </Panel>
+
+              {/* STEPS, last. The order of these cards is the argument the record makes:
+                  adherence first because it is the app's question, hours second because
+                  it is the sanctioned exception, and the last three are facts about a
+                  body rather than about a plan. Steps belong with weight and calories,
+                  and the floor line is the same statement its dashed checklist box makes.
+
+                  No entry control under it, unlike Weight. The phone is the instrument;
+                  a hand-typed step count is a number nobody measured. */}
+              {/* FULL WIDTH, because it is the fifth card in a two-column grid and the
+                  alternative is a half card with a hole beside it. The width is not a
+                  consolation either: this is the one series here with a day-shaped bar for
+                  every day of a year window, and it is the one that most wants the room. */}
+              <div className="lg:col-span-2">
+                <Panel
+                  title="Steps"
+                  tint={CARD_TINTS.steps}
+                  note="What the phone pushed. A day it never reported is a gap, not a day nobody walked — and the line at 7,000 is a floor to reach, never a ceiling."
+                >
+                  <StepsChart points={steps} />
+                </Panel>
+              </div>
             </div>
           )}
 
