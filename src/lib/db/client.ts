@@ -111,21 +111,67 @@ async function ensure(c: Client): Promise<Client> {
            ('social_capital','Social Capital & Career','high',1),
            ('physical','Physical Embodiment','high',2),
            ('portfolio','Portfolio Expansion','low',3)`,
-        // The non-negotiables v2 set. MUST stay in sync with the HABITS_V2 block in
-        // scripts/migrate.mjs — a fresh database (e.g. a brand-new Turso instance)
-        // is seeded from HERE, not from the migration script.
-        `INSERT INTO habits (pillar_id,name,target_value,source,sort_order) VALUES
-           ((SELECT id FROM pillars WHERE key='portfolio'),'Journal',1,'manual',1),
-           ((SELECT id FROM pillars WHERE key='physical'),'Tidy room',1,'manual',2),
-           ((SELECT id FROM pillars WHERE key='portfolio'),'Read 10 pages',1,'manual',3),
-           ((SELECT id FROM pillars WHERE key='physical'),'Sleep by set time',1,'manual',4),
-           ((SELECT id FROM pillars WHERE key='portfolio'),'Mandarin 15 min',1,'manual',5),
-           ((SELECT id FROM pillars WHERE key='social_capital'),'One outreach message',1,'manual',6),
-           ((SELECT id FROM pillars WHERE key='physical'),'Steps',8000,'health',7)`,
+        // The non-negotiables at their FINAL migrated state, system_key included. MUST
+        // stay in sync with scripts/migrate.mjs (HABITS_V2 + the system_key stamps +
+        // the round3 Weight insert) — a fresh database (e.g. a brand-new Turso
+        // instance) is seeded from HERE, not from the migration script.
+        //
+        // system_key is load-bearing, not decoration: the Journal row opens the drawing
+        // dialog ONLY as system_key='journal', outreach feeds the Social ring, weight is
+        // the number field. This seed used to omit the column, and the first deployed
+        // Turso instance was born from it — every system row silently disarmed, the
+        // Journal row a plain tickbox. Steps is seeded already-retired (active=0), the
+        // state migrate.mjs leaves it in: steps live in health_logs, not the checklist.
+        `INSERT INTO habits (pillar_id,name,target_value,source,sort_order,active,system_key,input,unit) VALUES
+           ((SELECT id FROM pillars WHERE key='portfolio'),'Journal',1,'manual',1,1,'journal','check',NULL),
+           ((SELECT id FROM pillars WHERE key='physical'),'Tidy room',1,'manual',2,1,NULL,'check',NULL),
+           ((SELECT id FROM pillars WHERE key='portfolio'),'Read 10 pages',1,'manual',3,1,NULL,'check',NULL),
+           ((SELECT id FROM pillars WHERE key='physical'),'Sleep by set time',1,'manual',4,1,NULL,'check',NULL),
+           ((SELECT id FROM pillars WHERE key='portfolio'),'Mandarin 15 min',1,'manual',5,1,NULL,'check',NULL),
+           ((SELECT id FROM pillars WHERE key='social_capital'),'One outreach message',1,'manual',6,1,'outreach','check',NULL),
+           ((SELECT id FROM pillars WHERE key='physical'),'Steps',8000,'health',7,0,'steps','check',NULL),
+           ((SELECT id FROM pillars WHERE key='physical'),'Weight',1,'manual',8,1,'weight','number','kg')`,
         // Marks v2 as already applied so migrate.mjs doesn't re-run its reshape.
         `INSERT INTO app_meta (key,value) VALUES ('timezone','Australia/Melbourne'),('habits_v2','1')`,
       ],
       "write",
+    );
+  }
+
+  // System keys, HEALED. A database seeded before the seed above carried system_key —
+  // the live Turso instance is one — has a Journal row that cannot open the drawing
+  // dialog, an outreach row the Social ring cannot find, and no Weight row at all,
+  // while everything else works. Stamps NULLs by canonical name only and latches, so a
+  // deliberate rename or reassignment is never overruled on a later boot. Mirrors the
+  // adherence_v1 / rings_v1 / round3_v1 blocks in scripts/migrate.mjs, which never run
+  // in production. On a database migrate.mjs HAS shaped, every statement is a no-op.
+  const keyed = await c.execute(
+    "SELECT 1 FROM app_meta WHERE key='system_keys_v1'",
+  );
+  if (!keyed.rows.length) {
+    await c.execute(
+      "UPDATE habits SET system_key='journal' WHERE name='Journal' AND system_key IS NULL",
+    );
+    await c.execute(
+      "UPDATE habits SET system_key='steps' WHERE name='Steps' AND system_key IS NULL",
+    );
+    await c.execute(
+      "UPDATE habits SET system_key='outreach' WHERE name='One outreach message' AND system_key IS NULL",
+    );
+    // Step tracking was cut as a HABIT (the checklist's Steps row reads health_logs);
+    // deactivated, never deleted, exactly as migrate.mjs treats it — history survives.
+    await c.execute("UPDATE habits SET active=0 WHERE system_key='steps'");
+    // Daily weight, exactly as round3_v1 inserts it — keyed so it survives a rename.
+    await c.execute(`INSERT INTO habits (pillar_id,name,target_value,source,cadence,active,days_mask,system_key,input,unit,sort_order)
+       SELECT (SELECT id FROM pillars WHERE key='physical'),'Weight',1,'manual','daily',1,127,'weight','number','kg',
+              (SELECT COALESCE(MAX(sort_order),0)+1 FROM habits)
+       WHERE NOT EXISTS (SELECT 1 FROM habits WHERE system_key='weight')`);
+    // Two habits can never claim the same key; the many NULLs stay unconstrained.
+    await c.execute(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_habits_system_key ON habits(system_key) WHERE system_key IS NOT NULL",
+    );
+    await c.execute(
+      "INSERT INTO app_meta (key,value) VALUES ('system_keys_v1','1')",
     );
   }
 
