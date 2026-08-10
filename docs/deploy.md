@@ -1,4 +1,4 @@
-# Deploying (Fly.io + Turso)
+2# Deploying (Fly.io + Turso)
 
 Single-user private app. The whole point of deploying is reach: your phone can push
 health data and open the board from anywhere, instead of only this PC while
@@ -45,33 +45,19 @@ turso auth signup
 Your local database has **real data** — goals, the XP ledger, habit history, live Google
 tokens, coach history and imported gym sessions. Don't start empty.
 
-Create the database (this part needs the Turso CLI, which has **no native Windows
-build** — use WSL, or create the database in the Turso web dashboard instead):
-
 ```bash
 turso db create personal-dashboard --location syd
+
+# Copy the local file up. Verify the row counts afterwards — do not skip this.
+turso db shell personal-dashboard < dump.sql
+
 turso db show personal-dashboard --url      # -> libsql://...
 turso db tokens create personal-dashboard   # -> the auth token
 ```
 
-Then copy your data up **from Windows**, using the script in this repo rather than the
-CLI — it uses `@libsql/client`, which is already installed and works here:
-
-```bash
-# DRY RUN first — prints per-table row counts, writes nothing.
-npm run db:copy -- --to "libsql://<db>-<org>.turso.io" --token "<auth-token>"
-
-# Then do it.
-npm run db:copy -- --to "libsql://<db>-<org>.turso.io" --token "<auth-token>" --write
-
-# Confirm the target matches the source.
-npm run db:verify -- --url "libsql://<db>-<org>.turso.io" --token "<auth-token>"
-```
-
-The copy preserves primary keys (XP rows point at task ids, habit entries at habit ids
-— renumbering would detach history from what it describes), runs in one transaction,
-and never writes to your local file. Confirm `goals`, `xp_log`, `habit_entries` and
-`google_oauth_tokens` all match before moving on.
+To produce `dump.sql` from the local file, use any SQLite client's `.dump`. Confirm
+afterwards that `goals`, `xp_log`, `habit_entries` and `google_oauth_tokens` all carry
+the same counts as local.
 
 ### 3. Launch, then set secrets BEFORE the first real deploy
 
@@ -85,22 +71,10 @@ fly secrets set \
   GOOGLE_CLIENT_ID="..." \
   GOOGLE_CLIENT_SECRET="..." \
   APP_PASSCODE="<a long passphrase you'll actually remember>" \
-  SESSION_SECRET="<32+ random chars — NOT the passcode>" \
   HEALTH_PUSH_SECRET="<the random value already in .env.local>"
 
 fly deploy
 ```
-
-**Secrets before the first deploy, not after.** Deploying first would put the app on a
-public URL while `APP_PASSCODE` is unset — and although the gate fails closed (503s
-everything) rather than serving openly, `npm start` also runs `scripts/preflight.mjs`,
-which refuses to boot without a real `DATABASE_URL`. Setting secrets first means the
-first deploy is the correct one instead of a rollback.
-
-`SESSION_SECRET` must be its own value, at least 32 characters. In production the app
-will not fall back to signing sessions with the passcode — passcode-strength entropy on
-a cookie-signing key means one captured cookie could be brute-forced offline into a
-key that mints sessions indefinitely.
 
 If `fly launch` gave you a different app name, update `app` and `GOOGLE_REDIRECT_URI`
 in `fly.toml` to match before deploying.
