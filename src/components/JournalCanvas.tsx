@@ -96,6 +96,7 @@ export default function JournalCanvas({
     if (!canvas) return;
     const fit = () => {
       const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return; // Skip if not laid out yet
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(rect.width * dpr);
       canvas.height = Math.round(rect.height * dpr);
@@ -103,7 +104,8 @@ export default function JournalCanvas({
       ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
       redraw();
     };
-    fit();
+    // Small delay to let the modal layout first
+    setTimeout(fit, 50);
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, [redraw]);
