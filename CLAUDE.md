@@ -110,6 +110,40 @@ A non-negotiable may take a **number** instead of a tick (`habits.input = 'numbe
 already a REAL, so adherence and the rings need no special case — an entry exists or it
 does not. Clearing the field clears the day, exactly like unticking.
 
+## Tasks — one-off, carrying, and deliberately unscored
+
+Separate from non-negotiables and separate again from blocks. A non-negotiable is a standing
+weekday rule ("weigh in, every day"); a **task** is a single thing decided for a single day
+("book the physio"). Added from `/habits`, dated, defaulting to **tomorrow** — the day you
+can still shape, which is the same reason the day title and the habit overrides live there.
+
+**If it is not ticked it carries forward, and the carry is DERIVED, never written.** Where a
+task sits is computed from `due` and today (`src/lib/tasks.ts`, import-free and tested); no
+nightly job moves anything. That deletes the whole failure class this feature is usually
+built with — a cron that runs twice and skips a day, one that misses a night and strands a
+task, a phone opened at 2am rolling the day early. Reading a task twice cannot move it twice.
+
+| Column | Means |
+|---|---|
+| `due` | the day it was FIRST for. Never rewritten — an origin, not a cursor. |
+| `done_on` | the day it was ticked, or NULL. Ticking is what fixes a task to a date. |
+
+- A done task belongs to **the day it was done**, which is what keeps a past day's record
+  true when you read it back. An outstanding task sits on **today** and on no earlier day —
+  the record of a past day must not grow new rows because you did not do something since.
+- **It feeds NOTHING** — not adherence, not the rings, not the streak, not the coach. The 30
+  point share is "non-negotiables ticked ÷ non-negotiables SCHEDULED, split evenly": a fixed
+  denominator known each morning. A carrying backlog joining it would make every other item
+  worth less for reasons nothing you did today caused — which is exactly the "item you are
+  designed to fail" that keeps the gym off the checklist. The list says `not scored` on
+  screen rather than leaving it to be discovered.
+- **"carried 3 days" is a fact, not a verdict.** No red, no "overdue", no escalating weight.
+  The honest-logging rule covers this list too: a list that starts scolding is one you stop
+  writing to.
+- The table is `day_tasks`. It is NOT the legacy `tasks` table, which is the pre-redesign
+  board and now holds only the old gym history that `migrate.mjs` rescued into
+  `gym_sessions`.
+
 ## Pillar rings — sufficiency, never score
 
 Three rings (Social / Physical / Portfolio) over a **rolling 14-day window**, defined in

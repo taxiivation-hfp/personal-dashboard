@@ -26,12 +26,54 @@ type TomorrowHabit = {
   override: { name: string | null; pillar: PillarKey | null } | null;
 };
 
+/** An open one-off task, as /api/tasks returns it. */
+type OpenTask = {
+  id: number;
+  title: string;
+  due: string;
+  carried: number;
+};
+
 export default function HabitEditor({ initial }: { initial: HabitView[] }) {
   const [habits, setHabits] = useState(initial);
   const [name, setName] = useState("");
   /** Tomorrow's list with its overrides. null until the fetch lands. */
   const [tomorrow, setTomorrow] = useState<TomorrowHabit[] | null>(null);
-  const tomorrowDate = addDays(todayISO(), 1);
+  const today = todayISO();
+  const tomorrowDate = addDays(today, 1);
+  /** Open one-off tasks. null until the fetch lands. */
+  const [tasks, setTasks] = useState<OpenTask[] | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  /** Defaults to TOMORROW — this whole screen is about the day ahead. */
+  const [taskDue, setTaskDue] = useState(tomorrowDate);
+
+  useEffect(() => {
+    fetch("/api/tasks")
+      .then((r) => r.json())
+      .then((d) => !d.error && setTasks(d.tasks ?? []))
+      .catch(() => setTasks([]));
+  }, []);
+
+  /** Every task write hands back the open list, so one round trip does both jobs. */
+  async function taskCall(init: RequestInit, url = "/api/tasks") {
+    const d = await fetch(url, {
+      headers: { "content-type": "application/json" },
+      ...init,
+    })
+      .then((r) => r.json())
+      .catch(() => ({ error: true }));
+    if (!d.error) setTasks(d.tasks ?? []);
+  }
+
+  async function addTask() {
+    const t = taskTitle.trim();
+    if (!t) return;
+    setTaskTitle("");
+    await taskCall({
+      method: "POST",
+      body: JSON.stringify({ title: t, due: taskDue }),
+    });
+  }
 
   const loadTomorrow = () => {
     fetch(`/api/habits/override?date=${tomorrowDate}`)
@@ -298,6 +340,126 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
                 </li>
               );
             })}
+          </ul>
+        )}
+      </section>
+
+      {/* ONE-OFF TASKS — the other half of "just tomorrow".
+
+          The section above dresses a STANDING non-negotiable differently for one day. This
+          adds something that exists on one day only and was never part of the standing list
+          at all: "book the physio", "email the supervisor". If it is not ticked it carries
+          forward until it is, so nothing has to be re-added and nothing quietly disappears.
+
+          It is UNSCORED, and the note says so. The checklist's 30 points are split evenly
+          between the non-negotiables SCHEDULED for a day — a fixed denominator known each
+          morning. A backlog joining it would make every other item worth less for reasons
+          nothing you did today caused, which is the same argument that keeps the gym off
+          the checklist. See src/lib/tasks.ts. */}
+      <section className="mt-12">
+        <div className="section-head">
+          <h2 className="text-small font-semibold">Tasks</h2>
+          <span className="text-micro text-[var(--color-muted)]">
+            one day only · carries over until done · not scored
+          </span>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-3">
+          <input
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addTask()}
+            placeholder="Add a task…"
+            className="min-w-[12rem] flex-1 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 font-serif text-body outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+          />
+          {/* Dated, and the floor is TODAY: a task is a thing you are going to do, and a
+              day already gone is not a day you can plan. The default is tomorrow. */}
+          <input
+            type="date"
+            value={taskDue}
+            min={today}
+            onChange={(e) => e.target.value && setTaskDue(e.target.value)}
+            aria-label="The day this task is for"
+            className="rounded border border-[var(--color-line)] bg-transparent px-2 py-1 font-serif text-micro outline-none transition-colors focus:border-[var(--color-accent)]"
+          />
+          <button
+            onClick={addTask}
+            disabled={!taskTitle.trim()}
+            className="shrink-0 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+
+        {tasks == null && (
+          <p className="pt-4 text-small text-[var(--color-muted)]">Loading…</p>
+        )}
+
+        {tasks != null && tasks.length === 0 && (
+          <p className="pt-4 text-small leading-relaxed text-[var(--color-muted)]">
+            Nothing outstanding. A task added here shows up on Today on the day
+            it is for, and stays there until you tick it.
+          </p>
+        )}
+
+        {tasks != null && tasks.length > 0 && (
+          <ul className="mt-5 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+            {tasks.map((t) => (
+              <li
+                key={t.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3"
+              >
+                <input
+                  key={`${t.id}-${t.title}`}
+                  defaultValue={t.title}
+                  onBlur={(e) =>
+                    e.target.value.trim() &&
+                    e.target.value !== t.title &&
+                    taskCall({
+                      method: "PATCH",
+                      body: JSON.stringify({ id: t.id, title: e.target.value }),
+                    })
+                  }
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && (e.target as HTMLInputElement).blur()
+                  }
+                  aria-label={`Rename ${t.title}`}
+                  className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)]"
+                />
+
+                {/* Moving the day is ordinary, not an admission — a plan is rewriteable,
+                    which is the same thing the day title says about itself. */}
+                <input
+                  type="date"
+                  value={t.due}
+                  min={today}
+                  onChange={(e) =>
+                    e.target.value &&
+                    taskCall({
+                      method: "PATCH",
+                      body: JSON.stringify({ id: t.id, due: e.target.value }),
+                    })
+                  }
+                  aria-label={`The day ${t.title} is for`}
+                  className="shrink-0 rounded border border-[var(--color-line)] bg-transparent px-1.5 py-0.5 font-serif text-micro outline-none transition-colors focus:border-[var(--color-accent)]"
+                />
+
+                {t.carried > 0 && (
+                  <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                    carried {t.carried}d
+                  </span>
+                )}
+
+                <button
+                  onClick={() =>
+                    taskCall({ method: "DELETE" }, `/api/tasks?id=${t.id}`)
+                  }
+                  className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                >
+                  remove
+                </button>
+              </li>
+            ))}
           </ul>
         )}
       </section>

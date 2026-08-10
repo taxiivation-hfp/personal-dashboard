@@ -335,6 +335,83 @@ export async function deleteJournalEntry(
   }
 }
 
+// ---------------------------------------------------------------- one-off tasks
+
+/**
+ * Add a task for a day. `due` is the day it is FOR — usually tomorrow.
+ *
+ * A single thing decided for a single day, as against a non-negotiable's standing weekday
+ * rule. If it is not ticked it carries forward, and the carry is DERIVED on read rather
+ * than written by a job — see src/lib/tasks.ts, which owns that rule and is tested.
+ *
+ * Nothing here touches adherence, the rings, the streak or the coach. That isolation is the
+ * point: a backlog that joined adherence's fixed 30-point denominator would make every
+ * non-negotiable quietly worth less for reasons nothing you did today caused.
+ */
+export async function createDayTask(
+  db: Client,
+  task: { title: string; due: string },
+): Promise<number> {
+  const title = task.title.trim();
+  if (!title) throw new Error("a task needs a title");
+  const r = await db.execute({
+    sql: "INSERT INTO day_tasks (title, due) VALUES (?,?)",
+    args: [title, task.due],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+/**
+ * Tick or untick a task.
+ *
+ * Ticking stamps the day it was done ON, which is what fixes a carrying task to a date —
+ * and it is why reading last Tuesday back still shows what was actually ticked last
+ * Tuesday. Unticking clears the stamp and the task resumes carrying from its original due
+ * date; it does NOT become due today, because the day you decided to do it has not changed.
+ */
+export async function setDayTaskDone(
+  db: Client,
+  id: number,
+  date: string,
+  done: boolean,
+): Promise<void> {
+  await db.execute({
+    sql: "UPDATE day_tasks SET done_on=? WHERE id=?",
+    args: [done ? date : null, id],
+  });
+}
+
+/** Rename a task, or move which day it is for. Both are ordinary — a plan is rewriteable. */
+export async function updateDayTask(
+  db: Client,
+  id: number,
+  patch: { title?: string; due?: string },
+): Promise<void> {
+  const sets: string[] = [];
+  const args: (string | number)[] = [];
+  if (patch.title !== undefined) {
+    const t = patch.title.trim();
+    if (!t) throw new Error("a task needs a title");
+    sets.push("title=?");
+    args.push(t);
+  }
+  if (patch.due !== undefined) {
+    sets.push("due=?");
+    args.push(patch.due);
+  }
+  if (!sets.length) return;
+  args.push(id);
+  await db.execute({
+    sql: `UPDATE day_tasks SET ${sets.join(", ")} WHERE id=?`,
+    args,
+  });
+}
+
+/** Drop a task. A thing you decided not to do is not a thing you failed — no tombstone. */
+export async function deleteDayTask(db: Client, id: number): Promise<void> {
+  await db.execute({ sql: "DELETE FROM day_tasks WHERE id=?", args: [id] });
+}
+
 // ---------------------------------------------------------------- day titles
 
 /**

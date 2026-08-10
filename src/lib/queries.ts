@@ -15,6 +15,7 @@ import type { CalEvent } from "./google";
 import { addDays, daysBetween } from "./dates";
 import { deriveWeights } from "./goals";
 import { METRICS, WINDOW_DAYS, type RawCount, type PillarKey } from "./rings";
+import { carriedDays, tasksFor, type DayTask } from "./tasks";
 
 // PillarKey now lives in rings.ts, which must stay import-free to be testable under
 // `node --test`. Re-exported here so every existing `import { PillarKey } from
@@ -145,12 +146,76 @@ export type DayView = {
   calorieEntries: CalorieEntry[];
   /** What the owner intends the day to be. null when unnamed. */
   title: string | null;
+  /**
+   * One-off tasks sitting on this day — the ones due today, plus anything that carried in
+   * from an earlier day, plus whatever was ticked today.
+   *
+   * DELIBERATELY ABSENT FROM `adherence` ABOVE. See src/lib/tasks.ts: a carrying backlog
+   * joining that fixed denominator would make each non-negotiable worth less for reasons
+   * nothing about today caused, which is the "item you are designed to fail" CLAUDE.md
+   * already ruled out once for the gym.
+   */
+  tasks: DayTaskView[];
   pillars: PillarView[];
 };
 
 /** One addition to a day's total. `note` is the food's name, or null — the schema always
  *  had the column; the UI only started writing it when logging grew a name field. */
 export type CalorieEntry = { id: number; kcal: number; note: string | null };
+
+/** A one-off task as the screen needs it: the row, plus how long it has been carrying. */
+export type DayTaskView = DayTask & {
+  done: boolean;
+  /** Days since it was first due, 0 unless it has carried. A fact, never a penalty. */
+  carried: number;
+};
+
+/**
+ * The tasks belonging to one day.
+ *
+ * Loads the OUTSTANDING ones plus anything ticked on that date, then lets tasks.ts place
+ * them — the carry is derived, so the query cannot do the placing itself without teaching
+ * SQL the same rule twice. Outstanding tasks are a short list by nature (a backlog nobody
+ * clears is the thing this feature exists to surface), so fetching them all is cheaper than
+ * a window of dates would be.
+ */
+export async function dayTasksFor(
+  db: Client,
+  date: string,
+  today: string,
+): Promise<DayTaskView[]> {
+  const r = await db.execute({
+    sql: "SELECT id,title,due,done_on FROM day_tasks WHERE done_on IS NULL OR done_on = ?",
+    args: [date],
+  });
+  const all: DayTask[] = r.rows.map((x) => ({
+    id: num(x.id),
+    title: String(x.title),
+    due: String(x.due),
+    doneOn: str(x.done_on),
+  }));
+  return tasksFor(all, date, today).map((t) => ({
+    ...t,
+    done: t.doneOn != null,
+    carried: carriedDays(t, today),
+  }));
+}
+
+/** Every task not yet ticked, soonest first — the planning list on /habits. */
+export async function openDayTasks(db: Client, today: string): Promise<DayTaskView[]> {
+  const r = await db.execute(
+    "SELECT id,title,due,done_on FROM day_tasks WHERE done_on IS NULL ORDER BY due, id",
+  );
+  return r.rows.map((x) => {
+    const t: DayTask = {
+      id: num(x.id),
+      title: String(x.title),
+      due: String(x.due),
+      doneOn: null,
+    };
+    return { ...t, done: false, carried: carriedDays(t, today) };
+  });
+}
 
 /** One past day of the calorie log, for the dialog's sidebar. */
 export type CalorieDay = { date: string; total: number; entries: CalorieEntry[] };
@@ -522,6 +587,10 @@ export async function getDayView(
     calories: cal.total,
     calorieEntries: cal.entries,
     title: titles.get(date) ?? null,
+    // todayISO() rather than `date`: where a task SITS depends on the real today, not on
+    // the day being looked at. Passing `date` here would make a carrying task appear on
+    // every future day anyone opened — the exact bug tasks.test.ts pins down.
+    tasks: await dayTasksFor(db, date, todayISO()),
     pillars,
   };
 }

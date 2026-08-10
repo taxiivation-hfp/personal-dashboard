@@ -416,6 +416,16 @@ export default function Today({
     loadRings(); // a skill session feeds the Portfolio ring
   }
 
+  /** Tick or untick a one-off task. The tick belongs to the day on screen. */
+  async function toggleTask(id: number, done: boolean) {
+    await fetch("/api/tasks", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, date: data.date, done }),
+    }).catch(() => {});
+    refresh();
+  }
+
   /** Numeric non-negotiable (weight). An empty field clears the day. */
   async function setHabitNumber(id: number, raw: string) {
     const v = raw.trim() === "" ? null : Number(raw);
@@ -823,6 +833,65 @@ export default function Today({
               </li>
             )}
           </ul>
+
+          {/* TASKS — one-off things, and the one list here that is NOT scored.
+
+              Below the checklist and under its own rule, because it is a different kind of
+              thing: the list above is the standing daily minimum and carries the day's 30
+              points; these are single decisions that carry themselves forward until done.
+              Mixing them would have meant a backlog you never cleared quietly lowering what
+              every non-negotiable was worth — see src/lib/tasks.ts.
+
+              The label says "not scored" out loud rather than leaving it to be discovered.
+              A list that looks like the scored one and isn't is worse than no list. */}
+          {data.tasks.length > 0 && (
+            <div className="mt-5 border-t border-[var(--color-line-strong)] pt-3">
+              <div className="mb-1 flex items-baseline justify-between gap-3">
+                <span className="text-micro text-[var(--color-muted)]">
+                  tasks · carry over, not scored
+                </span>
+                <Link
+                  href="/habits"
+                  className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                >
+                  add
+                </Link>
+              </div>
+              <ul>
+                {data.tasks.map((t) => (
+                  <li key={t.id} className={CHECK_ROW}>
+                    <button
+                      onClick={() => toggleTask(t.id, !t.done)}
+                      aria-pressed={t.done}
+                      className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+                    >
+                      {/* The checklist's own box, in ink rather than a pillar hue — a task
+                          belongs to no pillar, and borrowing one would file it under a
+                          category it does not feed. */}
+                      <span className="mt-0.5">
+                        <HabitBox done={t.done} tone="var(--color-ink)" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
+                        >
+                          {t.title}
+                        </span>
+                        {/* How long it has waited, stated plainly. No red, no "overdue",
+                            no escalating weight — the honest-logging rule covers this list
+                            too, and a list that starts scolding is one you stop writing to. */}
+                        {!t.done && t.carried > 0 && (
+                          <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
+                            carried {t.carried} day{t.carried === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </section>
 

@@ -400,3 +400,29 @@ CREATE TABLE IF NOT EXISTS gym_sessions (
 -- table — so on an upgraded database an index would be created against a `kind` column
 -- that does not exist yet. It is created after the ALTERs, in both db/client.ts and
 -- scripts/migrate.mjs, which are also where the old UNIQUE index is dropped.
+
+-- One-off tasks that carry themselves forward — deliberately NOT the `tasks` table above,
+-- which is the pre-redesign board and now holds only the legacy gym history.
+--
+-- A task is a single thing decided for a single day ("book the physio"), where a habit is a
+-- standing weekday rule. The distinction that matters here is `due` vs `done_on`:
+--
+--   due      the day it was FIRST for. Never rewritten. It is the task's origin, not a
+--            cursor — the carry is derived from it on read (see src/lib/tasks.ts), so
+--            there is no nightly job to run twice, miss a day, or fire early at 2am.
+--   done_on  the day it was ticked, or NULL. Ticking is what fixes a task to a date, which
+--            is what keeps a past day's record true when you read it back.
+--
+-- It feeds NOTHING — not adherence, not the rings, not the streak, not the coach. A
+-- carrying backlog joining adherence's fixed 30-point denominator would make each
+-- non-negotiable quietly worth less for reasons nothing you did today caused. See the
+-- reasoning in src/lib/tasks.ts.
+CREATE TABLE IF NOT EXISTS day_tasks (
+  id         INTEGER PRIMARY KEY,
+  title      TEXT NOT NULL,
+  due        TEXT NOT NULL CHECK (due GLOB '????-??-??'),
+  done_on    TEXT CHECK (done_on IS NULL OR done_on GLOB '????-??-??'),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_day_tasks_due ON day_tasks(due);
+CREATE INDEX IF NOT EXISTS idx_day_tasks_done_on ON day_tasks(done_on);
