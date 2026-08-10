@@ -60,10 +60,17 @@ test("a null required yields null rather than NaN or Infinity", () => {
   assert.equal(metricFill(3, 0, true), null);
 });
 
-test("steps is dormant: sourceReady false, so it renders as a ghost", () => {
-  const r = find(buildRings(counts(), WINDOW_DAYS), "physical", "steps");
-  assert.equal(r.fill, null);
-  assert.equal(r.fact, "no data source yet");
+test("steps is LIVE: a resolved count scores it against 12 qualifying days", () => {
+  // The phone pushes to /api/health now, so sourceReady is true and a resolved count
+  // fills the ring like any other metric — at weight 0, as an outer lap.
+  const r = find(
+    buildRings(counts({ steps: ok(6) }), WINDOW_DAYS),
+    "physical",
+    "steps",
+  );
+  assert.equal(r.state, "scored");
+  assert.equal(r.fill, 0.5); // 6 of 12 qualifying days
+  assert.equal(r.fact, "6 of 12 days");
 });
 
 test("a sourceless metric is EXCLUDED from its pillar mean, not counted as 0", () => {
@@ -307,22 +314,37 @@ test("only a floor-without-weight is drawn as an outer lap", () => {
     WINDOW_DAYS,
   ).flatMap((p) => p.metrics);
 
+  // TWO laps now that steps is live: misc and steps both carry a floor at weight 0,
+  // so both ride the thin outer band and neither ever moves the Physical mean.
   assert.deepEqual(
     all.filter((m) => m.lap).map((m) => m.key),
-    ["misc"],
+    ["misc", "steps"],
   );
   // Nothing that counts is ever moved off the donut.
   assert.ok(all.every((m) => !m.lap || m.weight === 0));
 });
 
 test("a ghost is never a lap — no source belongs on the ring, not around it", () => {
-  const steps = find(buildRings(counts(), WINDOW_DAYS), "physical", "steps");
+  // Steps with an UNRESOLVED count — the phone stopped pushing, say — must ghost on
+  // the ring rather than orbit it as a lap.
+  const steps = find(
+    buildRings(counts({ steps: { count: 0, resolved: false } }), WINDOW_DAYS),
+    "physical",
+    "steps",
+  );
   assert.equal(steps.weight, 0);
   assert.equal(steps.lap, false);
+  assert.equal(steps.state, "ghost");
 });
 
-test("steps stays a GHOST, not unscored — !sourceReady is checked first", () => {
-  const s = find(buildRings(counts(), WINDOW_DAYS), "physical", "steps");
+test("an unresolved count ghosts even when it carries a number", () => {
+  // hasSource = sourceReady && resolved: the count is discarded when the source did not
+  // actually answer, because a number nobody measured is worse than no number.
+  const s = find(
+    buildRings(counts({ steps: { count: 5, resolved: false } }), WINDOW_DAYS),
+    "physical",
+    "steps",
+  );
   assert.equal(s.state, "ghost");
   assert.equal(s.fact, "no data source yet");
 });

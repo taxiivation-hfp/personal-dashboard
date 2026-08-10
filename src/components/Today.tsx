@@ -32,6 +32,7 @@ import type {
   SkillSlice,
   PillarKey,
 } from "@/lib/queries";
+import { METRICS } from "@/lib/rings";
 import type {
   PillarFactInput,
   PillarRingView,
@@ -105,6 +106,11 @@ const round1 = (n: number) => String(Math.round(n * 10) / 10);
  * row from the top gives both columns a matching top edge and costs nothing.
  */
 const CHECK_ROW = "border-t border-[var(--color-line)]";
+
+/** The steps floor, read FROM the registry so the checklist row and the ring cannot
+ *  disagree about what a qualifying day is. */
+const STEPS_FLOOR =
+  METRICS.find((m) => m.key === "steps")?.dailyThreshold ?? 7000;
 
 /** The one numeric field shape, so the weight row and the calorie row cannot drift apart. */
 const NUM_FIELD =
@@ -626,21 +632,32 @@ export default function Today({
               />
             </li>
 
-            {/* STEPS. No writer exists for this yet — an iOS Shortcut posting one number is
-                separate, unstarted work — so it is a dashed placeholder rather than a zero.
-                A zero would be a failure no behaviour could fix; a dashed rule says plainly
-                that nothing is wired up, which is the same language the ghost rings use. */}
+            {/* STEPS, live from the phone. A FLOOR row like Calories: the box is dashed
+                until 7,000 is reached — "not yet", never "failed" — and the count is the
+                phone's own last push, read-only, because the phone is the instrument and
+                a hand-typed step count would be a number nobody measured. "—" until the
+                Shortcut has pushed today; never a zero the phone didn't say. */}
             <li className={CHECK_ROW}>
               <div className="flex items-center gap-2.5 py-2.5">
-                <span
-                  aria-hidden
-                  className="h-[18px] w-[18px] shrink-0 rounded-[5px] border border-dashed border-[var(--color-line-strong)]"
+                <HabitBox
+                  done={(data.steps ?? 0) >= STEPS_FLOOR}
+                  pending
+                  tone="var(--color-physical)"
                 />
-                <span className="min-w-0 flex-1 font-serif text-small leading-snug text-[var(--color-muted)]">
+                <span
+                  className={`min-w-0 flex-1 font-serif text-small leading-snug ${(data.steps ?? 0) >= STEPS_FLOOR ? "text-[var(--color-muted)]" : ""}`}
+                >
                   Steps
                 </span>
-                <span className="shrink-0 text-micro text-[var(--color-muted)]">
-                  soon
+                <span className="shrink-0 text-small tabular-nums">
+                  {data.steps == null ? (
+                    <span className="text-[var(--color-muted)]">—</span>
+                  ) : (
+                    data.steps.toLocaleString()
+                  )}
+                  <span className="text-micro text-[var(--color-muted)]">
+                    /{STEPS_FLOOR.toLocaleString()}
+                  </span>
                 </span>
               </div>
             </li>

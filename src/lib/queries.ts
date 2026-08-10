@@ -125,6 +125,9 @@ export type DayView = {
   streak: number;
   habits: HabitView[];
   journal: JournalView[];
+  /** Today's step count as the phone last pushed it. null = no push yet — the checklist
+   *  row prints "—", never a zero the phone didn't say. */
+  steps: number | null;
   /** The day's running total, derived from calorieEntries. null when nothing is logged,
    *  so the screen can render "—" rather than a zero nobody entered. */
   calories: number | null;
@@ -467,6 +470,12 @@ export async function getDayView(
   const cal = await caloriesForDate(db, date);
   const titles = await dayTitlesBetween(db, date, date);
   const { count } = await getStreak(db, date);
+  // The phone's last push for this day. null when it never pushed — the row prints "—",
+  // never a zero the phone didn't say.
+  const health = await db.execute({
+    sql: "SELECT steps FROM health_logs WHERE date=?",
+    args: [date],
+  });
 
   return {
     date,
@@ -480,6 +489,10 @@ export async function getDayView(
       kind: String(j.kind ?? "drawing"),
       preview: j.kind === "text" ? String(j.preview ?? "") : null,
     })),
+    steps:
+      health.rows.length && health.rows[0]!.steps != null
+        ? num(health.rows[0]!.steps)
+        : null,
     calories: cal.total,
     calorieEntries: cal.entries,
     title: titles.get(date) ?? null,
@@ -696,6 +709,18 @@ export async function getRingCounts(
       const r = await db.execute({
         sql: `SELECT ${agg} AS n FROM gym_sessions WHERE kind=? AND date BETWEEN ? AND ?`,
         args: [m.workoutKind!, from, to],
+      });
+      out[m.key] = { count: num(r.rows[0].n), resolved: true };
+      continue;
+    }
+
+    if (m.source === "health_steps") {
+      // Qualifying DAYS: one health_logs row per date by construction, counted only
+      // when the day reached the metric's own floor. 15k steps is the same day as 7k —
+      // the perDayCapped ruling, enforced here by the schema's one-row-per-day shape.
+      const r = await db.execute({
+        sql: "SELECT COUNT(*) AS n FROM health_logs WHERE date BETWEEN ? AND ? AND steps >= ?",
+        args: [from, to, m.dailyThreshold ?? 1],
       });
       out[m.key] = { count: num(r.rows[0].n), resolved: true };
       continue;

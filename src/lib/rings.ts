@@ -192,10 +192,11 @@ export const METRICS: Metric[] = [
     unit: "days",
     perDayCapped: true, // 15k steps IS the same day as 7k
     weight: 0,
-    // Dormant: nothing writes health_logs.steps yet. Config is valid and ready for the
-    // day a source lands; until then this renders as a GHOST (not unscored — !sourceReady
-    // is checked first) and is excluded from the Physical mean.
-    sourceReady: false,
+    // LIVE: an iOS Shortcut POSTs the day's count to /api/health, which upserts
+    // health_logs. Weight stays 0, so like Misc it draws as a thin outer lap and never
+    // moves the Physical mean — a phone sensor must not be able to cap the pillar. It
+    // still ghosts whenever the count is unresolved.
+    sourceReady: true,
   },
   {
     key: "social_events",
