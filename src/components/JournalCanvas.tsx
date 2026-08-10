@@ -104,7 +104,6 @@ export default function JournalCanvas({
       ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
       redraw();
     };
-    // Small delay to let the modal layout first
     setTimeout(fit, 50);
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
