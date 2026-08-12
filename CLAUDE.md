@@ -188,10 +188,26 @@ truth, what counts is the cap.
 
   Translucent, **not glowing**. A glow is a shadow, and this app ships none.
 - **Social events come from the CALENDAR, not a checklist.** Graphite (`colorId: "8"`)
-  means a social event — Church, a night out. Two a fortnight. They are already scheduled
-  there, and a second place to record them is a second place to forget. Counted in
-  `/api/rings` and passed to `getRingCounts`; on a calendar failure the count is left
-  UNDEFINED so the ring goes ghost rather than reporting a false zero.
+  means a social event — Church, a night out, a farewell. They are already scheduled there,
+  and a second place to record them is a second place to forget. Counted in `/api/rings`
+  and passed to `getRingCounts`; on a calendar failure the count is left UNDEFINED so the
+  ring goes ghost rather than reporting a false zero. ADHERED only: an event you drifted
+  from is not a social fortnight you had.
+- **The two Social bands split on RECURRENCE, never on colour.** Inner (the metric, six a
+  fortnight) is the standing kind — Church, a weekly night out; the mid band is the one-offs
+  and fills no quota. Both are graphite.
+
+  It was two colour ids until it was measured, and the lesson is worth keeping: **the
+  Calendar API reports only the ELEVEN LEGACY colour ids while the calendar UI's palette is
+  wider**, so Graphite and the Birch beside it both arrive as `8`. Across 180 days of the
+  owner's calendar, id 8 held Church and Nathan's Farewell side by side and the only id 4
+  event was titled "Gym" — so the second constant matched nothing social, the one-off band
+  never drew, every one-off quietly filled the inner ring, and a stray Gym block was one
+  adhered mark from counting as a night out.
+
+  `CalEvent.recurring` (from Google's `recurringEventId`, present on every instance of a
+  series) is what the colours were standing in for. A colour cannot carry this; a repeat
+  rule can, and cannot be fooled by a palette the API does not speak.
 - **Every skill lives under Portfolio**, including ice skating, badminton, calisthenics and
   dancing. They are things being LEARNED, and learning is what Portfolio holds; Physical
   already counts its own work from `gym_sessions`. The `skills` metric counts every
@@ -407,17 +423,50 @@ didn't schedule a productive day. Both numbers matter.
   Backdating. Seven days, today last, no future columns. The calendar
   column is what says what tomorrow holds; a strip reserving three empty columns for it
   spent a third of its width on days that had not happened.
-- **A gym hour scores ONCE, from the calendar.** Grape (`colorId "3"`) is Gym at half rate.
-  `scoreDay` has no `workouts` input at all — deleted rather than zeroed — because paying
-  for the logged `gym_sessions` row as well would count the same hour twice and reward
-  writing a session up rather than doing it. A session you did but never scheduled scores
-  nothing here; the Physical ring still counts it, and that is the ring's job.
+- **A gym session scores ONCE, from the LOGGED SESSION, at a FLAT 50** —
+  `POINTS_PER_SESSION`. Grape (`colorId "3"`) is deliberately absent from `CALENDAR_RATES`,
+  so a gym block on the calendar is worth nothing on its own. One of the two pays, never
+  both: paying for the scheduled hour as well would buy the same training twice.
+
+  **It is the one thing here not priced by the clock, and that is the owner's ruling.**
+  Three hours under a bar is not more productive than two — an hourly rate says it is, which
+  is a claim about training this app has no business making, and it would pay for dawdling
+  between sets while docking a session that was efficient. A session happened or it did not.
+  So a two-hour session and a forty-minute one score identically, and a day with two lifts
+  and a run scores three of them.
+
+  This REVERSES the arrangement that shipped first (an hour of Grape at half rate, with the
+  `workouts` input deleted). The double-count guard is unchanged; only which side of it pays
+  has swapped. The consequence is the mirror of the old one: a session you SCHEDULED but
+  never wrote up scores nothing, which is consistent with `COUNTED_STATES` paying only for
+  blocks you marked — both ask you to say what happened. The Physical ring reads the same
+  logged row, and that is the ring's job, not a second payment.
+
+  The slab takes `SLAB_GYM` — Grape's projection, free now that no blocked time can draw it.
+  Not achromatic: grey belongs to the ticked things, and two grey slabs cannot be told apart
+  at eighty pixels tall.
 - **Non-negotiables stay in the score even though adherence counts them too.** Not a double
   count: adherence and productivity are two different questions asked of the same day, and
   ticking a non-negotiable is a true answer to both.
-- **No productivity number is ever printed.** The bar's height is the whole claim. Printing
-  an uncapped score with no ceiling beside it invites a comparison it cannot support — and
-  it is the shortest path back to a scoreboard.
+- **No productivity number is ever printed ON THE STRIP.** The bar's height is the whole
+  claim there. Printing an uncapped score with no ceiling beside it invites a comparison it
+  cannot support — and it is the shortest path back to a scoreboard.
+- **Tapping a column opens its WORKINGS** — `ProductivityLog`, fed by `/api/productivity`.
+  This is the other half of that bargain, and the reason the rule above can stay: the bar
+  is a shape you glance at, and the arithmetic is one deliberate tap away. A drill-down you
+  opened on purpose is an explanation; a number sitting on a chart is a score. The total is
+  printed HERE and nowhere else, because a breakdown that withholds what it adds up to is
+  not a breakdown.
+
+  **"Didn't count" is the half that earns the screen.** Everything above it is already
+  visible on the bar; this is not. A day full of scheduled hours can score nothing — an
+  unmarked block pays nothing, skipped and drifted pay nothing, and a colour absent from
+  `CALENDAR_RATES` pays nothing — and every one of those is invisible in a stack. It is
+  stated without scolding: an unmarked block is information about the log, not a verdict.
+
+  `ProductivitySegment` carries `minutes` and `rate` so the workings come from `scoreDay`
+  itself. A breakdown computed anywhere else would eventually disagree with the bar it
+  exists to explain, and a disagreeing explanation is worse than none.
 - The one slab that is not calendar time — non-negotiables — is ACHROMATIC
   (`SLAB_NEUTRAL` in `eventColor.ts`). A hue there would have to mean something, and there
   is no calendar colour behind it to mean it.

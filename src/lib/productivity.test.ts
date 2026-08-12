@@ -4,6 +4,7 @@ import {
   CALENDAR_RATES,
   UNLISTED_RATE,
   POINTS_PER_HABIT,
+  POINTS_PER_SESSION,
   CALORIE_FLOOR,
   rateFor,
   scoreDay,
@@ -26,7 +27,8 @@ const uni = (minutes: number): ProductiveBlock => ({
   colorId: null,
   state: "adhered",
 });
-/** Grape — the owner's colour for gym. The ONLY way a workout enters this score. */
+/** Grape — the owner's colour for a gym block. It scores NOTHING: training is priced per
+ *  logged session now, not by the hour. See POINTS_PER_SESSION. */
 const grape = (minutes: number): ProductiveBlock => ({
   minutes,
   colorId: "3",
@@ -83,26 +85,58 @@ test("each non-negotiable is 25", () => {
   assert.equal(day({ habitsDone: 4 }).points, 100);
 });
 
-// The double-count guard, and the reason the workouts input was deleted rather than
-// zeroed. A gym session used to score from its gym_sessions row AND would now score again
-// as a Grape block; paying twice for one hour would have rewarded writing the session up
-// rather than doing it.
-test("a gym hour scores once, from the calendar, at half rate", () => {
-  const gym = CALENDAR_RATES.find((c) => c.id === "3");
-  assert.ok(gym, "Grape is in the rate table");
-  assert.equal(gym.label, "Gym");
-  assert.equal(gym.rate, 0.5);
-  assert.equal(day({ blocks: [grape(60)] }).points, 50);
+// THE DOUBLE-COUNT GUARD, from the other side. Training is paid for ONCE, and it is the
+// logged session that pays — so a Grape block on the calendar must be worth nothing on its
+// own, or the same training would be bought twice: once for scheduling it, again for doing
+// it. This is the inverse of the arrangement that shipped first; see POINTS_PER_SESSION.
+test("a gym BLOCK on the calendar scores nothing — Grape is not in the table", () => {
+  assert.equal(
+    CALENDAR_RATES.find((c) => c.id === "3"),
+    undefined,
+    "Grape must not be in the rate table",
+  );
+  assert.equal(rateFor("3"), UNLISTED_RATE);
+  assert.equal(day({ blocks: [grape(180)] }).points, 0);
 });
 
-test("logging a session cannot add points — there is no input for it", () => {
-  // Parsed rather than written as a literal: this is a STALE CALLER, the shape a caller
-  // that was never updated would send, and TypeScript would refuse to let me write one.
-  const s = scoreDay(
-    JSON.parse('{"blocks":[],"habitsDone":0,"workouts":3}'),
-  );
-  assert.equal(s.points, 0);
-  assert.deepEqual(s.segments, []);
+test("a logged SESSION is a flat 50, whatever the calendar says", () => {
+  assert.equal(POINTS_PER_SESSION, 50);
+  assert.equal(day({ workouts: 1 }).points, 50);
+  // The whole argument for a flat figure: three hours under a bar is not more productive
+  // than two, so the block's length must not reach the score at all.
+  assert.equal(day({ workouts: 1, blocks: [grape(120)] }).points, 50);
+  assert.equal(day({ workouts: 1, blocks: [grape(360)] }).points, 50);
+});
+
+test("two sessions in a day score twice one — a day can hold two lifts and a run", () => {
+  assert.equal(day({ workouts: 2 }).points, 100);
+  assert.equal(day({ workouts: 3 }).points, 150);
+});
+
+test("sessions get their own slab, and it is neither time nor a tick", () => {
+  const s = day({ workouts: 2, habitsDone: 1, blocks: [red(60)] });
+  const seg = s.segments.find((x) => x.kind === "sessions");
+  assert.ok(seg, "there is a sessions slab");
+  assert.equal(seg.points, 100);
+  // Not an hour: it carries no colour and no rate, and adds nothing to the minutes figure.
+  assert.equal(seg.colorId, null);
+  assert.equal(seg.rate, null);
+  assert.equal(seg.minutes, 0);
+  assert.equal(s.minutes, 60);
+  assert.equal(s.sessionPoints, 100);
+});
+
+test("a stale caller that omits workouts still scores, and scores nothing for them", () => {
+  // Parsed rather than written as a literal: this is the shape a caller that was never
+  // updated would send, and the input is optional so it must simply be worth zero.
+  const s = scoreDay(JSON.parse('{"blocks":[],"habitsDone":2}'));
+  assert.equal(s.sessionPoints, 0);
+  assert.equal(s.points, 2 * POINTS_PER_HABIT);
+});
+
+test("a nonsense session count can never subtract from a day", () => {
+  assert.equal(scoreDay(JSON.parse('{"blocks":[],"habitsDone":0,"workouts":-4}')).points, 0);
+  assert.equal(scoreDay(JSON.parse('{"blocks":[],"habitsDone":0,"workouts":2.7}')).points, 100);
 });
 
 // The property the whole feature turns on. This is the DELIBERATE inversion of the ring
@@ -110,8 +144,8 @@ test("logging a session cannot add points — there is no input for it", () => {
 // well-rounded fortnight the only good-looking board. This does not cap, because its job
 // is the opposite — a raw comparative reading of hours actually spent.
 test("the score is UNCAPPED", () => {
-  const s = day({ blocks: [red(360), uni(120), grape(360)], habitsDone: 5 });
-  assert.equal(s.points, 1125);
+  const s = day({ blocks: [red(360), uni(120)], habitsDone: 5, workouts: 3 });
+  assert.equal(s.points, 975);
   assert.ok(s.points > 100);
 });
 

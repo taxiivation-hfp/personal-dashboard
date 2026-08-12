@@ -29,6 +29,21 @@ export const POINTS_PER_HOUR = 100;
 export const POINTS_PER_HABIT = 25;
 
 /**
+ * A GYM SESSION, AS A FLAT FIGURE — the one thing here that is not priced by the clock.
+ *
+ * The owner's ruling, and the reasoning is the sharpest argument in this file: three hours
+ * under a bar is not more productive than two. An hourly rate says it is, and that is the
+ * one claim about training this app should not make — it would pay for dawdling between
+ * sets and dock a session that was efficient. A session happened or it did not, and it is
+ * worth what a session is worth.
+ *
+ * So it is priced like a non-negotiable rather than like an hour: two of them, in points.
+ * The consequence, and it is intended: a two-hour session and a forty-minute one score
+ * identically, and a day with two sessions scores twice one.
+ */
+export const POINTS_PER_SESSION = 100;
+
+/**
  * The calorie FLOOR — a number to reach, never a ceiling to stay under.
  *
  * The owner's, and the direction is the whole point: this is someone training, for whom
@@ -65,10 +80,12 @@ export const CALENDAR_RATES: {
   // its colour. Peacock briefly sat here too, but that was a stray on a couple of real
   // events rather than a rule; a colour has to be chosen deliberately to mean something.
   { id: null, google: "default", label: "Uni", rate: 0.5 },
-  // Gym. This is where a workout enters the score, and it is the ONLY place — see the note
-  // on ProductivityInput. Half rate, the owner's ruling: an hour under a bar is an hour
-  // spent, and it is not the hour the day was built around.
-  { id: "3", google: "Grape", label: "Gym", rate: 0.5 },
+  // GRAPE IS DELIBERATELY ABSENT. Gym used to score here at half rate, as hours; it scores
+  // from the LOGGED SESSION now, at a flat POINTS_PER_SESSION — see that constant for why,
+  // and `workouts` below for the double-count guard that keeps it to one of the two. A
+  // Grape block on the calendar is therefore worth nothing on its own, exactly like any
+  // other unlisted colour: the session is the record, and the block is just where it was
+  // going to happen.
 ];
 
 export const UNLISTED_RATE = 0;
@@ -112,21 +129,27 @@ export type ProductivityInput = {
    * distinction the chart cannot draw and the reader cannot use.
    */
   calories?: number | null;
+  /**
+   * GYM SESSIONS LOGGED THAT DAY — one row per session, so two lifts and a run is 3.
+   *
+   * This is the ONE place a workout enters the score, and the exclusivity is what keeps it
+   * honest: Grape has been removed from CALENDAR_RATES, so a gym block on the calendar pays
+   * nothing on its own. Paying both would be the same training bought twice — once for
+   * scheduling it and again for doing it.
+   *
+   * Which of the two is the record was reversed on the owner's ruling, and the argument is
+   * in POINTS_PER_SESSION: an hourly rate claims three hours under a bar beat two, and that
+   * is a claim about training this app has no business making. The calendar prices time;
+   * training is not time, it is a thing that happened.
+   *
+   * The consequence worth knowing, and it is the mirror of the old one: a session you
+   * SCHEDULED but never logged scores nothing here. That is consistent with the rest of the
+   * file — COUNTED_STATES only pays for blocks you marked, and this only pays for sessions
+   * you wrote up. Both ask you to say what happened. The Physical ring reads the same
+   * logged row, which is the ring's job and not a second payment.
+   */
+  workouts?: number;
 };
-
-/**
- * WORKOUTS ARE NOT AN INPUT, AND THAT IS DELIBERATE.
- *
- * A gym session used to score 100 points from its gym_sessions row. It now scores from the
- * CALENDAR instead, as a Grape block, at half rate like any other hour. Both at once would
- * have been a real double count — the same hour paid for twice, once because it was
- * scheduled and again because it was written up afterwards — and it would have quietly
- * rewarded logging rather than training.
- *
- * The consequence worth knowing: a session you did but never put in the calendar scores
- * nothing here. That is consistent with COUNTED_STATES, which only pays for blocks you
- * marked. The Physical ring still counts the logged session, and that is the ring's job.
- */
 
 /**
  * One slab of the day's stacked bar.
@@ -136,9 +159,25 @@ export type ProductivityInput = {
  * two segments that are not blocked time at all.
  */
 export type ProductivitySegment = {
-  kind: "time" | "habits";
+  /**
+   * "time" is blocked calendar hours and carries that hour's colour. "habits" is the
+   * things you ticked. "sessions" is training logged — not an hour, so it has no colorId
+   * and no rate, and the chart gives it its own fill (SLAB_GYM).
+   */
+  kind: "time" | "habits" | "sessions";
   colorId: ColorId;
   points: number;
+  /**
+   * The RAW scheduled minutes behind this slab, before the colour's rate. 0 on the habits
+   * slab, which is not time at all.
+   *
+   * Carried so the day's workings can be shown without a second implementation of this
+   * rule. A breakdown computed anywhere else would eventually disagree with the bar it is
+   * supposed to explain, and a disagreeing explanation is worse than none.
+   */
+  minutes: number;
+  /** The colour's rate, as applied. null on the habits slab, which has no rate. */
+  rate: number | null;
 };
 
 export type ProductivityScore = {
@@ -146,6 +185,8 @@ export type ProductivityScore = {
   points: number;
   timePoints: number;
   habitPoints: number;
+  /** Logged training, at a flat rate per session — see POINTS_PER_SESSION. */
+  sessionPoints: number;
   /** Raw minutes that scored anything at all. */
   minutes: number;
   /** Those minutes after the colour rate is applied. */
@@ -170,6 +211,8 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
   let weightedMinutes = 0;
   /** Weighted minutes per colour, so the bar can be split the way the calendar was. */
   const byColour = new Map<ColorId, number>();
+  /** The same split before the rate, so a slab can say what it was made of. */
+  const rawByColour = new Map<ColorId, number>();
 
   for (const b of input.blocks) {
     if (!COUNTED_STATES.includes(b.state)) continue;
@@ -183,6 +226,7 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     minutes += m;
     weightedMinutes += m * rate;
     byColour.set(b.colorId, (byColour.get(b.colorId) ?? 0) + m * rate);
+    rawByColour.set(b.colorId, (rawByColour.get(b.colorId) ?? 0) + m);
   }
 
   // Each part is rounded independently so the three always sum to `points` exactly. Adding
@@ -196,6 +240,11 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     input.habitsDone +
     ((input.calories ?? 0) >= CALORIE_FLOOR ? 1 : 0);
   const habitPoints = ticked * POINTS_PER_HABIT;
+  // Flat per session, never per hour. Clamped and floored, because a caller that has not
+  // been taught this input yet sends undefined and a corrupt one could send anything —
+  // neither may subtract from a day.
+  const sessions = Math.max(0, Math.floor(input.workouts ?? 0));
+  const sessionPoints = sessions * POINTS_PER_SESSION;
 
   // Colour slabs are apportioned out of the ALREADY-ROUNDED timePoints, and the smallest
   // takes the remainder. Rounding each colour independently would let the stack drift a
@@ -209,15 +258,40 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
         ? timePoints - assigned
         : Math.round((wm / weightedMinutes) * timePoints);
     assigned += pts;
-    if (pts > 0) segments.push({ kind: "time", colorId, points: pts });
+    if (pts > 0)
+      segments.push({
+        kind: "time",
+        colorId,
+        points: pts,
+        minutes: rawByColour.get(colorId) ?? 0,
+        rate: rateFor(colorId),
+      });
   });
+  // Training sits between the hours and the ticks in the stack: it is not blocked time, but
+  // it is more than a box — it keeps its own slab rather than joining the grey, because the
+  // owner asked to SEE it and two achromatic slabs cannot be told apart at 80px tall.
+  if (sessionPoints > 0)
+    segments.push({
+      kind: "sessions",
+      colorId: null,
+      points: sessionPoints,
+      minutes: 0,
+      rate: null,
+    });
   if (habitPoints > 0)
-    segments.push({ kind: "habits", colorId: null, points: habitPoints });
+    segments.push({
+      kind: "habits",
+      colorId: null,
+      points: habitPoints,
+      minutes: 0,
+      rate: null,
+    });
 
   return {
-    points: timePoints + habitPoints,
+    points: timePoints + sessionPoints + habitPoints,
     timePoints,
     habitPoints,
+    sessionPoints,
     minutes,
     weightedMinutes,
     segments,

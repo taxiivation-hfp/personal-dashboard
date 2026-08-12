@@ -208,7 +208,7 @@ export default function PillarSections({
   colors,
   workouts,
   socialEvents,
-  birchEvents,
+  oneOffEvents,
   skills14,
   date,
   today,
@@ -231,8 +231,9 @@ export default function PillarSections({
    *  Events drill-down. null while loading or when Google could not be reached — those
    *  are different statements from an empty fortnight, and the ring goes ghost. */
   socialEvents: EventItem[] | null;
-  /** The adhered birch events — the one-off kind, the Social ring's mid band. */
-  birchEvents: EventItem[] | null;
+  /** The adhered ONE-OFF social events — the Social ring's mid band. Same graphite as
+   *  the standing ones; what separates them is that these do not repeat. */
+  oneOffEvents: EventItem[] | null;
   /** Per-skill sessions in the window, for the Portfolio ring's segments. */
   skills14: SkillSlice[] | null;
   date: string;
@@ -624,7 +625,7 @@ export default function PillarSections({
          * uses, so the two surfaces cannot drift:
          *
          *   social     inner = adhered graphite events, one slot each against six;
-         *              mid = adhered birch (one-off) events; outer thin = outreach
+         *              mid = adhered one-off social events; outer thin = outreach
          *   portfolio  inner = active skills, arcs by session in each skill's own colour;
          *              mid = parked skills, same unit
          *   physical   the metric donut it always was, misc riding the thin lap
@@ -636,7 +637,7 @@ export default function PillarSections({
         } = bandsForPillar(
           pk,
           ring,
-          { social: socialEvents, birch: birchEvents, skills: skills14 },
+          { social: socialEvents, oneOff: oneOffEvents, skills: skills14 },
           PILLAR_NAME[pk],
         );
 
@@ -876,7 +877,7 @@ export default function PillarSections({
                               ? null
                               : [
                                   ...socialEvents,
-                                  ...(birchEvents ?? []),
+                                  ...(oneOffEvents ?? []),
                                 ]
                                   .sort((a, b) => b.date.localeCompare(a.date))
                                   .map((e, i) => ({

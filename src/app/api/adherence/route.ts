@@ -101,6 +101,18 @@ export async function GET(req: Request) {
     const calByDate = new Map<string, number>();
     for (const r of calRows.rows) calByDate.set(String(r.date), Number(r.total));
 
+    // GYM SESSIONS PER DAY, for the productivity score. Read here again after being taken
+    // out: training is priced per LOGGED SESSION now rather than per scheduled hour, so the
+    // gym_sessions row is the record and the Grape block on the calendar is worth nothing.
+    // See POINTS_PER_SESSION. One ranged query rather than one per day; COUNT is an
+    // aggregate, so libSQL hands it back as a BigInt and Number() applies at the boundary.
+    const gymRows = await db.execute({
+      sql: "SELECT date, COUNT(*) AS n FROM gym_sessions WHERE date BETWEEN ? AND ? GROUP BY date",
+      args: [start, end],
+    });
+    const gymByDate = new Map<string, number>();
+    for (const r of gymRows.rows) gymByDate.set(String(r.date), Number(r.n));
+
     const today = todayISO();
     const nowMs = Date.now();
     const out = [];
@@ -130,8 +142,9 @@ export async function GET(req: Request) {
        * would still report a number built from its non-negotiables while every scheduled
        * hour silently counted as zero — a wrong number rather than an absent one.
        *
-       * Gym sessions are NOT read here any more. A workout scores as a Grape block in the
-       * calendar; paying for the logged row as well would be the same hour counted twice.
+       * Gym sessions ARE read here, and they are the only way training enters the score:
+       * Grape has left CALENDAR_RATES, so the scheduled block pays nothing and the logged
+       * session pays a flat rate. One of the two, never both.
        */
       const productivity = connected
         ? scoreDay({
@@ -142,6 +155,7 @@ export async function GET(req: Request) {
             })),
             habitsDone,
             calories: calByDate.get(d) ?? null,
+            workouts: gymByDate.get(d) ?? 0,
           })
         : null;
 

@@ -11,7 +11,7 @@ import {
   toneColor,
   type EventItem,
 } from "./PillarRing";
-import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
+import { projectedColour, SLAB_GYM, SLAB_NEUTRAL } from "@/lib/eventColor";
 import {
   CALENDAR_RATES,
   CALORIE_FLOOR,
@@ -129,7 +129,7 @@ export default function Dashboard({
   const [facts, setFacts] = useState<PillarFactInput | null>(null);
   /** The band data the fortnight rings draw from — same feed the Today column reads. */
   const [socialEvents, setSocialEvents] = useState<EventItem[] | null>(null);
-  const [birchEvents, setBirchEvents] = useState<EventItem[] | null>(null);
+  const [oneOffEvents, setOneOffEvents] = useState<EventItem[] | null>(null);
   const [skills14, setSkills14] = useState<SkillSlice[] | null>(null);
   const [colors, setColors] = useState<Partial<Record<PillarKey, string | null>>>({});
   const [streak, setStreak] = useState<number | null>(null);
@@ -146,7 +146,7 @@ export default function Dashboard({
         setRings(d.pillars ?? []);
         setFacts(d.facts ?? null);
         setSocialEvents(d.socialEventList ?? null);
-        setBirchEvents(d.birchEventList ?? null);
+        setOneOffEvents(d.oneOffEventList ?? null);
         setSkills14(d.skills14 ?? null);
       })
       .catch(() => {});
@@ -224,16 +224,20 @@ export default function Dashboard({
           key: `${s.kind}-${s.colorId ?? "d"}-${i}`,
           points: s.points,
           fill:
-            s.kind === "time"
-              ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL)
-              : SLAB_NEUTRAL,
+            s.kind === "sessions"
+              ? SLAB_GYM
+              : s.kind === "time"
+                ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL)
+                : SLAB_NEUTRAL,
           // Named the way the week strip names them, from the same table, so the chart's
           // legend and the strip's swatches can never call one colour two things.
           label:
-            s.kind === "time"
-              ? (CALENDAR_RATES.find((c) => c.id === s.colorId)?.label ??
-                "Other")
-              : "Non-negotiables",
+            s.kind === "sessions"
+              ? "Gym"
+              : s.kind === "time"
+                ? (CALENDAR_RATES.find((c) => c.id === s.colorId)?.label ??
+                  "Other")
+                : "Non-negotiables",
         })),
       })),
     [strip],
@@ -417,7 +421,7 @@ export default function Dashboard({
                 const b = bandsForPillar(
                   pk,
                   ring,
-                  { social: socialEvents, birch: birchEvents, skills: skills14 },
+                  { social: socialEvents, oneOff: oneOffEvents, skills: skills14 },
                   PILLAR_NAME[pk],
                 );
                 return (

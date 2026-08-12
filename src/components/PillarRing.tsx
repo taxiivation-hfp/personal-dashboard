@@ -321,7 +321,7 @@ export type RingSegment = {
   color?: string | null;
   /**
    * A SPACER: takes up arc, draws nothing — not even track. For bands with no target
-   * (birch events, parked skills), where the units must stay the size units are but an
+   * (one-off events, parked skills), where the units must stay the size units are but an
    * empty track to the full circle would draw a quota that does not exist.
    */
   bare?: boolean;
@@ -548,7 +548,7 @@ export function SegmentedRing({
   segments: RingSegment[];
   /**
    * A SECOND full band between the donut and the thin outer lap — medium stroke, its own
-   * segments. Social wears its birch events here; Portfolio its parked skills. The three
+   * segments. Social wears its one-off events here; Portfolio its parked skills. The three
    * radii read outward as the standing they encode: the core commitment innermost, the
    * adjacent-but-lesser band around it, the thin extra outermost.
    */
@@ -876,7 +876,7 @@ export function SegmentedRing({
           ))}
 
           {/* THE MID BAND — the second full ring, between the donut and the thin lap.
-              Social's birch events, Portfolio's parked skills: adjacent to the core
+              Social's one-off events, Portfolio's parked skills: adjacent to the core
               commitment but not it, which is what the smaller stroke at the larger radius
               says without a legend. Same slice machinery as the donut, so a weight means
               one thing everywhere. */}
@@ -987,7 +987,7 @@ export type EventItem = { date: string; title: string };
  *
  * Inner (main): the weekly-occurring kind — graphite — one SLOT per event against the
  * owner's six-a-fortnight minimum, empty slots drawn as track because the target is real.
- * Mid: birch, the one-off kind, in the same one-sixth unit but with BARE remainder — they
+ * Mid: the one-off kind, in the same one-sixth unit but with BARE remainder — they
  * have no quota, so nothing may draw one. Outer thin: outreach against its two.
  *
  * `null` events mean the calendar could not be read: the band goes ghost, never zero —
@@ -995,7 +995,7 @@ export type EventItem = { date: string; title: string };
  */
 export function socialBands(
   graphite: EventItem[] | null,
-  birch: EventItem[] | null,
+  oneOff: EventItem[] | null,
   outreach: { count: number; required: number },
   eventsRequired: number,
 ): { segments: RingSegment[]; mid: RingSegment[]; outer: RingSegment[] } {
@@ -1015,24 +1015,24 @@ export function socialBands(
         );
 
   const mid: RingSegment[] =
-    birch == null || birch.length === 0
+    oneOff == null || oneOff.length === 0
       ? []
       : [
-          ...birch.map(
+          ...oneOff.map(
             (_, i): RingSegment => ({
               key: `bi${i}`,
-              label: i === 0 ? "Birch" : undefined,
+              label: i === 0 ? "One-off" : undefined,
               fill: 1,
               weight: 1,
               ghost: false,
             }),
           ),
-          ...(birch.length < eventsRequired
+          ...(oneOff.length < eventsRequired
             ? [
                 {
                   key: "bi-rest",
                   fill: 0,
-                  weight: eventsRequired - birch.length,
+                  weight: eventsRequired - oneOff.length,
                   ghost: false,
                   bare: true,
                 } satisfies RingSegment,
@@ -1139,7 +1139,7 @@ export function bandsForPillar(
   ring: PillarRingView | null,
   data: {
     social: EventItem[] | null;
-    birch: EventItem[] | null;
+    oneOff: EventItem[] | null;
     skills: SkillSlice[] | null;
   },
   pillarName: string,
@@ -1156,7 +1156,7 @@ export function bandsForPillar(
     const om = ring?.metrics.find((m) => m.key === "outreach");
     return socialBands(
       data.social,
-      data.birch,
+      data.oneOff,
       { count: om?.count ?? 0, required: om?.required ?? 2 },
       METRICS.find((m) => m.key === "social_events")?.required ?? 6,
     );

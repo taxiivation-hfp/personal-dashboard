@@ -16,6 +16,7 @@ import NextUp from "./NextUp";
 import WeightLog from "./WeightLog";
 import StepsLog from "./StepsLog";
 import StepsRefresh from "./StepsRefresh";
+import ProductivityLog from "./ProductivityLog";
 import Dashboard from "./Dashboard";
 import JournalPanel from "./JournalPanel";
 import CoachNote from "./CoachNote";
@@ -25,7 +26,7 @@ import Ring, { toneColor } from "./PillarRing";
 import { PhoneTabBar, PhoneSwipe, type PhoneTab } from "./PhoneTabs";
 import type { Workout } from "./WorkoutLog";
 import { addDays, daysBetween, prettyDate, todayISO } from "@/lib/dates";
-import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
+import { projectedColour, SLAB_GYM, SLAB_NEUTRAL } from "@/lib/eventColor";
 import { CALENDAR_RATES, type ProductivitySegment } from "@/lib/productivity";
 import type {
   DayView,
@@ -67,10 +68,20 @@ type StripDay = {
  */
 const STRIP_GAP_PCT = 2;
 
-/** The stack, bottom-up, in the fill each slab is drawn with. Blocked time keeps the colour
- *  it had in the calendar; the one thing that is not blocked time goes grey. */
+/**
+ * The stack, bottom-up, in the fill each slab is drawn with.
+ *
+ * Blocked time keeps the colour it had in the calendar. Logged training takes SLAB_GYM —
+ * the hue gym already wears here, free now that Grape has left the rate table. The ticked
+ * things go grey, because there is no calendar colour behind a non-negotiable for a hue to
+ * mean.
+ */
 const slabFill = (s: ProductivitySegment): string =>
-  s.kind === "time" ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL) : SLAB_NEUTRAL;
+  s.kind === "sessions"
+    ? SLAB_GYM
+    : s.kind === "time"
+      ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL)
+      : SLAB_NEUTRAL;
 
 // Desktop only: each column owns its scroll, bounded to whatever the masthead leaves.
 //
@@ -222,8 +233,9 @@ export default function Today({
   const [socialEvents, setSocialEvents] = useState<
     { date: string; title: string }[] | null
   >(null);
-  /** The adhered birch (one-off) events — the Social ring's mid band. */
-  const [birchEvents, setBirchEvents] = useState<
+  /** The adhered ONE-OFF social events — the Social ring's mid band. Same graphite as
+   *  the standing ones; what separates them is that these do not repeat. */
+  const [oneOffEvents, setOneOffEvents] = useState<
     { date: string; title: string }[] | null
   >(null);
   /** Per-skill sessions in the window — the Portfolio ring's segments. */
@@ -241,6 +253,10 @@ export default function Today({
   const [weightOpen, setWeightOpen] = useState(false);
   /** The step trend dialog, raised from the Steps row's count. */
   const [stepsOpen, setStepsOpen] = useState(false);
+  /** Which day's productivity workings are open, raised from a column of the week strip.
+   *  Any day on the strip, including the one on screen — a score explains itself whether
+   *  or not you are standing on it. */
+  const [scoreDay, setScoreDay] = useState<string | null>(null);
   /**
    * Set the moment the refresh button is tapped, cleared by the read that answers it.
    *
@@ -371,7 +387,7 @@ export default function Today({
         // undefined on a calendar failure, and passed through as such — the Events
         // drill-down says "unavailable" rather than showing an empty fortnight.
         setSocialEvents(s.socialEventList ?? null);
-        setBirchEvents(s.birchEventList ?? null);
+        setOneOffEvents(s.oneOffEventList ?? null);
         setSkills14(s.skills14 ?? null);
       })
       .catch(() => {});
@@ -648,11 +664,12 @@ export default function Today({
             rank: i < 0 ? CALENDAR_RATES.length : i,
           });
         } else {
-          // After every calendar colour: the hours came first, and this is the one thing
-          // in the bar that was not an hour.
+          // After every calendar colour: the hours came first, and these two are the
+          // things in the bar that were not hours. Gym before the ticks, matching the
+          // order they are stacked in.
           seen.set(fill, {
-            label: "Non-negotiables",
-            rank: CALENDAR_RATES.length + 1,
+            label: s.kind === "sessions" ? "Gym" : "Non-negotiables",
+            rank: CALENDAR_RATES.length + (s.kind === "sessions" ? 1 : 2),
           });
         }
       }
@@ -1138,10 +1155,10 @@ export default function Today({
               long ago — it prints its own number above its own bar, and naming it here
               would be the third time. What is left is the columns' SCALE, which is
               uncapped and therefore has to be stated, and the one thing about this chart
-              that is invisible: that a column is a way into its day. */}
+              that is invisible: that a column will explain itself. */}
           <span className="text-micro text-[var(--color-muted)]">
-            seven days to today · hours to this week&apos;s high · tap a day to
-            open it
+            seven days to today · hours to this week&apos;s high · tap a day for
+            its workings
           </span>
           {/* TODAY ONLY. The streak comes from the VIEWED day's DayView — getStreak counts
               the run ending on whatever day was asked for — and this card is anchored to
@@ -1159,12 +1176,17 @@ export default function Today({
           )}
         </div>
 
-        {/* THE STRIP IS ALSO THE WAY BACK.
+        {/* TAPPING A COLUMN OPENS ITS WORKINGS, not the day.
 
-            Seven days, and each column is the day it draws — tapping one moves the whole
-            screen onto it, which is the answer to "I did it on Tuesday and forgot to say
-            so". The strip was already the only place on this screen that names the last
-            week, so it is where a hand reaches.
+            The column is a SCORE, so the question a finger asks of it is "why is it that
+            tall" — and that question had no answer anywhere in the app: the strip prints no
+            productivity number by design, so a day that felt busy and drew a stub was a
+            mystery with nothing to read. The breakdown is that answer, and it carries the
+            half the bar cannot draw at all: the hours that scored NOTHING, and why.
+
+            Navigating to the day lives on the date line's arrows instead, and inside this
+            sheet as a quiet link — the commonest thing the workings make you want to do is
+            go and mark the block that did not count.
 
             The target is ONE TRANSPARENT BUTTON PER COLUMN, laid over all four rows rather
             than built into any of them. The four rows have to line up over each other and
@@ -1181,10 +1203,10 @@ export default function Today({
             {strip.map((d) => (
               <button
                 key={d.date}
-                onClick={() => goToDay(d.date)}
-                disabled={moving != null || d.date === data.date}
+                onClick={() => setScoreDay(d.date)}
+                aria-haspopup="dialog"
                 aria-current={d.date === data.date ? "date" : undefined}
-                aria-label={`${prettyDate(d.date)} · ${d.pct}% — open this day`}
+                aria-label={`${prettyDate(d.date)} · ${d.pct}% adhered — see how the day scored`}
                 // No hover fill and no ring: the columns beneath carry three ink levels
                 // and a stack of calendar colours, and any wash over them would tint a
                 // chart made of colours. The cursor is the whole affordance on a laptop,
@@ -1423,6 +1445,19 @@ export default function Today({
       {stepsOpen && (
         <StepsLog date={data.date} onClose={() => setStepsOpen(false)} />
       )}
+
+      {/* The day's workings, raised from its column on the strip. Mounted only while open,
+          so its read never runs behind a closed sheet. */}
+      {scoreDay && (
+        <ProductivityLog
+          date={scoreDay}
+          onClose={() => setScoreDay(null)}
+          onOpenDay={(d) => {
+            setScoreDay(null);
+            goToDay(d);
+          }}
+        />
+      )}
     </div>
   );
 
@@ -1435,7 +1470,7 @@ export default function Today({
       colors={colors}
       workouts={workouts}
       socialEvents={socialEvents}
-      birchEvents={birchEvents}
+      oneOffEvents={oneOffEvents}
       skills14={skills14}
       date={data.date}
       today={today}
