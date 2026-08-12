@@ -211,6 +211,7 @@ export default function PillarSections({
   birchEvents,
   skills14,
   date,
+  today,
   onSubgoal,
   onLogTime,
   onUndoTime,
@@ -235,6 +236,10 @@ export default function PillarSections({
   /** Per-skill sessions in the window, for the Portfolio ring's segments. */
   skills14: SkillSlice[] | null;
   date: string;
+  /** The real today. Everything here is anchored to `date` — the fortnight, the ring
+   *  window, the session list — and only the workout dialog's date picker needs to know
+   *  where the calendar actually ends. */
+  today?: string;
   onSubgoal: (id: number, done: boolean) => Promise<void>;
   onLogTime: (skillId: number, minutes: number) => Promise<void>;
   onUndoTime: (skillId: number) => Promise<void>;
@@ -1323,6 +1328,7 @@ export default function PillarSections({
           kind={openLog.kind}
           label={WORKOUTS.find((w) => w.kind === openLog.kind)!.label}
           date={date}
+          today={today}
           workout={
             openLog.id == null
               ? null

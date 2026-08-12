@@ -43,14 +43,25 @@ const PANE =
 
 export default function CalorieLog({
   date,
+  today,
   total,
   entries,
   initialDay,
   onChanged,
   onClose,
 }: {
-  /** TODAY — the anchor the picker cannot pass and the history is measured back from. */
+  /** THE DAY THIS OPENED ON — the day it writes to by default, and the day the history is
+   *  measured back from. Usually today; not when the owner has stepped back to catch up. */
   date: string;
+  /**
+   * The REAL today, and the only thing the picker may not pass.
+   *
+   * It used to be `date` that capped the picker, which was the same value until Today
+   * learned to show a past day — after which stepping back to Tuesday quietly made
+   * Wednesday unreachable, and the control became narrower than the sentence beside it
+   * claims. A meal in the future has not happened; a meal on Wednesday has.
+   */
+  today?: string;
   /** Today's figures, as a seed so the dialog paints instantly; its own fetch is the
    *  authority thereafter. */
   total: number | null;
@@ -61,6 +72,9 @@ export default function CalorieLog({
   onChanged: () => void;
   onClose: () => void;
 }) {
+  /** The far end of the picker. Falls back to the opening day for the callers that have
+   *  no view of a separate today — which is every caller that opens on one. */
+  const cap = today ?? date;
   const [name, setName] = useState("");
   const [kcal, setKcal] = useState("");
   const [busy, setBusy] = useState(false);
@@ -218,7 +232,7 @@ export default function CalorieLog({
         <input
           type="date"
           value={day}
-          max={date}
+          max={cap}
           onChange={(e) => e.target.value && setDay(e.target.value)}
           className="rounded border border-transparent bg-transparent px-1 py-0.5 font-serif text-micro text-[var(--color-ink)] outline-none transition-colors hover:border-[var(--color-line)] focus:border-[var(--color-accent)]"
         />
@@ -228,7 +242,10 @@ export default function CalorieLog({
             onClick={() => setDay(date)}
             className="underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
           >
-            back to today
+            {/* Back to the day this OPENED on, which is the day the owner was looking at —
+                calling that "today" when it is not is the one word that would make a
+                backdated log write to the wrong day with the screen agreeing. */}
+            back to {date === cap ? "today" : dayHeading(date)}
           </button>
         )}
         <span aria-hidden>·</span>
@@ -289,7 +306,7 @@ export default function CalorieLog({
               additive log a mistyped 20000 must never be a permanent fact. */}
           {view.entries.length === 0 ? (
             <p className="mt-6 text-small text-[var(--color-muted)]">
-              Nothing logged {day === date ? "today" : `on ${dayHeading(day)}`}{" "}
+              Nothing logged {day === cap ? "today" : `on ${dayHeading(day)}`}{" "}
               yet.
             </p>
           ) : (

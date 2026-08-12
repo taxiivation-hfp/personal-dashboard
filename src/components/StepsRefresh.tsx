@@ -63,9 +63,27 @@ export default function StepsRefresh({
    * it has.
    */
   onRun,
+  /**
+   * Is the row showing the REAL today?
+   *
+   * Both halves of this control assume it. The button asks the phone for a fresh count,
+   * and the Shortcut it launches pushes to whatever day the SERVER calls today — so on a
+   * day you have navigated back to, tapping it would write a number into a row that is not
+   * on screen and leave the figure you are looking at exactly where it was. That is the
+   * "I assume it failed" the button exists to prevent, arrived at from the other side.
+   *
+   * The staleness dressing assumes it too: dashed-and-ink means "the phone has stopped
+   * pushing", which is a true and useful thing to say about this morning and a meaningless
+   * one about a Tuesday three weeks ago, where of course the last push is days old.
+   *
+   * The AGE still prints. It is a fact about the reading either way, and hiding it would
+   * hide the honest half of the control.
+   */
+  live = true,
 }: {
   updatedAt: string | null;
   onRun?: () => void;
+  live?: boolean;
 }) {
   // Both start FALSE / fixed on the server and are corrected in an effect: navigator does
   // not exist during the render that produces the HTML, and a clock read during it would
@@ -94,7 +112,7 @@ export default function StepsRefresh({
     now == null || !updatedAt
       ? null
       : Math.max(0, Math.floor((now - Date.parse(updatedAt)) / 60_000));
-  const stale = minutes == null || minutes >= STALE_MINUTES;
+  const stale = live && (minutes == null || minutes >= STALE_MINUTES);
 
   // Nothing pushed is its own statement and not a staleness reading: "0m ago" would be a
   // lie about a figure that does not exist. Kept short because this sits in a ~150px
@@ -119,7 +137,7 @@ export default function StepsRefresh({
     ? "border-dashed border-[var(--color-line-strong)] text-[var(--color-ink)]"
     : "border-[var(--color-line-strong)] text-[var(--color-muted)]";
 
-  if (!isIOS)
+  if (!isIOS || !live)
     return (
       <span
         title={title}

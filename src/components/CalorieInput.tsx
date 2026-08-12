@@ -21,11 +21,15 @@ import type { CalorieEntry } from "@/lib/queries";
  */
 export default function CalorieInput({
   date,
+  today,
   calories,
   entries,
   onChanged,
 }: {
   date: string;
+  /** The real today, so the log's date picker is capped by the calendar rather than by
+   *  whichever day the checklist happens to be showing. */
+  today?: string;
   calories: number | null;
   entries: CalorieEntry[];
   onChanged: () => void;
@@ -70,6 +74,7 @@ export default function CalorieInput({
       {open && (
         <CalorieLog
           date={date}
+          today={today}
           total={calories}
           entries={entries}
           onChanged={onChanged}

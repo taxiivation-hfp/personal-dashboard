@@ -294,6 +294,69 @@ export async function saveJournalEntry(
   }
 }
 
+/**
+ * Rewrite a page that already exists.
+ *
+ * A journal you can only add to is a journal that keeps its typos forever, and the owner
+ * asked for the opposite: a typed page reopens with its words and you edit them, a
+ * handwritten one reopens with its ink under the pen and you carry on.
+ *
+ * `kind` CANNOT CHANGE, and that is enforced here rather than trusted to the caller.
+ * Turning a drawing into a text page would silently drop the only copy of some
+ * handwriting; turning a text page into a drawing would leave words in a row nothing ever
+ * reads again. So the update is matched against what the row already is, and a mismatch is
+ * an error rather than a write — the same ruling the schema comment makes about `kind`
+ * being the discriminator, applied to the one operation that could break it.
+ *
+ * No habit tick to do: a page already exists for the day, so the Journal non-negotiable is
+ * already ticked and editing cannot be the thing that ticks it. Nothing is stamped either.
+ * An "edited" mark would be the app looking over the owner's shoulder at their own diary.
+ *
+ * Returns false when there is no such row, so a caller can 404 rather than report a
+ * successful write that touched nothing.
+ */
+export async function updateJournalEntry(
+  db: Client,
+  id: number,
+  patch:
+    | { kind: "text"; body: string }
+    | { kind: "drawing"; image: string; width?: number | null; height?: number | null },
+): Promise<boolean> {
+  const tx = await db.transaction("write");
+  try {
+    const r = await tx.execute({
+      sql: "SELECT kind FROM journal_entries WHERE id=?",
+      args: [id],
+    });
+    if (!r.rows.length) {
+      await tx.rollback();
+      return false;
+    }
+    const kind = String(r.rows[0].kind ?? "drawing");
+    if (kind !== patch.kind) {
+      await tx.rollback();
+      throw new Error(`page ${id} is a ${kind} page, not ${patch.kind}`);
+    }
+
+    if (patch.kind === "text") {
+      await tx.execute({
+        sql: "UPDATE journal_entries SET body=? WHERE id=?",
+        args: [patch.body, id],
+      });
+    } else {
+      await tx.execute({
+        sql: "UPDATE journal_entries SET image=?, width=?, height=? WHERE id=?",
+        args: [patch.image, patch.width ?? null, patch.height ?? null, id],
+      });
+    }
+    await tx.commit();
+    return true;
+  } catch (e) {
+    await tx.rollback();
+    throw e;
+  }
+}
+
 export async function deleteJournalEntry(
   db: Client,
   id: number,

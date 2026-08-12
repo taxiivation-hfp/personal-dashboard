@@ -52,6 +52,7 @@ export default function WorkoutLog({
   kind,
   label,
   date,
+  today,
   workout,
   hue,
   onSave,
@@ -61,6 +62,10 @@ export default function WorkoutLog({
   kind: WorkoutKind;
   label: string;
   date: string;
+  /** The real today — the one thing the picker may not pass. Separate from `date` since
+   *  Today learned to show a past day: capping at the VIEWED day would have made a
+   *  session you did yesterday unwritable from a screen showing last Tuesday. */
+  today?: string;
   workout: Workout | null;
   hue: string;
   /** The date is passed BACK on save, because the dialog may have changed it. */
@@ -161,7 +166,7 @@ export default function WorkoutLog({
         <input
           type="date"
           value={day}
-          max={date}
+          max={today ?? date}
           onChange={(e) => e.target.value && setDay(e.target.value)}
           className="rounded border border-transparent bg-transparent px-1 py-0.5 font-serif text-micro text-[var(--color-ink)] outline-none transition-colors hover:border-[var(--color-line)] focus:border-[var(--color-accent)]"
         />
@@ -171,7 +176,14 @@ export default function WorkoutLog({
             onClick={() => setDay(date)}
             className="underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
           >
-            back to today
+            {/* Back to the day the dialog OPENED on, which is not always today any more. */}
+            back to{" "}
+            {date === (today ?? date)
+              ? "today"
+              : onDay(date).toLocaleDateString("en-AU", {
+                  day: "numeric",
+                  month: "short",
+                })}
           </button>
         )}
       </label>

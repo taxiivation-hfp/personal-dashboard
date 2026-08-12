@@ -1,23 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import JournalReader from "./JournalReader";
+import Sheet from "./Sheet";
 import type { JournalPage } from "@/lib/queries";
 
 /**
- * EVERY PAGE EVER WRITTEN, grouped by month — the journal's record.
+ * EVERY PAGE EVER WRITTEN, grouped by month — the journal's record, and now a place you can
+ * actually read.
  *
- * The shelf used to live at the foot of Today, under the day's blocks, which put the
- * archive on the acting screen: Today is where you write tonight's page, and this is where
- * you go back — the same split /stats draws between acting and looking, so it gets the
- * same architecture: a route of its own, wearing the window.
+ * It was a shelf of 84px thumbnails. A drawing at that size is a grey smudge you open in a
+ * browser tab as a raw PNG; a typed page was a blank card with the first hundred and forty
+ * characters printed on it and NO WAY THROUGH TO THE REST. Everything typed into this app
+ * was, in practice, write-only — which is the one thing a journal may not be.
+ *
+ * So the shelf became a LIST, and the unit is a page rather than a tile: the page in
+ * miniature on the left, the day it belongs to and the line it opens with beside it, and the
+ * whole row is the way in. The opening line is what tells two Tuesdays apart, and a
+ * thumbnail cannot carry it — that is the argument for a row over a grid, and the reason a
+ * contact sheet was the wrong shape for this even though it looks better in a screenshot.
  *
  * Months, not days, because that is how you leaf back through a journal — days are for
  * finding, months are for remembering. Newest month first, and inside a month the pages run
  * newest first too: leafing back, not reading forward.
  *
- * No transcription, no search, no themes. The pages are the artefact; this screen only
- * shelves them.
+ * No transcription, no search, no themes. The pages are the artefact; this screen shelves
+ * them and opens them.
  */
 
 /** Noon, never midnight: a bare ISO date parses as UTC and lands on the day before
@@ -31,11 +40,32 @@ const monthHeading = (ym: string) =>
   });
 
 const dayLabel = (iso: string) =>
-  onDay(iso).toLocaleDateString("en-AU", { weekday: "short", day: "numeric" });
+  onDay(iso).toLocaleDateString("en-AU", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
 
 export default function JournalArchive({ initial }: { initial: JournalPage[] }) {
   const [pages, setPages] = useState<JournalPage[]>(initial);
-  const [confirming, setConfirming] = useState<number | null>(null);
+  const [reading, setReading] = useState<number | null>(null);
+
+  /** Re-read after the reader writes or deletes. The list is metadata only — previews at
+   *  140 characters — so re-reading all of it is cheaper than reconciling one row. */
+  const reload = useCallback(() => {
+    fetch("/api/journal")
+      .then((r) => r.json())
+      .then((d) => !d.error && setPages(d.pages ?? []))
+      .catch(() => {});
+  }, []);
+
+  /** A page deleted out from under the reader must not leave it open on a row that is
+   *  gone. The reader moves itself to a neighbour first; this is the case where there was
+   *  no neighbour left. */
+  useEffect(() => {
+    if (reading != null && !pages.some((p) => p.id === reading))
+      setReading(null);
+  }, [pages, reading]);
 
   /** "2026-08" -> its pages, insertion-ordered — the query already sorts newest first. */
   const byMonth = useMemo(() => {
@@ -47,12 +77,6 @@ export default function JournalArchive({ initial }: { initial: JournalPage[] }) 
     }
     return [...m.entries()];
   }, [pages]);
-
-  async function remove(id: number) {
-    await fetch(`/api/journal/${id}`, { method: "DELETE" }).catch(() => {});
-    setConfirming(null);
-    setPages((ps) => ps.filter((p) => p.id !== id));
-  }
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--color-bg)] text-[var(--color-ink)]">
@@ -97,82 +121,81 @@ export default function JournalArchive({ initial }: { initial: JournalPage[] }) 
                   </span>
                 </div>
 
-                {/* The shelf, exactly as Today drew it: paper thumbnails, drawings as
-                    themselves. The date sits under each page — out of the day's context it
-                    is the only thing that tells two Tuesdays apart. */}
-                <div className="mt-4 flex flex-wrap items-start gap-x-3 gap-y-4">
+                {/* Rows on hairlines, the way the day's blocks are drawn — a month is a
+                    list of entries, and a grid of cards would be a dashboard of them. */}
+                <ul className="divide-y divide-[var(--color-line)]">
                   {mine.map((p) => (
-                    <div key={p.id} className="relative">
-                      {p.kind === "text" ? (
-                        <div
-                          className="flex h-[119px] w-[84px] overflow-hidden rounded-lg border border-[var(--color-line)] p-2"
-                          style={{ background: "#fdfbf6" }}
-                        >
-                          <span className="line-clamp-6 font-serif text-micro text-[var(--color-ink)]">
-                            {p.preview || "…"}
-                          </span>
-                        </div>
-                      ) : (
-                        <a
-                          href={`/api/journal/${p.id}/image`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`/api/journal/${p.id}/image`}
-                            alt={`Handwritten page from ${p.date}`}
-                            loading="lazy"
-                            className="h-[119px] w-[84px] rounded-lg border border-[var(--color-line)] object-cover object-top"
-                          />
-                        </a>
-                      )}
-                      <p className="mt-1 text-center text-micro tabular-nums text-[var(--color-muted)]">
-                        {dayLabel(p.date)}
-                      </p>
-
-                      {/* Always present rather than revealed on hover — phone first, and a
-                          hidden control is an absent one. Quiet, because it is the one
-                          destructive thing on the shelf. */}
+                    <li key={p.id}>
                       <button
-                        onClick={() => setConfirming(p.id)}
-                        aria-label="Delete this page"
-                        className="absolute -right-2 -top-2 rounded-full p-1 text-micro leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
+                        onClick={() => setReading(p.id)}
+                        className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-4 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-bg)]"
                       >
-                        ×
-                      </button>
+                        {/* THE PAGE IN MINIATURE. Ruled, because the ruling scales with the
+                            sheet — a thumbnail is a small page, not a page with tiny lines.
+                            That is the whole of `.sheet`, and it is why a typed page on this
+                            list finally looks like paper rather than like a blank card. */}
+                        {p.kind === "text" ? (
+                          <Sheet className="w-[4.5rem] shrink-0 rounded border border-[var(--color-line)]">
+                            <div className="sheet-text">{p.preview || "…"}</div>
+                          </Sheet>
+                        ) : (
+                          <Sheet
+                            rules={false}
+                            className="w-[4.5rem] shrink-0 rounded border border-[var(--color-line)]"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`/api/journal/${p.id}/image`}
+                              alt=""
+                              loading="lazy"
+                              className="h-full w-full object-cover object-top"
+                            />
+                          </Sheet>
+                        )}
 
-                      {/* One stray tap must never destroy handwriting. Same ask, same
-                          panel, as the Today shelf it replaces. */}
-                      {confirming === p.id && (
-                        <div className="absolute left-0 top-full z-[var(--z-popover)] mt-1.5 w-48 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] p-3">
-                          <p className="text-small leading-snug">
-                            Delete this page? It can&apos;t be undone.
-                          </p>
-                          <div className="mt-3 flex items-center gap-3">
-                            <button
-                              onClick={() => remove(p.id)}
-                              className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90"
-                            >
-                              Delete
-                            </button>
-                            <button
-                              onClick={() => setConfirming(null)}
-                              className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                            >
-                              Keep
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-3">
+                            {/* The date IS the title. Out of the day's context it is the
+                                only thing that tells two Tuesdays apart. */}
+                            <span className="min-w-0 truncate font-serif text-body">
+                              {dayLabel(p.date)}
+                            </span>
+                            <span className="shrink-0 text-micro text-[var(--color-muted)]">
+                              {p.kind === "text" ? "typed" : "handwritten"}
+                            </span>
+                          </span>
+                          {p.kind === "text" && (
+                            // The line it opens with, in the owner's serif. Two lines and
+                            // no ellipsis: the clip is the edge of the excerpt, and a
+                            // "read more" affordance would be a second control on a row
+                            // that is already one big one.
+                            <span className="mt-0.5 line-clamp-2 block max-w-[68ch] font-serif text-small text-[var(--color-muted)]">
+                              {p.preview || "…"}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </section>
             ))}
           </div>
         </div>
       </main>
+
+      {/* One page, open. Delete lives IN here rather than on the row — the one destructive
+          control in the journal now sits where the page is legible, instead of hanging off
+          a thumbnail nobody could read. */}
+      {reading != null && (
+        <JournalReader
+          pages={pages}
+          id={reading}
+          onId={setReading}
+          onChanged={reload}
+          onClose={() => setReading(null)}
+        />
+      )}
     </div>
   );
 }

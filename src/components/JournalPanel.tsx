@@ -2,17 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import JournalCanvas from "./JournalCanvas";
+import JournalReader from "./JournalReader";
 import JournalText from "./JournalText";
+import Sheet from "./Sheet";
 import type { JournalView } from "@/lib/queries";
 
 /**
- * A page is saved as handwriting or as words, and left as whatever it was — no
- * transcription in either direction. So this panel shows the page itself rather than
- * anything read back out of it.
+ * THE WAY IN, and nothing else visible.
  *
- * `kind` is the discriminator throughout. A text entry stores image='' (see the schema
- * comment), so testing for an empty image would work by accident today and break the
- * moment anything else writes a blank — never do it.
+ * The Journal row of the day's checklist raises this: the journal is written, not ticked,
+ * so its row asks which kind of page rather than toggling a box. The shelf of pages that
+ * used to hang at the foot of Today is gone to /journal, kept by month — the same
+ * acting/looking split /stats draws.
+ *
+ * A page is saved as handwriting or as words, and left as whatever it was — no transcription
+ * in either direction. `kind` is the discriminator throughout: a text entry stores image='',
+ * so testing for an empty image would work by accident today and break the moment anything
+ * else writes a blank.
+ *
+ * WHAT IS NEW HERE IS THE DAY'S OWN PAGES. Writing a second page was the only thing this
+ * chooser could do; the pages already written were listed nowhere it could reach, so the way
+ * to reread tonight's page was to leave for the archive and find the date. They sit on the
+ * chooser now, as pages, and tapping one opens it to read or to change.
  */
 type Mode = null | "draw" | "type";
 
@@ -20,50 +31,38 @@ export default function JournalPanel({
   date,
   entries,
   onChanged,
+  /** Is this the real today? Only the words: a page written on a day you stepped back to
+   *  is still that day's page, and calling it "tonight's" would be the app telling you
+   *  what day it is and getting it wrong. */
+  live = true,
   prompt = false,
-  actions = true,
-  shelf = true,
   onPromptHandled,
 }: {
   date: string;
   entries: JournalView[];
   onChanged: () => void;
-  /** Raised by the Journal row in the day's checklist. The journal is written, not ticked,
-   *  so its row asks which kind of page rather than toggling a box. */
+  live?: boolean;
+  /** Raised by the Journal row in the day's checklist. */
   prompt?: boolean;
-  /**
-   * Show the inline write / type buttons.
-   *
-   * False on Today, where the checklist row is the way in and these were the same two
-   * choices offered a second time twenty lines below.
-   */
-  actions?: boolean;
-  /**
-   * Show the shelf of page thumbnails.
-   *
-   * False on Today: the archive lives at /journal now, kept by month, and the shelf at the
-   * foot of the day was the acting screen carrying the looking-back job. The panel stays
-   * mounted with the shelf off because it owns the chooser and the writing surface the
-   * checklist row opens — the way IN lives here even when the pages do not.
-   */
-  shelf?: boolean;
   onPromptHandled?: () => void;
 }) {
   const [mode, setMode] = useState<Mode>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<number | null>(null);
+  /** Which page is open in the reader, by id. */
+  const [reading, setReading] = useState<number | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const chooserRef = useRef<HTMLDialogElement>(null);
 
-  // The chooser stands down the moment a kind is picked — the page itself is the next
-  // thing on screen, and two stacked modals would be one too many.
+  // The chooser stands down the moment a kind is picked, or a page is opened — the page
+  // itself is the next thing on screen, and two stacked modals would be one too many.
   useEffect(() => {
     const d = chooserRef.current;
     if (!d) return;
-    if (prompt && !mode && !d.open) d.showModal();
-    if ((!prompt || mode) && d.open) d.close();
-  }, [prompt, mode]);
+    const busyElsewhere = Boolean(mode) || reading != null;
+    if (prompt && !busyElsewhere && !d.open) d.showModal();
+    if ((!prompt || busyElsewhere) && d.open) d.close();
+  }, [prompt, mode, reading]);
 
   const choose = (m: Mode) => {
     onPromptHandled?.();
@@ -97,133 +96,93 @@ export default function JournalPanel({
     }
   }
 
-  async function remove(id: number) {
-    await fetch(`/api/journal/${id}`, { method: "DELETE" });
-    setConfirming(null);
-    onChanged();
-  }
+  const written = entries.length > 0;
 
   return (
     <>
-      <div
-        className={`flex-wrap items-start gap-3 ${shelf ? "flex" : "hidden"}`}
-      >
-        {entries.map((e) => (
-          <div key={e.id} className="relative">
-            {e.kind === "text" ? (
-              // Paper, not panel. The colour is the same one baked into a drawn page's PNG,
-              // so a typed page and a handwritten one sit on the shelf as one artefact
-              // rather than reading as two features — and the preview takes the serif
-              // because the words in it are the owner's.
-              <div
-                className="flex h-[119px] w-[84px] overflow-hidden rounded-lg border border-[var(--color-line)] p-2"
-                style={{ background: "#fdfbf6" }}
-              >
-                <span className="line-clamp-6 font-serif text-micro text-[var(--color-ink)]">
-                  {e.preview || "…"}
-                </span>
-              </div>
-            ) : (
-              <a
-                href={`/api/journal/${e.id}/image`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/journal/${e.id}/image`}
-                  alt="Today's handwritten page"
-                  className="h-[119px] w-[84px] rounded-lg border border-[var(--color-line)] object-cover object-top"
-                />
-              </a>
-            )}
-            {/* Always present rather than revealed on hover: this app is opened from a phone
-                home screen, where hover never fires and a hidden control is an absent one.
-                Quiet enough that the eye isn't drawn to the one destructive thing here. */}
-            <button
-              onClick={() => setConfirming(e.id)}
-              aria-label="Delete this page"
-              className="absolute -right-2 -top-2 rounded-full p-1 text-micro leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
-            >
-              ×
-            </button>
-
-            {/* One stray tap used to destroy a page with no undo, against real
-                handwriting. It asks now.
-
-                No shadow, despite genuinely floating. It was the last one left in the
-                codebase after this pass, and a single unexplained lift reads as an
-                oversight rather than a system. The panel surface against the page, the
-                hairline and the z-index already say "above"; that is the whole depth
-                model, and it is enough. */}
-            {confirming === e.id && (
-              <div className="absolute left-0 top-full z-[var(--z-popover)] mt-1.5 w-48 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)] p-3">
-                <p className="text-small leading-snug">
-                  Delete this page? It can&apos;t be undone.
-                </p>
-                <div className="mt-3 flex items-center gap-3">
-                  <button
-                    onClick={() => remove(e.id)}
-                    className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    onClick={() => setConfirming(null)}
-                    className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                  >
-                    Keep
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* Sitting on the same bottom edge as the pages beside it, so the shelf has one
-            line rather than controls hovering at the top of tall thumbnails. */}
-        <div
-          className={`items-center gap-3 self-end ${actions ? "flex" : "hidden"}`}
-        >
-          <button
-            onClick={() => setMode("draw")}
-            className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-panel)]"
-          >
-            {entries.length ? "Write another page" : "Write today's page"}
-          </button>
-          <button
-            onClick={() => setMode("type")}
-            className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-          >
-            or type it
-          </button>
-        </div>
-      </div>
-
       {/* The chooser, raised from the day's checklist. Two equally-weighted options: a
           handwritten page and a typed one are the same artefact here, and giving either a
           filled button would quietly nominate one as the proper way to keep a journal. */}
       <dialog
         ref={chooserRef}
         onClose={() => onPromptHandled?.()}
-        className="w-[min(92vw,22rem)] rounded-2xl bg-[var(--color-panel)] p-5 text-[var(--color-ink)]"
+        className="w-[min(92vw,24rem)] rounded-2xl bg-[var(--color-panel)] p-5 text-[var(--color-ink)]"
       >
-        <p className="font-serif text-body">Tonight&apos;s page</p>
-        <p className="mt-1 text-micro text-[var(--color-muted)]">
-          Both land on the same sheet. Nothing reads it back.
+        <p className="font-serif text-body">
+          {live ? "Tonight's page" : "That day's page"}
         </p>
-        <div className="mt-4 flex flex-wrap gap-2.5">
+        <p className="mt-1 text-micro text-[var(--color-muted)]">
+          {written
+            ? "What is already on this day, and room for another."
+            : "Both land on the same sheet. Nothing reads it back."}
+        </p>
+
+        {/* THE DAY'S PAGES, as pages. Small ruled sheets rather than a list of links: a
+            journal page is an object, and the one thing that tells two of them apart at
+            this size is what is on the paper. */}
+        {written && (
+          <ul className="mt-4 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+            {entries.map((e) => (
+              <li key={e.id}>
+                {/* A ROW, not a bare tile — the same shape the archive uses, and for the
+                    same reason. A page in miniature is the page's likeness, not its name:
+                    at 72px the ruled preview is a grey texture, so two typed pages written
+                    on one Tuesday would have been two identical smudges and the only thing
+                    telling them apart would have been an aria-label nobody sees. The
+                    opening line beside the sheet is what makes the choice a choice. */}
+                <button
+                  onClick={() => {
+                    onPromptHandled?.();
+                    setReading(e.id);
+                  }}
+                  className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+                >
+                  {e.kind === "text" ? (
+                    <Sheet className="w-[2.75rem] shrink-0 rounded border border-[var(--color-line)]">
+                      <div className="sheet-text">{e.preview || "…"}</div>
+                    </Sheet>
+                  ) : (
+                    <Sheet
+                      rules={false}
+                      className="w-[2.75rem] shrink-0 rounded border border-[var(--color-line)]"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/journal/${e.id}/image`}
+                        alt=""
+                        className="h-full w-full object-cover object-top"
+                      />
+                    </Sheet>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    {e.kind === "text" ? (
+                      <span className="line-clamp-2 block font-serif text-small text-[var(--color-ink)]">
+                        {e.preview || "…"}
+                      </span>
+                    ) : (
+                      <span className="block text-small text-[var(--color-muted)]">
+                        handwritten
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => choose("draw")}
             className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-bg)]"
           >
-            Write it
+            {written ? "Write another" : "Write it"}
           </button>
           <button
             onClick={() => choose("type")}
             className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small transition-colors hover:bg-[var(--color-bg)]"
           >
-            Type it
+            {written ? "Type another" : "Type it"}
           </button>
           <button
             onClick={() => onPromptHandled?.()}
@@ -232,6 +191,7 @@ export default function JournalPanel({
             not now
           </button>
         </div>
+
         {/* The way back through the written ones — the archive lives at /journal, by
             month. An <a>, not the router: the dialog must close, and a full navigation is
             the cheapest correct way to guarantee it does. */}
@@ -266,6 +226,7 @@ export default function JournalPanel({
       >
         {mode === "draw" && (
           <JournalCanvas
+            live={live}
             onSave={(image, width, height) =>
               post({ kind: "drawing", image, width, height })
             }
@@ -275,12 +236,25 @@ export default function JournalPanel({
         )}
         {mode === "type" && (
           <JournalText
+            live={live}
             onSave={(body) => post({ kind: "text", body })}
             onCancel={() => !busy && setMode(null)}
             busy={busy}
           />
         )}
       </dialog>
+
+      {/* Reading one of the day's pages, and changing it. The reader fetches the archive
+          for itself, so leafing off this day's pages reaches the whole journal rather than
+          stopping at midnight. */}
+      {reading != null && (
+        <JournalReader
+          id={reading}
+          onId={setReading}
+          onChanged={onChanged}
+          onClose={() => setReading(null)}
+        />
+      )}
     </>
   );
 }

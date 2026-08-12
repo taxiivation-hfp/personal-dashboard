@@ -111,10 +111,15 @@ function asTime(minutes: number): string {
 
 export default function Dashboard({
   date,
+  today,
   /** Rendered inside an expanding overlay rather than as a page — the close control differs. */
   onClose,
 }: {
   date: string;
+  /** The real today. Every window here is anchored to `date`, which is the day the record
+   *  was opened from and is no longer always today; this is only the far end of the two
+   *  date pickers the cards carry, which belong to the calendar and not to the screen. */
+  today?: string;
   onClose?: () => void;
 }) {
   const [days, setDays] = useState<number>(WINDOWS[0].days);
@@ -253,7 +258,28 @@ export default function Dashboard({
    */
   const week = (strip ?? []).slice(-7);
   const weekHours = week.reduce((s, d) => s + (d.productivity?.minutes ?? 0), 0);
-  const todayPct = (strip ?? []).find((d) => d.isToday)?.pct ?? null;
+  /**
+   * The percentage on the day this window ENDS on — which is `date`, and `date` is only
+   * usually today.
+   *
+   * It used to look for the row flagged `isToday`, which is server truth about the real
+   * today. Open the record from a day you have stepped back to and that row is simply not
+   * in the window, so the figure read "—" under a label promising a number. Taking the
+   * last row instead asks the question the window can actually answer, and the label below
+   * says which day it is about.
+   */
+  const viewedPct = (strip ?? []).at(-1)?.pct ?? null;
+
+  /** Is this record about the present? Every window here ends on `date`. */
+  const onToday = today == null || date === today;
+  /** The suffix every window label takes, so four figures cannot describe four different
+   *  spans of time in four different ways. */
+  const anchored = onToday
+    ? "today"
+    : `to ${new Date(`${date}T12:00:00`).toLocaleDateString("en-AU", {
+        day: "numeric",
+        month: "short",
+      })}`;
   const daysLogged = (strip ?? []).filter((d) => d.pct > 0).length;
 
   /**
@@ -344,23 +370,28 @@ export default function Dashboard({
               card with a rule everywhere else, and four rounded tiles with big numbers in
               them is the one shape that would make it look like every other dashboard. */}
           <div className="grid grid-cols-2 border-y border-[var(--color-line-strong)] lg:grid-cols-4">
+            {/* EVERY ONE OF THESE ENDS ON `date`, and `date` is the day the record was
+                opened from — which is only usually today. The window moved the moment Today
+                learned to step back; the labels have to move with it or all four figures
+                are about a fortnight ago while claiming to be about now. `anchored` is one
+                suffix so they cannot drift apart. */}
             <Figure
-              label="adherence today"
-              value={todayPct == null ? "—" : `${todayPct}%`}
+              label={`adherence ${anchored}`}
+              value={viewedPct == null ? "—" : `${viewedPct}%`}
               fact="70 parts hours, 30 parts non-negotiables"
             />
             <Figure
-              label="hours worked, last 7 days"
+              label={onToday ? "hours worked, last 7 days" : `hours worked, 7 days ${anchored}`}
               value={asTime(weekHours)}
               fact="blocked time you marked adhered"
             />
             <Figure
-              label="sessions, past fortnight"
+              label={onToday ? "sessions, past fortnight" : `sessions, fortnight ${anchored}`}
               value={facts ? String(facts.workoutSessions) : "—"}
               fact="strength, cardio and misc together"
             />
             <Figure
-              label="days logged in a row"
+              label={onToday ? "days logged in a row" : `days in a row ${anchored}`}
               value={streak == null ? "—" : String(streak)}
               fact="a fact about the record, not a thing to keep"
             />
@@ -635,7 +666,11 @@ export default function Dashboard({
                 {/* Under the chart, because this is where you are already looking when you
                     notice a gap in it. Backfilling is not an edge case for a record meant to
                     last years — a chart of a fortnight is a chart nobody consults. */}
-                <WeightEntry today={date} onSaved={reloadTrends} />
+                <WeightEntry
+                  anchor={date}
+                  today={today ?? date}
+                  onSaved={reloadTrends}
+                />
               </Panel>
 
               <Panel
@@ -691,6 +726,7 @@ export default function Dashboard({
           {calOpen && (
             <CalorieLog
               date={date}
+              today={today}
               total={null}
               entries={[]}
               onChanged={reloadTrends}
@@ -699,7 +735,8 @@ export default function Dashboard({
           )}
 
           <p className="mt-10 max-w-[62ch] border-t border-[var(--color-line)] pt-4 text-micro leading-relaxed text-[var(--color-muted)]">
-            {daysLogged} of the last {days} days have something marked on them.
+            {daysLogged} of the {days} days {anchored} have something marked on
+            them.
             There is deliberately no average here, and no comparison with the
             window before this one — those are judgements, and this is a record.
           </p>

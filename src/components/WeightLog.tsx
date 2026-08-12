@@ -25,11 +25,15 @@ const TREND_DAYS = 30;
 
 export default function WeightLog({
   date,
+  today,
   /** Fired after a reading lands so Today's checklist field agrees with the chart. */
   onChanged,
   onClose,
 }: {
   date: string;
+  /** The real today. The chart and the entry both open on `date`; only the picker's far
+   *  end is the calendar's business rather than the screen's. */
+  today?: string;
   onChanged: () => void;
   onClose: () => void;
 }) {
@@ -111,7 +115,8 @@ export default function WeightLog({
       {/* The record page's own backfill control, verbatim — a gap you notice in the chart
           is filled directly under it, here as there. */}
       <WeightEntry
-        today={date}
+        anchor={date}
+        today={today ?? date}
         onSaved={() => {
           setReloadKey((n) => n + 1);
           onChanged();

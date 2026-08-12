@@ -24,7 +24,7 @@ import PillarSections from "./PillarSections";
 import Ring, { toneColor } from "./PillarRing";
 import { PhoneTabBar, PhoneSwipe, type PhoneTab } from "./PhoneTabs";
 import type { Workout } from "./WorkoutLog";
-import { prettyDate, todayISO } from "@/lib/dates";
+import { addDays, daysBetween, prettyDate, todayISO } from "@/lib/dates";
 import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
 import { CALENDAR_RATES, type ProductivitySegment } from "@/lib/productivity";
 import type {
@@ -99,6 +99,15 @@ const RECORD_EXIT_MS = 180;
 /** Hours to one decimal, with no trailing ".0" — "3.5 of 8h" reads; "3.50 of 8.00h" does not. */
 const round1 = (n: number) => String(Math.round(n * 10) / 10);
 
+/** "2026-08-06" -> "Thu 6 Aug". Noon, never midnight: a bare ISO date parses as UTC and
+ *  lands on the day before anywhere west of Greenwich. */
+const shortDay = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+
 /**
  * One row of the day's checklist.
  *
@@ -142,14 +151,60 @@ const NUM_FIELD =
 
 export default function Today({
   initial,
+  today: serverToday,
   goals: initialGoals,
   skills: initialSkills,
 }: {
   initial: DayView;
+  /**
+   * The REAL today, resolved on the server.
+   *
+   * This screen shows `data.date`, which is usually today and deliberately no longer always
+   * — so the two have to be held apart. It is resolved server-side and passed down rather
+   * than read here, for two reasons: `todayISO()` consults APP_TZ, which Next does not
+   * inline into a client bundle for a non-NEXT_PUBLIC var, and a value computed during
+   * render is a value that goes stale in a tab left open across midnight.
+   */
+  today: string;
   goals: GoalView[];
   skills: SkillView[];
 }) {
   const [data, setData] = useState<DayView>(initial);
+
+  /**
+   * TODAY, AND IT HAS TO BE ABLE TO CHANGE.
+   *
+   * Seeded from the server, which is the right place to resolve it once — but a value
+   * resolved once is a value that is wrong after midnight, and this app is opened from a
+   * phone home screen and left there. At 00:10 the screen is showing yesterday while every
+   * derived answer still says it is live: no catching-up bar, a forward arrow disabled
+   * against a day that now exists, and a Steps refresh button that would launch the
+   * Shortcut and write into a row that is no longer on screen.
+   *
+   * So it is re-read whenever the app comes back to the front, which on a phone is the
+   * moment it matters. Nothing here MOVES the screen — the day you were looking at is
+   * still the day you were looking at, it has simply stopped being today, and the bar and
+   * the enabled arrow are how you find out.
+   *
+   * Client-side `todayISO()` falls back to the hardcoded Australia/Melbourne default, since
+   * Next does not inline a non-NEXT_PUBLIC var into the browser bundle. That agrees with
+   * the server unless APP_TZ is set to something else — and a tab that has been open across
+   * midnight is exactly the case where a stale value is already wrong.
+   */
+  const [today, setToday] = useState(serverToday);
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = todayISO();
+      setToday((cur) => (cur === now ? cur : now));
+    };
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+  }, []);
   const [strip, setStrip] = useState<StripDay[]>([]);
   // Goals, skills and rings are OWNED here rather than left as server props. page.tsx
   // renders once per request, so every new control (subgoal tick, +15/+30/+60, gym
@@ -269,22 +324,47 @@ export default function Today({
     return () => window.removeEventListener("keydown", onKey);
   }, [recordOpen]);
 
-  // ENDS on the day being viewed. There is no future half: the calendar column says what
-  // tomorrow holds, and a strip that reserved three columns for it spent a third of its
-  // width on days that had not happened. A consequence worth knowing — no day on this strip
-  // is ever `isFuture`, which is why nothing below branches on it.
+  /**
+   * THE DAY THE SCREEN IS CURRENTLY ASKING ABOUT, readable from inside a promise.
+   *
+   * Every loader here fires for one day and resolves later, and until this screen could
+   * move there was only ever one day for them to be about. Now a reply can outlive the day
+   * that asked for it: tick a habit, tap another column while the refresh is still out, and
+   * the old day's answer lands last and paints itself over the new one — the date line would
+   * say Monday while the checklist showed Saturday's ticks.
+   *
+   * A ref rather than state because nothing renders from it; it exists so a `.then` can ask
+   * "is this still the question?" rather than assume.
+   */
+  const viewing = useRef(data.date);
+  viewing.current = data.date;
+
+  /**
+   * ENDS ON TODAY — always, whatever day the screen is showing. There is no future half:
+   * the calendar column says what tomorrow holds, and a strip that reserved three columns
+   * for it spent a third of its width on days that had not happened. A consequence worth
+   * knowing — no day on this strip is ever `isFuture`, which is why nothing below branches
+   * on it.
+   *
+   * Anchored to TODAY and not to the viewed day, which matters now that those can differ.
+   * A strip that travelled with the screen could only ever be walked backwards — the way
+   * forward would be off its right-hand edge — and it would rescale its columns against a
+   * different week's high at every step. Fixed, it is a ruler: the last seven days, one of
+   * them underlined as the one you are on, and any of them a tap away.
+   */
   const loadStrip = useCallback(() => {
-    fetch(`/api/adherence?days=7&to=${data.date}`)
+    fetch(`/api/adherence?days=7&to=${today}`)
       .then((r) => r.json())
       .then((s) => !s.error && setStrip(s.days ?? []))
       .catch(() => {});
-  }, [data.date]);
+  }, [today]);
 
   const loadRings = useCallback(() => {
-    fetch(`/api/rings?date=${data.date}`)
+    const asked = data.date;
+    fetch(`/api/rings?date=${asked}`)
       .then((r) => r.json())
       .then((s) => {
-        if (s.error) return;
+        if (s.error || viewing.current !== asked) return;
         setRings(s.pillars ?? []);
         setFacts(s.facts ?? null);
         setWorkouts(s.workouts ?? []);
@@ -299,10 +379,66 @@ export default function Today({
 
   const refresh = useCallback(async () => {
     const d = await fetch(`/api/today?date=${data.date}`).then((r) => r.json());
-    if (!d.error) setData(d);
+    // Applied only if it is still the day on screen. `d.date` is the server's own answer,
+    // so this compares what arrived against what is being asked — never two guesses.
+    if (!d.error) setData((cur) => (d.date === cur.date ? d : cur));
     loadStrip();
     loadRings();
   }, [data.date, loadStrip, loadRings]);
+
+  /**
+   * GOING BACK A DAY — the whole of the backdating feature, in one function.
+   *
+   * Everything on this screen already wrote to `data.date` rather than to the clock: the
+   * marks, the ticks, the weight, the calories, the page you write tonight. What was
+   * missing was any way for `data.date` to be a day other than the one the server rendered,
+   * which is why "I did it but forgot to log it" had no answer.
+   *
+   * THE SWAP IS ATOMIC, and that is the honest arrangement rather than the fast one. The
+   * alternative — move the date line now, let the checklist catch up — puts a date at the
+   * top of the screen and yesterday's ticks underneath it for as long as the fetch takes,
+   * and a tick made in that window is a tick you made against the wrong list. So the whole
+   * day arrives at once and the control you pressed carries the wait.
+   *
+   * NEVER PAST TODAY. There is nothing to log about a day that has not happened, and the
+   * calendar column already says what tomorrow holds.
+   */
+  const [moving, setMoving] = useState<string | null>(null);
+  const goToDay = useCallback(
+    async (iso: string) => {
+      if (iso === data.date || iso > today || moving) return;
+      setMoving(iso);
+      // Skills travel with the day: their 14-day figures are anchored to the date being
+      // VIEWED (see listSkills), so a screen on last Tuesday must read the fortnight that
+      // ended then. Fetched alongside rather than after, so the two land together.
+      const [d, s] = await Promise.all([
+        fetch(`/api/today?date=${iso}`)
+          .then((r) => r.json())
+          .catch(() => ({ error: true })),
+        fetch(`/api/skills?date=${iso}`)
+          .then((r) => r.json())
+          .catch(() => ({ error: true })),
+      ]);
+      if (!d.error) {
+        setData(d);
+        if (!s.error) setSkills(s.skills ?? []);
+        // The address bar follows, so a reload stays on the day being read and the
+        // journal's "open that day" link survives being bookmarked. replaceState rather
+        // than push: back should leave this screen, not walk one day at a time through
+        // every arrow tap. Next supports both natively and keeps its router in step.
+        window.history.replaceState(
+          null,
+          "",
+          iso === today ? "/" : `/?date=${iso}`,
+        );
+      }
+      setMoving(null);
+    },
+    [data.date, today, moving],
+  );
+
+  /** How far back the screen is, and the fact the standing bar prints. 0 is today. */
+  const back = daysBetween(data.date, today);
 
   useEffect(loadStrip, [loadStrip]);
   useEffect(loadRings, [loadRings]);
@@ -544,11 +680,76 @@ export default function Today({
           structure and weight, and the record's card is the house word for it: the day's
           name in one card, the next thing that will happen in its own beside it. Same
           smaller-pane-of-the-same-glass the chart cards established. */}
+      {/* CATCHING UP.
+
+          The one piece of furniture the backdating feature adds, and it stands only while
+          the screen is showing a day that is not today. It says the mechanism out loud —
+          what you mark here lands on THAT day — because every control below it looks
+          exactly as it does on a live day, which is the whole point and also the whole
+          risk. A tick is cheap to make and expensive to make against the wrong date.
+
+          --color-recorded is the token the calendar column already gives a past day, so a
+          screen in the past wears the colour the app has always used to mean "recorded".
+          No warning hue and no alarm: catching up is the feature working, not a mistake. */}
+      {back > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-recorded)] px-4 py-2.5">
+          <p className="min-w-0 text-small leading-snug">
+            <span className="font-semibold">Catching up.</span>{" "}
+            <span className="text-[var(--color-muted)]">
+              Everything marked here lands on {prettyDate(data.date)} —{" "}
+              {back} day{back === 1 ? "" : "s"} back.
+            </span>
+          </p>
+          <button
+            onClick={() => goToDay(today)}
+            disabled={moving != null}
+            className="shrink-0 rounded-full border border-[var(--color-line-strong)] px-3 py-1 text-micro transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+          >
+            back to today
+          </button>
+        </div>
+      )}
+
       <header className="flex flex-wrap items-stretch gap-4">
         <div className="record-card min-w-0 flex-1">
-          <p className="text-micro text-[var(--color-muted)]">
-            {prettyDate(data.date)}
-          </p>
+          {/* THE DATE, and the way to another one. The arrows sit at the end of the line
+              they move rather than flanking it: a date with a chevron on each side is a
+              stepper, and this line is a heading that happens to be steppable — the day
+              you open on is today, and nothing should suggest a dial to be spun. */}
+          {/* items-center, not items-baseline: the arrows are 36px boxes now and a baseline
+              would hang them off the date's own. -my-2 gives the buttons their height back
+              out of the card's padding, so a generous target costs the header nothing. */}
+          <div className="-my-2 flex items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-micro text-[var(--color-muted)]">
+              {prettyDate(data.date)}
+            </p>
+            <div className="-mr-2 flex shrink-0 items-center">
+              {/* 2.25rem square each, and sized for a thumb rather than for the glyph.
+                  These are the always-visible way into the whole feature on a phone, and a
+                  chevron's own advance width is about 5px — a target that small, with its
+                  twin 12px away, is one where the commonest gesture in the feature lands on
+                  the wrong arrow and moves the screen the wrong way. The MARK stays small;
+                  only the box around it is generous. */}
+              <button
+                onClick={() => goToDay(addDays(data.date, -1))}
+                disabled={moving != null}
+                aria-label="The day before"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-small leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] disabled:opacity-40"
+              >
+                ‹
+              </button>
+              <button
+                onClick={() => goToDay(addDays(data.date, 1))}
+                // Never past today. There is nothing to log about a day that has not
+                // happened, and the calendar column is what says what tomorrow holds.
+                disabled={moving != null || back === 0}
+                aria-label="The day after"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-small leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] disabled:opacity-40"
+              >
+                ›
+              </button>
+            </div>
+          </div>
           {editingTitle ? (
             <input
               autoFocus
@@ -560,8 +761,8 @@ export default function Today({
                 if (e.key === "Escape") setEditingTitle(false);
               }}
               maxLength={80}
-              placeholder="What is today for?"
-              aria-label="What is today for?"
+              placeholder={back === 0 ? "What is today for?" : "What was that day for?"}
+              aria-label={back === 0 ? "What is today for?" : "What was that day for?"}
               className="mt-1 w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-heading outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
             />
           ) : (
@@ -574,7 +775,10 @@ export default function Today({
             >
               {data.title ?? (
                 <span className="text-[var(--color-muted)]">
-                  What is today for?
+                  {/* An intention is written in advance, so on a past day the question is
+                      in the past tense — asking what a Tuesday three weeks gone "is for"
+                      would be the screen not knowing which day it is on. */}
+                  {back === 0 ? "What is today for?" : "What was that day for?"}
                 </span>
               )}
             </button>
@@ -582,8 +786,8 @@ export default function Today({
         </div>
 
         {/* NextUp wears its own card and returns null when there is nothing next, so no
-            empty frame ever stands here at 11pm. */}
-        <NextUp blocks={data.blocks} date={data.date} today={todayISO()} />
+            empty frame ever stands here at 11pm — or on any day but today. */}
+        <NextUp blocks={data.blocks} date={data.date} today={today} />
       </header>
 
       {/* THE HERO. The ring keeps the left side to itself and stays the largest thing on
@@ -664,7 +868,18 @@ export default function Today({
                 // A NUMERIC non-negotiable — weight. Typing the number IS the tick: the
                 // entry exists or it does not, so adherence needs no special case, and
                 // clearing the field clears the day exactly like unticking.
-                <li key={h.id} className={CHECK_ROW}>
+                // KEYED BY DAY AS WELL AS BY HABIT, and this one is load-bearing rather
+                // than tidy. The number field below is UNCONTROLLED — `defaultValue`, so a
+                // background refresh cannot yank a figure out from under a cursor — and
+                // React only ever writes `defaultValue` to the value ATTRIBUTE, which the
+                // browser ignores once the field has been typed into. With a key that is
+                // the same on every day, stepping from today to yesterday left this
+                // morning's 82.4 sitting in a row whose tick and label had already become
+                // yesterday's; blurring it then POSTed 82.4 against yesterday and
+                // overwrote a real reading. A key that carries the date makes the day
+                // change a REMOUNT, which is the one thing that reliably re-seeds an
+                // uncontrolled field.
+                <li key={`${data.date}-${h.id}`} className={CHECK_ROW}>
                   <div className="flex w-full items-center gap-2.5 py-2.5">
                     <HabitBox done={h.done} tone={habitTone(h.pillar)} />
                     {/* WEIGHT's name is the way into its trend — the same pattern the
@@ -714,7 +929,9 @@ export default function Today({
                   </div>
                 </li>
               ) : (
-                <li key={h.id} className={CHECK_ROW}>
+                // Dated for the same reason as the numeric row above — these hold no
+                // uncontrolled state, but one list must not be keyed two ways.
+                <li key={`${data.date}-${h.id}`} className={CHECK_ROW}>
                   <button
                     onClick={() =>
                       // The journal is not a thing you tick, it is a thing you write. Its
@@ -746,6 +963,7 @@ export default function Today({
             <li className={CHECK_ROW}>
               <CalorieInput
                 date={data.date}
+                today={today}
                 calories={data.calories}
                 entries={data.calorieEntries}
                 onChanged={refresh}
@@ -812,6 +1030,11 @@ export default function Today({
                       which of the two is the reading. */}
                   <StepsRefresh
                     updatedAt={data.stepsUpdatedAt}
+                    // The Shortcut pushes to whatever day the SERVER calls today, so on a
+                    // day stepped back to there is nothing this button could correctly do
+                    // — it would write into a row that is not on screen. The age still
+                    // prints; only the ask, and the staleness dressing, stand down.
+                    live={back === 0}
                     onRun={() => {
                       stepsWanted.current = true;
                     }}
@@ -822,7 +1045,7 @@ export default function Today({
 
             {data.habits.length === 0 && (
               <li className="py-2.5 text-small leading-relaxed text-[var(--color-muted)]">
-                Nothing set for today.{" "}
+                Nothing set for {back === 0 ? "today" : shortDay(data.date)}.{" "}
                 <Link
                   href="/habits"
                   className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
@@ -911,27 +1134,72 @@ export default function Today({
           this screen. The strip is this screen's one chart, so it wears the chart's frame. */}
       <section className="record-card">
         <div className="mb-2.5 flex items-baseline justify-between gap-3">
-          {/* "adherence" has left this line: it prints its own number above its own bar
-              now, and a caption naming it as well would be the third time. What is left is
-              the one scale a reader cannot infer — the columns, which are uncapped. */}
+          {/* Two facts a reader cannot infer, and nothing else. "adherence" left this line
+              long ago — it prints its own number above its own bar, and naming it here
+              would be the third time. What is left is the columns' SCALE, which is
+              uncapped and therefore has to be stated, and the one thing about this chart
+              that is invisible: that a column is a way into its day. */}
           <span className="text-micro text-[var(--color-muted)]">
-            seven days to today · hours to this week&apos;s high
+            seven days to today · hours to this week&apos;s high · tap a day to
+            open it
           </span>
-          {data.streak > 0 && (
-            // A count, deliberately undramatised — no flame, no badge, no "don't break it".
-            // A fact about the record, not a thing you can lose.
+          {/* TODAY ONLY. The streak comes from the VIEWED day's DayView — getStreak counts
+              the run ending on whatever day was asked for — and this card is anchored to
+              today. Printed on a past day it would quietly swap today's run for a different
+              one, and worse: the days you step back to are the ones with nothing marked on
+              them yet, so the number you would see is almost always 0. A card captioned
+              "seven days to today" must not carry another day's fact.
+
+              A count, deliberately undramatised — no flame, no badge, no "don't break it".
+              A fact about the record, not a thing you can lose. */}
+          {back === 0 && data.streak > 0 && (
             <span className="text-micro text-[var(--color-muted)]">
               {data.streak} day{data.streak === 1 ? "" : "s"} logged in a row
             </span>
           )}
         </div>
 
-        {/* ADHERENCE. The number and its bar are one unit — the bar is the number drawn,
-            not a second measurement — so they sit together above the rule with the columns
-            below it. Productivity gets no number at all: its height is the whole claim, and
-            an uncapped score printed with no ceiling beside it invites a comparison it
-            cannot support. */}
-        <div className="flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
+        {/* THE STRIP IS ALSO THE WAY BACK.
+
+            Seven days, and each column is the day it draws — tapping one moves the whole
+            screen onto it, which is the answer to "I did it on Tuesday and forgot to say
+            so". The strip was already the only place on this screen that names the last
+            week, so it is where a hand reaches.
+
+            The target is ONE TRANSPARENT BUTTON PER COLUMN, laid over all four rows rather
+            than built into any of them. The four rows have to line up over each other and
+            they do it with a percentage gap — see STRIP_GAP_PCT — so turning one of them
+            into a row of controls would have made that row a different height from its
+            neighbours and pulled the alignment apart. An overlay takes the same gap, so it
+            covers exactly the columns it names, and nothing underneath it is interactive
+            for it to steal a click from. */}
+        <div className="relative">
+          <div
+            className="absolute inset-0 z-[1] flex"
+            style={{ gap: `${STRIP_GAP_PCT}%` }}
+          >
+            {strip.map((d) => (
+              <button
+                key={d.date}
+                onClick={() => goToDay(d.date)}
+                disabled={moving != null || d.date === data.date}
+                aria-current={d.date === data.date ? "date" : undefined}
+                aria-label={`${prettyDate(d.date)} · ${d.pct}% — open this day`}
+                // No hover fill and no ring: the columns beneath carry three ink levels
+                // and a stack of calendar colours, and any wash over them would tint a
+                // chart made of colours. The cursor is the whole affordance on a laptop,
+                // and on a phone the caption above says it in words.
+                className="min-w-0 flex-1 rounded-sm outline-offset-2 disabled:cursor-default"
+              />
+            ))}
+          </div>
+
+          {/* ADHERENCE. The number and its bar are one unit — the bar is the number drawn,
+              not a second measurement — so they sit together above the rule with the columns
+              below it. Productivity gets no number at all: its height is the whole claim, and
+              an uncapped score printed with no ceiling beside it invites a comparison it
+              cannot support. */}
+          <div className="flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
           {strip.map((d) => (
             <span
               key={d.date}
@@ -1040,20 +1308,31 @@ export default function Today({
 
         <div className="h-px w-full bg-[var(--color-line-strong)]" />
 
-        <div className="mt-2 flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
-          {strip.map((d) => (
-            <span
-              key={d.date}
-              className="min-w-0 flex-1 text-center text-micro"
-              style={{
-                color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
-              }}
-            >
-              {new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", {
-                weekday: "narrow",
-              })}
-            </span>
-          ))}
+          {/* THE LETTERS carry TWO marks now, and they mean different things. Ink is the
+              real today, wherever it falls in the window — server truth, the same flag the
+              calendar column pins its green row with. The UNDERLINE is the day on screen.
+              On a live day they are the same column and the pair reads as one emphasis;
+              stepped back, the underline travels and today stays where it is, which is
+              exactly the fact a reader needs and the only place the strip states it. */}
+          <div className="mt-2 flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
+            {strip.map((d) => (
+              <span
+                key={d.date}
+                className={`min-w-0 flex-1 text-center text-micro ${
+                  d.date === data.date
+                    ? "underline decoration-[var(--color-ink)] decoration-2 underline-offset-4"
+                    : ""
+                }`}
+                style={{
+                  color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
+                }}
+              >
+                {new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", {
+                  weekday: "narrow",
+                })}
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Swatches, not a boxed legend. A few small marks on one line under the chart read
@@ -1083,12 +1362,15 @@ export default function Today({
 
       <section>
         <div className="section-head">
-          <h2 className="text-small font-semibold">Today&apos;s blocks</h2>
+          <h2 className="text-small font-semibold">
+            {back === 0 ? "Today's blocks" : `Blocks on ${shortDay(data.date)}`}
+          </h2>
         </div>
         <div className="mt-4">
           {data.calendarConnected ? (
             <BlockList
               date={data.date}
+              isToday={back === 0}
               blocks={data.blocks}
               onChanged={refresh}
             />
@@ -1120,9 +1402,8 @@ export default function Today({
         date={data.date}
         entries={data.journal}
         onChanged={refresh}
+        live={back === 0}
         prompt={journalPrompt}
-        actions={false}
-        shelf={false}
         onPromptHandled={() => setJournalPrompt(false)}
       />
 
@@ -1131,6 +1412,7 @@ export default function Today({
       {weightOpen && (
         <WeightLog
           date={data.date}
+          today={today}
           onChanged={refresh}
           onClose={() => setWeightOpen(false)}
         />
@@ -1156,6 +1438,7 @@ export default function Today({
       birchEvents={birchEvents}
       skills14={skills14}
       date={data.date}
+      today={today}
       onSubgoal={(id, done) =>
         mutateGoals(`/api/subgoals/${id}`, {
           method: "PATCH",
@@ -1363,6 +1646,7 @@ export default function Today({
                   {recordGeom ? (
                     <Dashboard
                       date={data.date}
+                      today={today}
                       onClose={() => setRecordOpen(false)}
                     />
                   ) : (

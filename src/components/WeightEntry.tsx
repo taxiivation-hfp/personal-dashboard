@@ -54,15 +54,25 @@ const short = (iso: string) =>
   });
 
 export default function WeightEntry({
-  /** Today, so the picker cannot reach into the future. */
+  /**
+   * THE DAY IT OPENS ON — the day being looked at, which is usually but no longer always
+   * today. Only the starting selection; everything else here is anchored to the real
+   * today, because the readings list is a list of the most recent readings whatever day
+   * you happen to be reading it from.
+   */
+  anchor,
+  /** The real today, so the picker cannot reach into the future — and, since Today
+   *  learned to show a past day, so that stepping back cannot make yesterday
+   *  unreachable either. */
   today,
   onSaved,
 }: {
+  anchor?: string;
   today: string;
   onSaved: () => void;
 }) {
   const [habitId, setHabitId] = useState<number | null>(null);
-  const [day, setDay] = useState(today);
+  const [day, setDay] = useState(anchor ?? today);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   /** What just happened, in words — "saved to 3 Aug" or "removed 3 Aug". Naming the DAY is

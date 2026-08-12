@@ -243,6 +243,78 @@ the weight chart on the record, where you already are when you notice a gap in i
 **Neither lives on Today.** That screen is for the day in front of you, and a date picker on
 it is one more thing between waking up and typing a number.
 
+### TODAY ITSELF MOVES — and it is still not a date picker
+
+Everything else is marked where it happens, and until now that meant only where it happens
+TODAY. "I did it but forgot to log it" had no answer, which is the one gap that makes a
+person start guessing at yesterday — and a guessed log is exactly the drift this app exists
+to catch.
+
+So the whole screen takes a day. `data.date` was already threaded through every fetch and
+every write on it; what was missing was any way for that value to be a day the server had
+not rendered. Three ways in, and NONE of them is a calendar control:
+
+- **‹ › at the end of the date line.** The date is a heading that happens to be steppable,
+  not a dial — hence the arrows at the end of the line rather than flanking it.
+- **A tap on any column of the week strip**, which is where a hand already reaches to read
+  the last seven days. One transparent button per column, laid OVER all four rows: those
+  rows line up by a percentage gap, and turning one of them into controls would have made
+  it a different height from its neighbours and pulled the alignment apart.
+- **`?date=` on the front door**, clamped to today and validated. For a reload — the screen
+  writes the day back with `replaceState` as you move — and for the journal's
+  "open that day".
+
+**The screen never shows a day it cannot write.** The swap is ATOMIC: the whole day arrives
+at once and the control you pressed carries the wait. Moving the date line first and letting
+the checklist catch up would put one date at the top of the screen and another day's ticks
+underneath it, and a tick made in that window is a tick against the wrong list.
+
+**A standing bar says so while you are back there** — `Catching up. Everything marked here
+lands on Tuesday 11 August — 1 day back.` on `--color-recorded`, the token the calendar
+column already gives a past day. Every control below it looks exactly as it does on a live
+day, which is the point and also the risk. No warning hue: catching up is the feature
+working, not a mistake.
+
+**Never past today.** Nothing to log about a day that has not happened.
+
+**The week strip stays anchored to TODAY**, with the viewed day underlined and the real today
+still in ink. A strip that travelled with the screen could only be walked backwards — forward
+would be off its right edge — and it would rescale its columns against a different week's high
+at every step. Fixed, it is a ruler.
+
+Two things stand down on a past day, and both would otherwise write to the wrong place:
+**`StepsRefresh`'s button** (the Shortcut pushes to whatever day the SERVER calls today, so
+the count on screen would never move) and its **staleness dressing** (dashed-and-ink means
+"the phone has stopped pushing", which says nothing true about a Tuesday three weeks gone).
+The age still prints. `NextUp` already returned null off today.
+
+The three date pickers — workout, food, weight — now take the REAL today as their cap rather
+than the viewed day. Capping at the screen's day would have made yesterday unreachable from
+last Tuesday, which is the control quietly becoming narrower than the sentence beside it.
+
+**`today` is re-read when the app comes back to the front.** It is resolved on the server,
+which is the right place to resolve it once — but a value resolved once is wrong after
+midnight, and this app lives on a phone home screen. At 00:10 a stale value means no
+catching-up bar, a forward arrow disabled against a day that now exists, and a live Steps
+button that would write into a row not on screen. Nothing MOVES when it rolls over: the day
+you were looking at is still the day you were looking at, it has just stopped being today.
+
+**Two figures are hidden rather than relabelled off today**, because they are facts about the
+present that no past day can answer: Today's **streak** (`getStreak` counts the run ending on
+the day it is asked about, and the days you step back to are precisely the unmarked ones, so
+it would almost always read 0 in a card captioned "seven days to today"), and `StepsRefresh`'s
+button. Everything else on the record says which window it means — `adherence to 2 Aug`,
+`hours worked, 7 days to 2 Aug` — since four figures ending on the viewed day while three of
+their labels claim to mean "now" is the record lying about a fortnight ago.
+
+**Anything uncontrolled must be keyed by the DATE as well as its row.** The numeric
+non-negotiable field is `defaultValue`, deliberately, so a background refresh cannot pull a
+figure out from under a cursor. React only writes `defaultValue` to the value *attribute*,
+which a browser ignores once the field has been typed in — so with a key that is the same on
+every day, stepping back left this morning's weight sitting in a row whose tick and label had
+already become yesterday's, and blurring it overwrote a real reading. A dated key makes the
+day change a remount, which is the one thing that re-seeds an uncontrolled field.
+
 **A weight reading can be CORRECTED or REMOVED, for any past day.** It always overwrote in
 place — `habit_entries` is `UNIQUE (habit_id, date)` and `setHabitValue` upserts on that
 pair, so a second reading for a day has never been a second row — but nothing on screen said
@@ -331,7 +403,8 @@ didn't schedule a productive day. Both numbers matter.
   the rule, in the colours those hours had in the calendar. They stopped sharing a box
   because one of them has a fixed axis and the other cannot have one — a percentage drawn
   over an uncapped score invites a comparison neither can support.
-- **The strip ENDS ON TODAY.** Seven days, today last, no future columns. The calendar
+- **The strip ENDS ON TODAY**, and stays there even when the screen has stepped back — see
+  Backdating. Seven days, today last, no future columns. The calendar
   column is what says what tomorrow holds; a strip reserving three empty columns for it
   spent a third of its width on days that had not happened.
 - **A gym hour scores ONCE, from the calendar.** Grape (`colorId "3"`) is Gym at half rate.
@@ -410,6 +483,84 @@ Light beige, premium, clean.
   later reads 1200. Stored as a log so a mistyped entry is removed rather than retyped, and
   the total is derived on read. Still no food database, no barcode, no API.
 - Render the calendar view (Google OAuth is already connected).
+
+## The journal is READ and REWRITTEN, not only written
+
+It was write-only, and for typed pages literally so. Every list in the app carries a
+140-character `preview` — deliberately, since a year of handwriting as data URLs in one
+response is the whole reason `[id]/image` exists — but that was the ONLY thing a typed page
+ever showed. There was no way through to the rest of it, and a drawing "opened" as a raw PNG
+in a browser tab, which is the file rather than the page.
+
+**`GET /api/journal/[id]` is where the full `body` lives, and the only place.** A drawing's
+bytes still are not in it; `[id]/image` serves those as a real image with a cache header, and
+re-encoding the same PNG as base64 inside JSON would be the same page again at four thirds
+the size.
+
+**`PATCH /api/journal/[id]` rewrites a page, and `kind` CANNOT CHANGE.** That is enforced in
+`updateJournalEntry` against the STORED kind rather than trusted to the caller: turning a
+drawing into words would drop the only copy of some handwriting, and the reverse would leave
+words in a row nothing reads again. Nothing is stamped — an "edited" mark would be the app
+looking over the owner's shoulder at their own diary — and there is no habit tick to do,
+since a page already existing is what ticked it.
+
+- **A typed page reopens with its words**, on the same surface it was written on. Save
+  instead of Save page; a second screen for correcting a sentence would be a second place
+  the journal lives.
+- **A handwritten page reopens with its ink UNDER THE PEN.** Only a flat PNG was ever
+  stored, so there are no strokes to pop: Undo and Clear take back what you add NOW, and the
+  note above the canvas says so rather than leaving it to a tap that does nothing. The base
+  is drawn FITTED, never stretched — pages saved before the A4 rule are whatever shape the
+  dialog happened to be, and filling the canvas with one would squash the owner's own hand
+  and then flatten the squash in permanently on the next save.
+- **`/journal` is a LIST, not a shelf.** The unit is a page: the page in miniature, the day
+  it belongs to, and the line it opens with. The opening line is what tells two Tuesdays
+  apart and a thumbnail cannot carry it — which is why a contact sheet was the wrong shape
+  here even though it photographs better. Months as chapters, newest first, both ways.
+- **Delete lives in the reader**, where the page is legible, instead of hanging off a
+  thumbnail nobody could read. Still the app's own two-step, never a native `confirm()`.
+- **Leafing is BY DATE and the words say so** — `‹ older` / `newer ›`. `pages` runs newest
+  first, so a pair of bare arrows would have made the direction something you learn by
+  pressing one.
+
+### The ruled sheet — one page, four sizes
+
+`.sheet` in `globals.css`, wrapped by `Sheet.tsx`. A4 portrait ruled into **eighteen lines
+whatever the sheet measures**, everything derived from its own WIDTH in `cqw`.
+
+The ruling used to be a 34px constant shared by hand between the canvas and the typed page,
+which meant it only looked right at the one size the writing dialog happens to be — and at
+thumbnail size the archive drew **no lines at all**, so a typed page on the shelf was a scrap
+of paper and a handwritten one was a page. A thumbnail is a small PAGE, not a page with tiny
+lines. The canvas derives its own ruling from canvas width by the same two numbers, so a page
+ruled in a PNG matches one ruled in CSS at any size on any display.
+
+**The reading sheet GROWS**; the writing and thumbnail sheets are fixed A4 and clip, because
+that is what running out of paper looks like. A fixed reader with an inner scrollbar would
+have slid the words across their own rules. `--paper` is a real physical colour and not a
+surface token: a page in a beige app is still paper.
+
+**No rules under a drawing** — the PNG carries its own, and a second set would be two pages
+showing at once.
+
+**The WRITING surface paints its own ruling** rather than sitting over the shared layer, and
+`background-attachment: local` is the reason: a textarea scrolls its content inside a box
+that does not move, so a layer pinned behind it leaves every line past the seventeenth
+sitting off its rule. One `--rule-bg` declaration, two consumers.
+
+**The page's type is FLUID, and that is the one place in the app where it may be.** The five
+type steps govern the app's own voice — labels, rows, controls, captions. A journal page is
+not the app speaking; it is an artefact, and its text is a property of the paper the same way
+handwriting is. Sizing it in `cqw` is what makes a thumbnail the page in miniature instead of
+a full-size page cropped to a stamp. The cost is that a thumbnail's words are texture rather
+than words, so **wherever a thumbnail is a CHOICE, the opening line is printed beside it** —
+the archive and the day's chooser both do. A page must never be identified by 3px type.
+
+**Saving a drawing is gated on the saved page having arrived.** A canvas that looks like it
+is adding to a page and is really holding a blank one is the only control in this app that
+can destroy something irreplaceable: Save flattens what is on screen and PATCHes it over the
+row. So `JournalCanvas` tracks whether its base image loaded, refuses to save until it has,
+and says which of "fetching", "ready" and "could not be loaded" is true.
 
 ## Steps — the one figure this app does not write
 

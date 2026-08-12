@@ -15,10 +15,15 @@ export default function BlockList({
   date,
   blocks,
   onChanged,
+  /** Is this the real today? Only the words change — `due` is computed server-side against
+   *  the real clock, so on a past day every block is due and "needs marking" is already the
+   *  only branch that can be reached. */
+  isToday = true,
 }: {
   date: string;
   blocks: Block[];
   onChanged: () => void;
+  isToday?: boolean;
 }) {
   const [openReason, setOpenReason] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -64,8 +69,16 @@ export default function BlockList({
   if (!live.length) {
     return (
       <p className="max-w-[42ch] py-6 text-body leading-relaxed text-[var(--color-muted)]">
-        Nothing on the calendar today. Blocks come from Google Calendar — put
-        something there and it shows up here to mark.
+        Nothing on the calendar{" "}
+        {isToday
+          ? "today"
+          : `on ${new Date(`${date}T12:00:00`).toLocaleDateString("en-AU", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}`}
+        . Blocks come from Google Calendar — put something there and it shows up
+        here to mark.
       </p>
     );
   }

@@ -1175,3 +1175,141 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 1rem 1.25rem 1.25rem;
 }
 
+
+/* ---------------------------------------------------------------- THE RULED SHEET
+ *
+ * A4 portrait, 1:1.4142, ruled into EIGHTEEN lines whatever the sheet measures — and that
+ * count is the whole design. The ruling used to be a 34px constant, shared by hand between
+ * the canvas and the typed page, which meant it only looked right at the one size the
+ * writing dialog happens to be. At thumbnail size it was hopeless: the archive drew no
+ * lines at all, so a typed page on the shelf was a scrap and a handwritten one was a page.
+ *
+ * Everything here is derived from the sheet's OWN WIDTH (`cqw`), so a thumbnail is a small
+ * PAGE rather than a page with tiny lines — eighteen rules, a margin at the same fraction,
+ * words at the same fraction again. One number, four sizes, and no size that has to be
+ * remembered in two files.
+ *
+ * The paper colour is the one baked into a drawn page's PNG. A real physical colour, not a
+ * surface token: a page in a beige app is still paper, and borrowing --color-panel would
+ * drift the journal the day that token moves for a reason of its own.
+ */
+:root {
+  --sheet-ratio: 1.4142;
+  --sheet-lines: 18;
+  --paper: #fdfbf6;
+}
+
+.sheet {
+  position: relative;
+  container-type: inline-size;
+  overflow: hidden;
+  background: var(--paper);
+  /* Resolved by whichever CHILD uses them, so `cqw` measures THIS sheet rather than its
+   * parent — a custom property is substituted at the use site, and that is precisely the
+   * property that lets one declaration serve every size. */
+  --rule-gap: calc(100cqw * var(--sheet-ratio) / var(--sheet-lines));
+  --rule-margin: 13cqw;
+}
+
+/* A page of fixed extent: the writing surface, and the thumbnail. What overflows is
+ * clipped, because that is what running out of paper looks like. */
+.sheet-a4 {
+  aspect-ratio: 1 / var(--sheet-ratio);
+}
+
+/* THE RULING ITSELF, declared once and drawn by two different things.
+ *
+ * The reading and thumbnail sheets paint it as a layer behind the page; the WRITING surface
+ * paints it as the textarea's own background, because a textarea scrolls its content and a
+ * layer pinned behind it does not — past the seventeenth line the words would slide off
+ * their rules, which is the one failure the whole primitive exists to prevent. Same tokens,
+ * same gradients, one place to change them. */
+.sheet {
+  --rule-bg:
+    /* the margin rule — one line down the page, the way a notebook has one */
+    linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(var(--rule-margin) - 1px),
+      var(--color-line-strong) calc(var(--rule-margin) - 1px),
+      var(--color-line-strong) var(--rule-margin),
+      transparent var(--rule-margin)
+    ),
+    /* the eighteen rules */
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(var(--rule-gap) - 1px),
+        var(--color-line) calc(var(--rule-gap) - 1px),
+        var(--color-line) var(--rule-gap)
+      );
+}
+
+/* Drawn BEHIND whatever the page holds — a layer of its own rather than a background on
+ * .sheet itself, since the sheet is the container and an element cannot measure itself in
+ * its own container units.
+ *
+ * `z-index: 0` is not decoration. A positioned element paints above every non-positioned
+ * sibling whatever the DOM order, so without it these hairlines land ON TOP of a
+ * statically-positioned `.sheet-text` — which is exactly what the thumbnails are. */
+.sheet-rules {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--rule-bg);
+}
+
+/* THE WORDS ON IT, and the same metrics whether the page is being written or read back.
+ * `line-height` IS the rule gap, so every line sits on a rule, and the top padding drops
+ * the first baseline onto the first one rather than floating it above.
+ *
+ * Serif, because the words are the owner's. Sized in cqw like everything else here, which
+ * is what makes a thumbnail the page in miniature: the six lines clipped on the shelf are
+ * the six lines the reader opens with. */
+.sheet-text {
+  font-family: var(--font-serif);
+  color: var(--color-ink);
+  font-size: calc(var(--rule-gap) * 0.47);
+  line-height: var(--rule-gap);
+  padding-top: calc(var(--rule-gap) * 0.3);
+  padding-left: calc(var(--rule-margin) + 2.5cqw);
+  padding-right: 5cqw;
+  padding-bottom: calc(var(--rule-gap) * 0.5);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* The WRITING surface. Fills its A4 exactly and scrolls inside it, the way a page under a
+ * pen does not — but a textarea must, and a typed page that silently clipped the words
+ * still being typed would be the one honest failure this sheet cannot afford. */
+textarea.sheet-text {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  resize: none;
+  outline: none;
+  background-color: transparent;
+  /* ITS OWN RULING, and `local` is the whole reason. A textarea scrolls its content inside
+   * a box that does not move, so a rules layer behind it stays put while the words travel —
+   * type an eighteenth line and every line is offset from its rule. `background-attachment:
+   * local` ties the paint to the content, so the page scrolls as a page. The sheet under a
+   * textarea therefore draws no layer of its own; see JournalText. */
+  background-image: var(--rule-bg);
+  background-attachment: local;
+}
+
+textarea.sheet-text::placeholder {
+  color: var(--color-placeholder);
+}
+
+/* The READING surface, and the one page here that GROWS. A page is at least A4 and as long
+ * as the writing on it: the rules run on because they are painted across the whole box, and
+ * the gap never changes because it is a fraction of the WIDTH. A fixed sheet with an inner
+ * scrollbar would have slid the words across their own lines. */
+.sheet-page {
+  position: relative;
+  min-height: calc(100cqw * var(--sheet-ratio));
+}
