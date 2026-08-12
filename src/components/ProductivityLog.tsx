@@ -118,8 +118,7 @@ export default function ProductivityLog({
 
   const s = data?.score ?? null;
   const time = (s?.segments ?? []).filter((x) => x.kind === "time");
-  const label = (colorId: string | null) =>
-    data?.rates.find((r) => r.id === colorId)?.label ?? "Other";
+
 
   return (
     <dialog
@@ -209,7 +208,7 @@ export default function ProductivityLog({
                       }}
                     />
                     <span className="w-28 shrink-0 text-small">
-                      {label(seg.colorId)}
+                      {seg.label}
                     </span>
                     <span className="min-w-0 flex-1 text-micro tabular-nums text-[var(--color-muted)]">
                       {asTime(seg.minutes)} {asRate(seg.rate ?? 0)}

@@ -10,6 +10,7 @@ import { workoutsOn } from "@/lib/engine";
 import { getCalendarRange } from "@/lib/google";
 import { buildRings, WINDOW_DAYS } from "@/lib/rings";
 import { addDays, isISODate, todayISO } from "@/lib/dates";
+import { CALENDAR_RATES } from "@/lib/productivity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,18 @@ export const dynamic = "force-dynamic";
  * does not speak.
  */
 const SOCIAL_COLOR_ID = "8";
+
+/**
+ * Basil — the owner's colour for their own project work, and the one full-rate category in
+ * productivity.ts. The Portfolio ring's outer lap counts the HOURS of it, so the two
+ * readings of the same blocks stay in step: the same colour, the same adhered-only rule,
+ * one priced per hour and one measured in them.
+ *
+ * Read from CALENDAR_RATES rather than written down again — the productivity table is
+ * where a category's colour is decided, and a second literal here is how the two drift.
+ */
+const PROJECT_COLOR_ID =
+  CALENDAR_RATES.find((c) => c.label === "Work Projects")?.id ?? null;
 
 export async function GET(req: Request) {
   try {
@@ -62,14 +75,31 @@ export async function GET(req: Request) {
     // reason the count is.
     let socialEventList: { date: string; title: string }[] | undefined;
     let oneOffEventList: { date: string; title: string }[] | undefined;
+    /** Adhered project HOURS in the window — the Portfolio lap. Undefined on a calendar
+     *  failure, for the same reason the event counts are. */
+    let projectHours: number | undefined;
     if (cal.connected) {
       socialEvents = 0;
       socialEventList = [];
       oneOffEventList = [];
+      let projectMinutes = 0;
       for (const [date, events] of cal.byDate) {
         for (const e of events) {
-          if (e.colorId !== SOCIAL_COLOR_ID) continue;
           if (!adhered.has(e.id)) continue;
+
+          if (e.colorId === PROJECT_COLOR_ID) {
+            // Minutes from the event's own span. An all-day block contributes nothing —
+            // the same ruling adherence makes, and for the same reason: a day marked
+            // "projects" is not fourteen hours of project work.
+            if (e.start && e.end && !e.allDay) {
+              const mins =
+                (Date.parse(e.end) - Date.parse(e.start)) / 60_000;
+              if (Number.isFinite(mins) && mins > 0) projectMinutes += mins;
+            }
+            continue;
+          }
+
+          if (e.colorId !== SOCIAL_COLOR_ID) continue;
           socialEvents += 1;
           // A standing commitment is an instance of a repeating series; a one-off is not.
           (e.recurring ? socialEventList : oneOffEventList).push({
@@ -80,6 +110,9 @@ export async function GET(req: Request) {
       }
       socialEventList.sort((a, b) => b.date.localeCompare(a.date));
       oneOffEventList.sort((a, b) => b.date.localeCompare(a.date));
+      // One decimal: the fact line prints this verbatim, and "7.4 of 14 hours" is a figure
+      // you can act on where "7.416666666666667" is a bug report.
+      projectHours = Math.round((projectMinutes / 60) * 10) / 10;
     }
 
     const [counts, observedDays, workouts, facts, skills14] = await Promise.all([
@@ -89,6 +122,7 @@ export async function GET(req: Request) {
       // not evidence you kept one.
       getRingCounts(db, from, anchor, {
         social_events: socialEventList?.length,
+        project_hours: projectHours,
       }),
       getObservedDays(db, anchor),
       // The workout metrics are 14-day counts, so they cannot tell the toggles what is

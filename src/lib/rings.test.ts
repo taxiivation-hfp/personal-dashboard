@@ -177,6 +177,8 @@ test("the printed noun and the counting rule are allowed to disagree, but not by
     misc: false,
     steps: true,
     skills: false,
+    // Hours, and two blocks on one Tuesday are two blocks — nothing about a day caps them.
+    project_hours: false,
   };
   for (const m of METRICS)
     assert.equal(m.perDayCapped, expected[m.key], `${m.key}`);
@@ -314,11 +316,13 @@ test("only a floor-without-weight is drawn as an outer lap", () => {
     WINDOW_DAYS,
   ).flatMap((p) => p.metrics);
 
-  // TWO laps now that steps is live: misc and steps both carry a floor at weight 0,
-  // so both ride the thin outer band and neither ever moves the Physical mean.
+  // THREE laps: misc and steps on Physical, project hours on Portfolio. Each carries a
+  // floor at weight 0, so each rides the thin outer band and none can move its pillar's
+  // mean — a phone sensor must not cap Physical, and blocked hours must not fill
+  // Portfolio when nothing came of them.
   assert.deepEqual(
     all.filter((m) => m.lap).map((m) => m.key),
-    ["misc", "steps"],
+    ["misc", "steps", "project_hours"],
   );
   // Nothing that counts is ever moved off the donut.
   assert.ok(all.every((m) => !m.lap || m.weight === 0));

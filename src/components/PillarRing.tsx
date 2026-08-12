@@ -345,6 +345,10 @@ export type RingSegment = {
  *  in the box, and the ring was paying it out of its own diameter. */
 const LABEL_GAP = 4;
 
+/** Breathing room between two labels' boxes, in px of arc. Small — the point is that they
+ *  stop touching, not that they stand apart. */
+const LABEL_CLEAR = 6;
+
 /** The label's own type. Off the app's step scale and predates this pass; left alone
  *  deliberately, because changing it moves the whole column's width budget. */
 const LABEL_SIZE = 11.5;
@@ -707,6 +711,60 @@ export function SegmentedRing({
       baseDeg: (s.start + s.span / 2) * 360,
       w: labelW(s.label!),
     }));
+
+  /**
+   * FAN APART ANY TWO NAMES THAT LAND ON THE SAME SPOT.
+   *
+   * Every label sits at ONE radius, just past the outermost band, so a name's only
+   * coordinate is its angle — and two bands can genuinely agree on one. Portfolio is the
+   * case that forced this: a donut of a single slice puts "Skills" at the bottom of the
+   * circle, and a single outer lap puts "Projects" at the bottom of the circle, and the two
+   * printed straight through each other.
+   *
+   * Relaxation rather than reassignment: a cluster is pushed apart around its own mean, so
+   * a name never leaves its arc by more than it must, and a ring whose labels were already
+   * clear of each other — Physical's four, Social's three — comes out untouched. Applied
+   * ONCE, here, so the resting positions and the rotation loop below read the same numbers
+   * and a spinning ring cannot disagree with a paused one.
+   */
+  if (labelMeta.length > 1) {
+    /**
+     * How far apart this particular pair has to be, in degrees.
+     *
+     * NOT a constant, because a constant cannot know how wide a word is: 26° separates
+     * "Misc" from "Steps" and leaves "Projects" still lying across "Skills". The room two
+     * boxes need is measured along the direction they are being pushed, which is the
+     * tangent — nearly horizontal at the top and bottom of the circle, where their WIDTHS
+     * collide, and nearly vertical at three and nine o'clock, where only their line heights
+     * do. Same decomposition the radial clearance above already uses, turned ninety degrees.
+     */
+    const needDeg = (a: (typeof labelMeta)[number], b: (typeof labelMeta)[number]) => {
+      const mid = (((a.baseDeg + b.baseDeg) / 2) * Math.PI) / 180;
+      const along =
+        Math.abs(Math.cos(mid)) * ((a.w + b.w) / 2) +
+        Math.abs(Math.sin(mid)) * LABEL_SIZE * 1.2;
+      return ((along + LABEL_CLEAR) * 180) / (Math.PI * rl);
+    };
+
+    labelMeta.sort((a, b) => a.baseDeg - b.baseDeg);
+    for (let pass = 0; pass < 8; pass++) {
+      let moved = false;
+      for (let i = 0; i < labelMeta.length; i++) {
+        const a = labelMeta[i]!;
+        const b = labelMeta[(i + 1) % labelMeta.length]!;
+        // The last pair wraps the top of the circle, so its gap crosses 360.
+        const gap =
+          b.baseDeg - a.baseDeg + (i === labelMeta.length - 1 ? 360 : 0);
+        const need = needDeg(a, b);
+        if (gap >= need) continue;
+        const push = (need - gap) / 2;
+        a.baseDeg -= push;
+        b.baseDeg += push;
+        moved = true;
+      }
+      if (!moved) break;
+    }
+  }
 
   // The padded box. Geometry is unchanged — the viewBox simply starts negative, so every
   // cx/cy/r below still means what it meant before the labels existed. The pad is
@@ -1166,7 +1224,13 @@ export function bandsForPillar(
       data.skills,
       METRICS.find((m) => m.key === "skills")?.required ?? 4,
     );
-    return { ...b, outer: [] };
+    // The donut is skills and the mid band is the parked ones; the OUTER lap is project
+    // hours, on the same footing Misc and Steps have on Physical. Filtered from the ring
+    // rather than named here, so a future weight-0 metric on this pillar needs no edit.
+    return {
+      ...b,
+      outer: ring ? ring.metrics.filter((m) => m.lap).map(asSegment) : [],
+    };
   }
   // Physical: the metric donut it always was, misc riding the thin lap. Before the fetch
   // lands there is one plain empty slice rather than a dashed one: dashes mean "no source

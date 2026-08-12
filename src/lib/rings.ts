@@ -68,7 +68,8 @@ export type MetricSource =
   | "gym"
   | "skill_session"
   | "health_steps"
-  | "calendar_social";
+  | "calendar_social"
+  | "calendar_project_hours";
 
 /** Workout kinds. Misc is deliberately unscored — see METRICS. */
 export type WorkoutKind = "strength" | "cardio" | "misc";
@@ -105,7 +106,7 @@ export type Metric = {
    * now lives in `perDayCapped`, and these two must be allowed to disagree — `misc` reads
    * "sessions" and always did, even while it was being counted by day.
    */
-  unit: "days" | "sessions";
+  unit: "days" | "sessions" | "hours";
   /**
    * Whether one date can contribute at most once.
    *
@@ -215,6 +216,36 @@ export const METRICS: Metric[] = [
     unit: "sessions",
     perDayCapped: false,
     weight: 1,
+    sourceReady: true,
+  },
+  {
+    key: "project_hours",
+    pillar: "portfolio",
+    label: "Projects",
+    source: "calendar_project_hours",
+    /**
+     * HOURS BLOCKED FOR THE OWNER'S OWN PROJECTS, from the calendar — Basil, the one
+     * full-rate category in productivity.ts. Adhered only, exactly as the social events
+     * are: an hour you blocked and drifted from is not project work you did.
+     *
+     * The first metric measured in HOURS rather than in things that happened, and the
+     * reason is what the pillar is for. Skills counts sessions because turning up is the
+     * unit — a lesson is a lesson. Portfolio work has no session shape; it is the thing
+     * that quietly gets none of the week, so the honest question is how much of the week
+     * it got.
+     */
+    required: 14, // 14h / 14 days — an hour a day, the owner's minimum
+    unit: "hours",
+    perDayCapped: false,
+    /**
+     * WEIGHT 0, so this is a thin lap around the donut and never moves Portfolio's fill.
+     *
+     * The owner asked for an outer ring, and that is what an outer ring means here — the
+     * same standing Misc and Steps have. It also keeps a real property: Portfolio's fill
+     * stays a statement about SKILLS, so blocking six hours and touching nothing cannot
+     * fill the pillar. The lap says the hours were there; the donut says what came of them.
+     */
+    weight: 0,
     sourceReady: true,
   },
   {

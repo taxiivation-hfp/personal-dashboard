@@ -63,7 +63,7 @@ export type Adherence = {
   pct: number;
   /** Blocked hours actually worked. */
   adheredHours: number;
-  /** Blocked hours in the day, worked or not — the denominator for the 70. */
+  /** Blocked hours in the day, worked or not — the denominator for BLOCK_SHARE. */
   totalHours: number;
   adhered: number;
   drifted: number;
@@ -79,10 +79,23 @@ export type Adherence = {
 /** The day's non-negotiable tally. `scheduled` is how many applied that weekday. */
 export type HabitTally = { scheduled: number; done: number };
 
+/**
+ * THE TWO HALVES, and they are halves on purpose.
+ *
+ * 50/50, the owner's ruling, replacing 70/30. The old split said an hour of blocked time
+ * was worth more than two thirds of a day, which made the figure mostly a story about the
+ * calendar — a day with nothing scheduled could barely climb however much of the standing
+ * minimum was kept, and a day of long blocks read well with the whole checklist untouched.
+ * Even halves say the thing the app actually believes: the hours you said you would work
+ * and the things you do every day regardless are worth the same, and a day is answered by
+ * both.
+ *
+ * They must sum to 100 — the figure is a percentage and a test pins it.
+ */
 /** Share of the day's figure that blocked time can earn. */
-export const BLOCK_SHARE = 70;
+export const BLOCK_SHARE = 50;
 /** Share the non-negotiables can earn, split evenly between them. */
-export const HABIT_SHARE = 30;
+export const HABIT_SHARE = 50;
 
 const localDateTime = (iso: string): number => new Date(iso).getTime();
 
@@ -159,7 +172,7 @@ export function buildBlocks(
  * as planned is simply more of the day than a fifteen-minute errand. Every hour of the
  * day's blocked total is worth BLOCK_SHARE/totalHours.
  *
- * NON-NEGOTIABLES SPLIT HABIT_SHARE EVENLY — five of them and each is worth six. They have
+ * NON-NEGOTIABLES SPLIT HABIT_SHARE EVENLY — five of them and each is worth ten. They have
  * no duration, so there is nothing to weight them by, and a checklist where some items
  * quietly matter more than others is a checklist you start gaming.
  *

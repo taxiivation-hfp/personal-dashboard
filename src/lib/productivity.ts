@@ -37,9 +37,10 @@ export const POINTS_PER_HABIT = 25;
  * sets and dock a session that was efficient. A session happened or it did not, and it is
  * worth what a session is worth.
  *
- * So it is priced like a non-negotiable rather than like an hour: two of them, in points.
- * The consequence, and it is intended: a two-hour session and a forty-minute one score
- * identically, and a day with two sessions scores twice one.
+ * So it is priced as a THING rather than as a duration — currently worth what a full-rate
+ * hour is worth, which is the owner's dial and the only place to turn it. The consequence,
+ * and it is intended: a two-hour session and a forty-minute one score identically, and a day
+ * with two sessions scores twice one.
  */
 export const POINTS_PER_SESSION = 100;
 
@@ -75,17 +76,32 @@ export const CALENDAR_RATES: {
   /** Fraction of POINTS_PER_HOUR earned per hour. */
   rate: number;
 }[] = [
-  { id: "11", google: "Tomato", label: "Work", rate: 1 },
-  // Uni is the calendar's DEFAULT colour — an event you scheduled without thinking about
-  // its colour. Peacock briefly sat here too, but that was a stray on a couple of real
-  // events rather than a rule; a colour has to be chosen deliberately to mean something.
+  // WORK PROJECTS — the owner's own things, the portfolio. Full rate, and it is the only
+  // full rate: this is the work nobody scheduled for them and nobody is paying for, which
+  // is exactly why it is the first to lose a week. Basil.
+  { id: "10", google: "Basil", label: "Work Projects", rate: 1 },
+  // WORK UNI — their own study in their own time, as distinct from sitting in a timetabled
+  // class. Chosen work, so it outranks the sold and the scheduled kinds. Banana.
+  { id: "5", google: "Banana", label: "Work Uni", rate: 0.75 },
+  // WORK PART TIME — the hours sold for money. TWO IDS, one meaning, because the calendar
+  // really does hold both: Law Image and KebabX sit in Lavender, and older shifts sit in
+  // Tomato. Merging them in the table rather than re-colouring a year of history is the
+  // cheaper truth — and the stack merges by LABEL, so they draw as one slab regardless.
+  { id: "1", google: "Lavender", label: "Work Part Time", rate: 0.5 },
+  { id: "11", google: "Tomato", label: "Work Part Time", rate: 0.5 },
+  // UNI — the timetable. The calendar's DEFAULT colour: an event you scheduled without
+  // thinking about its colour, which is what a lecture in a fixed slot is.
   { id: null, google: "default", label: "Uni", rate: 0.5 },
-  // GRAPE IS DELIBERATELY ABSENT. Gym used to score here at half rate, as hours; it scores
-  // from the LOGGED SESSION now, at a flat POINTS_PER_SESSION — see that constant for why,
-  // and `workouts` below for the double-count guard that keeps it to one of the two. A
-  // Grape block on the calendar is therefore worth nothing on its own, exactly like any
-  // other unlisted colour: the session is the record, and the block is just where it was
-  // going to happen.
+  // DELIBERATELY ABSENT, both of them, and for different reasons.
+  //
+  // GRAPE (gym) scores from the LOGGED SESSION at a flat POINTS_PER_SESSION — see that
+  // constant, and `workouts` below for the guard that keeps it to one of the two. The
+  // block is just where it was going to happen.
+  //
+  // GRAPHITE (social) scores nothing here at all. Seeing people is a pillar, counted by
+  // the Social ring, and paying it productivity points as well would make an evening out
+  // a thing you can be more or less productive AT — which is the one reading this app's
+  // whole design refuses.
 ];
 
 export const UNLISTED_RATE = 0;
@@ -154,18 +170,31 @@ export type ProductivityInput = {
 /**
  * One slab of the day's stacked bar.
  *
- * The bar is the day's productivity broken into what produced it, so the colour of an
- * hour on the chart is the colour of that hour in the calendar. `colorId` is null for the
- * two segments that are not blocked time at all.
+ * The bar is the day's productivity broken into what produced it — one slab per CATEGORY,
+ * in the colour that category has in the calendar.
+ *
+ * It used to be one slab per COLOUR, which was the same thing while every category owned
+ * exactly one swatch. Work Part Time owns two (Lavender and Tomato, because the calendar
+ * really does hold both), and a bar that drew them apart would have shown one meaning as
+ * two slabs and printed its name twice in the legend. The unit the reader cares about is
+ * the category; the colour is how it is recognised.
  */
 export type ProductivitySegment = {
   /**
-   * "time" is blocked calendar hours and carries that hour's colour. "habits" is the
+   * "time" is blocked calendar hours and carries that category's colour. "habits" is the
    * things you ticked. "sessions" is training logged — not an hour, so it has no colorId
    * and no rate, and the chart gives it its own fill (SLAB_GYM).
    */
   kind: "time" | "habits" | "sessions";
+  /**
+   * The category's CANONICAL colour — the first id listed for it in CALENDAR_RATES — not
+   * necessarily the id of any one event in the slab. Null on the two kinds that are not
+   * calendar time.
+   */
   colorId: ColorId;
+  /** What this slab is called, resolved here so no screen has to look it up and none can
+   *  call the same slab two things. */
+  label: string;
   points: number;
   /**
    * The RAW scheduled minutes behind this slab, before the colour's rate. 0 on the habits
@@ -194,7 +223,7 @@ export type ProductivityScore = {
   /**
    * The stack, largest first. Segments always sum to `points`.
    *
-   * Blocked time is merged BY COLOUR rather than left one-per-event: a day of six Uni
+   * Blocked time is merged BY CATEGORY rather than left one-per-event: a day of six Uni
    * blocks would otherwise draw six identical slabs with hairlines between them, which
    * reads as detail the chart is not carrying.
    */
@@ -209,24 +238,37 @@ export function rateFor(colorId: ColorId): number {
 export function scoreDay(input: ProductivityInput): ProductivityScore {
   let minutes = 0;
   let weightedMinutes = 0;
-  /** Weighted minutes per colour, so the bar can be split the way the calendar was. */
-  const byColour = new Map<ColorId, number>();
+  /**
+   * Weighted minutes per CATEGORY, so the bar can be split the way the day was spent.
+   *
+   * Keyed by label rather than by colorId: Work Part Time owns two swatches, and keying by
+   * colour would draw one meaning as two slabs. `canon` remembers which colour each
+   * category shows itself in — the first id the table lists for it, so the choice is the
+   * registry's and not this loop's.
+   */
+  const byCategory = new Map<string, number>();
   /** The same split before the rate, so a slab can say what it was made of. */
-  const rawByColour = new Map<ColorId, number>();
+  const rawByCategory = new Map<string, number>();
+  const canon = new Map<string, ColorId>();
 
   for (const b of input.blocks) {
     if (!COUNTED_STATES.includes(b.state)) continue;
-    const rate = rateFor(b.colorId);
+    const entry = CALENDAR_RATES.find((c) => c.id === b.colorId);
     // Not merely worth zero — an unlisted colour was never productive time, so it must not
     // inflate the raw minutes figure either.
-    if (rate <= 0) continue;
+    if (!entry || entry.rate <= 0) continue;
     // Clamped: a malformed event with an end before its start must not subtract from
     // the day.
     const m = Math.max(0, b.minutes);
     minutes += m;
-    weightedMinutes += m * rate;
-    byColour.set(b.colorId, (byColour.get(b.colorId) ?? 0) + m * rate);
-    rawByColour.set(b.colorId, (rawByColour.get(b.colorId) ?? 0) + m);
+    weightedMinutes += m * entry.rate;
+    byCategory.set(entry.label, (byCategory.get(entry.label) ?? 0) + m * entry.rate);
+    rawByCategory.set(entry.label, (rawByCategory.get(entry.label) ?? 0) + m);
+    if (!canon.has(entry.label))
+      canon.set(
+        entry.label,
+        CALENDAR_RATES.find((c) => c.label === entry.label)!.id,
+      );
   }
 
   // Each part is rounded independently so the three always sum to `points` exactly. Adding
@@ -249,21 +291,23 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
   // Colour slabs are apportioned out of the ALREADY-ROUNDED timePoints, and the smallest
   // takes the remainder. Rounding each colour independently would let the stack drift a
   // point or two from the total it is supposed to be a picture of.
-  const colours = [...byColour.entries()].sort((a, b) => b[1] - a[1]);
+  const cats = [...byCategory.entries()].sort((a, b) => b[1] - a[1]);
   const segments: ProductivitySegment[] = [];
   let assigned = 0;
-  colours.forEach(([colorId, wm], i) => {
+  cats.forEach(([label, wm], i) => {
     const pts =
-      i === colours.length - 1
+      i === cats.length - 1
         ? timePoints - assigned
         : Math.round((wm / weightedMinutes) * timePoints);
     assigned += pts;
+    const colorId = canon.get(label) ?? null;
     if (pts > 0)
       segments.push({
         kind: "time",
         colorId,
+        label,
         points: pts,
-        minutes: rawByColour.get(colorId) ?? 0,
+        minutes: rawByCategory.get(label) ?? 0,
         rate: rateFor(colorId),
       });
   });
@@ -274,6 +318,7 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     segments.push({
       kind: "sessions",
       colorId: null,
+      label: "Gym",
       points: sessionPoints,
       minutes: 0,
       rate: null,
@@ -282,6 +327,7 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     segments.push({
       kind: "habits",
       colorId: null,
+      label: "Non-negotiables",
       points: habitPoints,
       minutes: 0,
       rate: null,

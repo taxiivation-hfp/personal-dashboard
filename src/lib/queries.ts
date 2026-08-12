@@ -788,7 +788,11 @@ export async function getRingCounts(
       continue;
     }
 
-    if (m.source === "calendar_social") {
+    // Both calendar-sourced metrics come from the caller: Google events are never
+    // persisted, so whoever already holds the range counts them. An absent key is an
+    // UNRESOLVED source rather than a zero — a Google outage must read "no data", not
+    // "you did nothing".
+    if (m.source === "calendar_social" || m.source === "calendar_project_hours") {
       const n = external[m.key];
       out[m.key] = n == null ? { count: 0, resolved: false } : { count: n, resolved: true };
       continue;

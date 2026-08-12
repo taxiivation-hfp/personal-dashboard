@@ -57,10 +57,18 @@ ratio of done-to-due:
 
 | Share | Earned by |
 |---|---|
-| **70** | blocked hours worked ÷ blocked hours in the day |
-| **30** | non-negotiables ticked ÷ non-negotiables scheduled, split evenly |
+| **50** | blocked hours worked ÷ blocked hours in the day |
+| **50** | non-negotiables ticked ÷ non-negotiables scheduled, split evenly |
 
-So one hour of an eight-hour day is `1/8 × 70`, and one of five non-negotiables is 6.
+So one hour of an eight-hour day is `1/8 × 50`, and one of five non-negotiables is 10.
+
+**EVEN HALVES, replacing 70/30 — the owner's ruling.** The old split made the figure mostly
+a story about the calendar: a day with nothing scheduled could barely climb however much of
+the standing minimum was kept, and a day of long blocks read well with the whole checklist
+untouched. Halves say what the app actually believes — the hours you said you would work and
+the things you do every day regardless are worth the same, and a day is answered by both.
+`BLOCK_SHARE + HABIT_SHARE` must remain 100; a test pins it, and the tests are written
+against the constants rather than the numbers so the dial can be turned again.
 A day with 8h blocked and 5 items starts at 0 and can only go up.
 
 **This replaced a ratio of adhered-to-due, and the reason is behavioural, not
@@ -175,6 +183,17 @@ truth, what counts is the cap.
   give `0.8 x 1.25 + 0.2 x 0 = 100%`, so overdoing strength would exactly cancel skipping
   cardio. The cap stays in the maths; the acknowledgement lives in the pixels. A test
   asserts no amount of strength can fill Physical alone.
+- **Portfolio carries a lap of its own: PROJECT HOURS.** Adhered Basil blocks over the
+  fortnight — the same colour and the same adhered-only rule productivity prices at the full
+  rate — against 14 hours, an hour a day. `weight: 0`, so it is a thin outer lap and never
+  moves Portfolio's fill.
+
+  That weight is the point, not a technicality: **Portfolio's fill stays a statement about
+  SKILLS**, so blocking six hours and touching nothing cannot fill the pillar. The lap says
+  the hours were there; the donut says what came of them. It is also the first metric
+  measured in HOURS rather than in things that happened — skills count sessions because
+  turning up is the unit, and project work has no session shape. It is the thing that
+  quietly gets none of the week, so the honest question is how much of the week it got.
 - **A metric may have a floor without having a share, and it is drawn OUTSIDE the ring.**
   Misc — bouldering, calisthenic skills — has `required: 1` (one session a fortnight) and
   `weight: 0`. It fills its own mark and never enters the Physical mean.
@@ -477,6 +496,33 @@ didn't schedule a productive day. Both numbers matter.
   on it. If it ever acquires one, this exception has been misread.
 - `src/lib/productivity.ts` holds the one tuning knob — the colour→rate table — following
   the `rings.ts` METRICS precedent. Anything unlisted scores zero.
+- **FIVE CATEGORIES, and the split exists to answer "where did the week go".** The point is
+  to see whether an hour went to the portfolio, to uni, or to the till:
+
+  | Category | Colour | Rate |
+  |---|---|---|
+  | **Work Projects** | Basil `10` | 100/h — the only full rate |
+  | **Work Uni** | Banana `5` | 75/h |
+  | **Work Part Time** | Lavender `1` **and** Tomato `11` | 50/h |
+  | **Uni** (the timetable) | default, no colour | 50/h |
+  | Social | Graphite `8` | **nothing** |
+  | Gym | Grape `3` | **nothing** — flat per logged session |
+
+  Work Projects is the only full rate because it is the work nobody scheduled and nobody is
+  paying for, which is exactly why it is the first thing a bad week deletes. Social scores
+  nothing at all: seeing people is a pillar, and paying it productivity points would make an
+  evening out a thing you can be more or less productive AT.
+
+- **ONE CATEGORY MAY OWN TWO COLOURS, and the stack merges by CATEGORY not by colour.**
+  Work Part Time owns Lavender and Tomato because the calendar genuinely holds both, and
+  re-colouring a year of history is a worse trade than a two-row table. `scoreDay` therefore
+  keys its slabs by label and carries a `label` on every segment, so no screen looks a name
+  up and none can call one slab two things. A segment's `colorId` is the category's
+  CANONICAL colour — the first id listed for it — not necessarily any one event's.
+- **CHANGING THIS TABLE REWRITES HISTORY, silently.** The score is recomputed from the live
+  calendar on every read, so adding a colour makes every past adhered block of that colour
+  start scoring, and removing one makes them stop. There is no stored score to migrate and
+  no warning on screen. Retune deliberately.
 
 ## The coach
 

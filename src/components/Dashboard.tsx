@@ -229,15 +229,9 @@ export default function Dashboard({
               : s.kind === "time"
                 ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL)
                 : SLAB_NEUTRAL,
-          // Named the way the week strip names them, from the same table, so the chart's
-          // legend and the strip's swatches can never call one colour two things.
-          label:
-            s.kind === "sessions"
-              ? "Gym"
-              : s.kind === "time"
-                ? (CALENDAR_RATES.find((c) => c.id === s.colorId)?.label ??
-                  "Other")
-                : "Non-negotiables",
+          // Taken straight off the segment, which is where the score itself decided it —
+          // so the chart's legend and the strip's swatches cannot call one slab two things.
+          label: s.label,
         })),
       })),
     [strip],

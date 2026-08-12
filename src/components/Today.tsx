@@ -652,29 +652,27 @@ export default function Today({
    * itself when the week's composition changes.
    */
   const stackKey = (() => {
-    const seen = new Map<string, { label: string; rank: number }>();
+    // Keyed by the slab's NAME, not by its fill. A category may own more than one calendar
+    // swatch — Work Part Time owns two — and the score merges those into one slab, so a
+    // legend keyed by colour would have printed the same name twice with two different
+    // marks beside it. The name is the unit here, exactly as it is in the bar.
+    const seen = new Map<string, { fill: string; rank: number }>();
     for (const d of strip)
       for (const s of d.productivity?.segments ?? []) {
-        const fill = slabFill(s);
-        if (seen.has(fill)) continue;
-        if (s.kind === "time") {
-          const i = CALENDAR_RATES.findIndex((c) => c.id === s.colorId);
-          seen.set(fill, {
-            label: CALENDAR_RATES[i]?.label ?? "Other",
-            rank: i < 0 ? CALENDAR_RATES.length : i,
-          });
-        } else {
-          // After every calendar colour: the hours came first, and these two are the
-          // things in the bar that were not hours. Gym before the ticks, matching the
-          // order they are stacked in.
-          seen.set(fill, {
-            label: s.kind === "sessions" ? "Gym" : "Non-negotiables",
-            rank: CALENDAR_RATES.length + (s.kind === "sessions" ? 1 : 2),
-          });
-        }
+        if (seen.has(s.label)) continue;
+        const i = CALENDAR_RATES.findIndex((c) => c.id === s.colorId);
+        seen.set(s.label, {
+          fill: slabFill(s),
+          // Calendar categories in registry order, then the two things that were not
+          // hours — gym before the ticks, matching how they stack.
+          rank:
+            s.kind === "time"
+              ? (i < 0 ? CALENDAR_RATES.length : i)
+              : CALENDAR_RATES.length + (s.kind === "sessions" ? 1 : 2),
+        });
       }
     return [...seen]
-      .map(([fill, v]) => ({ fill, ...v }))
+      .map(([label, v]) => ({ label, ...v }))
       .sort((x, y) => x.rank - y.rank);
   })();
   // Straight off DayView.pillars — no extra request for something already loaded.

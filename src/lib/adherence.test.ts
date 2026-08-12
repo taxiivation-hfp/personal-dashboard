@@ -29,10 +29,18 @@ const block = (
 
 // ---------------------------------------------------------------- the shape of it
 
-test("the two shares are 70 and 30", () => {
-  assert.equal(BLOCK_SHARE, 70);
-  assert.equal(HABIT_SHARE, 30);
+// The RATIO is the owner's dial and has been turned once already (70/30 -> 50/50), so the
+// tests below are written against the constants rather than against today's numbers. What
+// must never change is that the two shares are the whole of the figure and nothing else can
+// reach it — that is what makes 100 mean "everything I said I'd do".
+test("the two shares are the whole figure", () => {
   assert.equal(BLOCK_SHARE + HABIT_SHARE, 100);
+  assert.ok(BLOCK_SHARE > 0 && HABIT_SHARE > 0);
+});
+
+test("blocked hours and non-negotiables carry equal weight", () => {
+  assert.equal(BLOCK_SHARE, 50);
+  assert.equal(HABIT_SHARE, 50);
 });
 
 test("an untouched day is 0, never null", () => {
@@ -54,14 +62,14 @@ test("hours, not items — a 3h block outweighs a 1h block", () => {
   // 4 blocked hours in the day; adhering the 3h one earns 3/4 of the 70.
   const long = adherenceFor([block("adhered", 3), block(null, 1)]);
   const short = adherenceFor([block(null, 3), block("adhered", 1)]);
-  assert.equal(long.pct, 53); // 52.5 rounds
-  assert.equal(short.pct, 18); // 17.5 rounds
+  assert.equal(long.pct, Math.round(0.75 * BLOCK_SHARE));
+  assert.equal(short.pct, Math.round(0.25 * BLOCK_SHARE));
   assert.ok(long.pct > short.pct, "the longer block is worth more");
 });
 
 test("half the blocked hours is half the block share", () => {
   const a = adherenceFor([block("adhered", 2), block(null, 2)]);
-  assert.equal(a.pct, 35);
+  assert.equal(a.pct, Math.round(BLOCK_SHARE / 2));
   assert.equal(a.adheredHours, 2);
   assert.equal(a.totalHours, 4);
 });
@@ -69,14 +77,14 @@ test("half the blocked hours is half the block share", () => {
 test("the denominator is the WHOLE day, not the elapsed part — that is what makes it climb", () => {
   // A 2h block worked and a 6h block still ahead: 2/8 of 70, not 100% of what has passed.
   const a = adherenceFor([block("adhered", 2), block(null, 6, false)]);
-  assert.equal(a.pct, 18); // 17.5 rounds
+  assert.equal(a.pct, Math.round(0.25 * BLOCK_SHARE));
 });
 
 test("drift and skip do not subtract, they simply do not add", () => {
   const drifted = adherenceFor([block("adhered", 1), block("drifted", 1)]);
   const unmarked = adherenceFor([block("adhered", 1), block(null, 1)]);
-  assert.equal(drifted.pct, 35);
-  assert.equal(unmarked.pct, 35);
+  assert.equal(drifted.pct, Math.round(BLOCK_SHARE / 2));
+  assert.equal(unmarked.pct, Math.round(BLOCK_SHARE / 2));
   assert.equal(drifted.pct, unmarked.pct, "drifting costs nothing the clock did not already cost");
 });
 
@@ -89,48 +97,48 @@ test("marking a block can only ever raise the figure", () => {
 test("dismissed blocks leave both sides of the ratio", () => {
   const a = adherenceFor([block("adhered", 1), block("dismissed", 9)]);
   assert.equal(a.totalHours, 1);
-  assert.equal(a.pct, 70);
+  assert.equal(a.pct, BLOCK_SHARE);
 });
 
 test("a block with an unknown duration cannot be earned or held against you", () => {
   const unknown = { ...block(null, 1), minutes: null };
   const a = adherenceFor([block("adhered", 1), unknown]);
   assert.equal(a.totalHours, 1);
-  assert.equal(a.pct, 70);
+  assert.equal(a.pct, BLOCK_SHARE);
 });
 
 // ---------------------------------------------------------------- non-negotiables
 
-test("five non-negotiables are worth six each", () => {
-  const one = adherenceFor([], { scheduled: 5, done: 1 });
-  assert.equal(one.pct, 6);
-  assert.equal(adherenceFor([], { scheduled: 5, done: 3 }).pct, 18);
-  assert.equal(adherenceFor([], { scheduled: 5, done: 5 }).pct, 30);
+test("five non-negotiables split the habit share evenly", () => {
+  const each = HABIT_SHARE / 5;
+  assert.equal(adherenceFor([], { scheduled: 5, done: 1 }).pct, Math.round(each));
+  assert.equal(adherenceFor([], { scheduled: 5, done: 3 }).pct, Math.round(3 * each));
+  assert.equal(adherenceFor([], { scheduled: 5, done: 5 }).pct, HABIT_SHARE);
 });
 
 test("ticking one adds immediately — there is no cutoff to wait for", () => {
   const a = adherenceFor([block(null, 4)], { scheduled: 5, done: 1 });
-  assert.equal(a.pct, 6);
+  assert.equal(a.pct, Math.round(HABIT_SHARE / 5));
 });
 
 test("done above scheduled cannot push past the share", () => {
-  assert.equal(adherenceFor([], { scheduled: 2, done: 9 }).pct, 30);
+  assert.equal(adherenceFor([], { scheduled: 2, done: 9 }).pct, HABIT_SHARE);
 });
 
 test("no habits at all leaves only the block share reachable", () => {
-  assert.equal(adherenceFor([block("adhered", 1)]).pct, 70);
-  assert.equal(adherenceFor([block("adhered", 1)], null).pct, 70);
+  assert.equal(adherenceFor([block("adhered", 1)]).pct, BLOCK_SHARE);
+  assert.equal(adherenceFor([block("adhered", 1)], null).pct, BLOCK_SHARE);
 });
 
 // ---------------------------------------------------------------- the two together
 
 test("the halves compose", () => {
-  // Half the hours (35) plus three of five non-negotiables (18).
+  // Half the blocked hours, plus three of five non-negotiables.
   const a = adherenceFor([block("adhered", 1), block(null, 1)], {
     scheduled: 5,
     done: 3,
   });
-  assert.equal(a.pct, 53);
+  assert.equal(a.pct, Math.round(BLOCK_SHARE / 2 + (3 / 5) * HABIT_SHARE));
 });
 
 test("the counts are still reported for the call to action", () => {
