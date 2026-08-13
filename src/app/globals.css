@@ -718,6 +718,92 @@ input[type="number"]::-webkit-inner-spin-button {
   margin: 0;
 }
 
+/* HOW MUCH OF A DRIFTED BLOCK WAS WORKED.
+ *
+ * A NATIVE range input, which is the one control in this app that had to be. It is dragged
+ * with a thumb on a phone, and nothing hand-rolled tracks a finger as well as the platform
+ * does — least of all across a pointer leaving the element mid-drag.
+ *
+ * THE FILL IS THE ACCENT, and that is an argument rather than a preference: this fraction
+ * feeds the adherence ring, and the ring is amber. The same quantity should not change
+ * colour between the control that sets it and the figure that reports it. No second hue is
+ * introduced, and the drift colour is deliberately NOT used — this bar is the part you
+ * WORKED, so painting it in the colour of the state would say the opposite of what it means.
+ *
+ * A range input cannot style the track to the left of its own thumb, so the fill is a
+ * gradient with a hard stop driven from --worked, set inline by the component. Firefox has
+ * ::-moz-range-progress and could do it natively; using one mechanism for both keeps the
+ * two browsers from drifting a pixel apart.
+ *
+ * The track is 3px — the same weight as the adherence bar on the week strip, which is the
+ * other place a percentage is drawn as a horizontal rule. */
+.worked-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  /* The touch target, not the track. 24px so a thumb finds it; the visible rule inside is
+     3px. A 3px-tall control on a phone is a control you miss. */
+  height: 24px;
+  background: transparent;
+  cursor: pointer;
+}
+.worked-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) 0 calc(var(--worked, 0) * 100%),
+    var(--color-line-strong) calc(var(--worked, 0) * 100%) 100%
+  );
+}
+.worked-range::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) 0 calc(var(--worked, 0) * 100%),
+    var(--color-line-strong) calc(var(--worked, 0) * 100%) 100%
+  );
+}
+.worked-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  /* Centres an 18px thumb on a 3px track: -(18 - 3) / 2. WebKit lays the thumb out from the
+     top of the track rather than its middle, and Firefox does not — hence the one-sided
+     correction rather than a shared rule. */
+  margin-top: -7.5px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent);
+  transition: transform var(--dur-press) var(--ease-out);
+}
+.worked-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent);
+  transition: transform var(--dur-press) var(--ease-out);
+}
+/* Transform only, and no shadow: this app ships no glows, and the press is the one moment
+   the control should acknowledge you. */
+.worked-range:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+.worked-range:active::-moz-range-thumb {
+  transform: scale(1.15);
+}
+.worked-range:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.worked-range:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* The tab bar is the app's third and last translucent surface. Same alternative as the
  * dialog backdrop: when transparency is unwelcome it becomes an opaque band rather than a
  * blurred one, which is a real answer instead of a degraded version of the same thing. */

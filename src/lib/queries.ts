@@ -16,6 +16,7 @@ import { addDays, daysBetween } from "./dates";
 import { deriveWeights } from "./goals";
 import { METRICS, WINDOW_DAYS, type RawCount, type PillarKey } from "./rings";
 import { carriedDays, tasksFor, type DayTask } from "./tasks";
+import { workedFraction } from "./worked";
 
 // PillarKey now lives in rings.ts, which must stay import-free to be testable under
 // `node --test`. Re-exported here so every existing `import { PillarKey } from
@@ -220,24 +221,49 @@ export async function openDayTasks(db: Client, today: string): Promise<DayTaskVi
 /** One past day of the calorie log, for the dialog's sidebar. */
 export type CalorieDay = { date: string; total: number; entries: CalorieEntry[] };
 
+/** What a marked calendar event was worth over a window: its state, and how much of it was
+ *  worked. */
+export type EventWork = { state: BlockState; worked: number };
+
 /**
- * Calendar events the owner ADHERED to, by event id, over a window.
+ * Marked calendar events over a window, by event id — the state AND the worked fraction.
  *
- * What the Social ring counts now: an event on the calendar you drifted from is not a
- * social fortnight you had. Unmarked events do not count either — the mark is the record,
- * and the ring reads the record, not the plan.
+ * It used to be `adheredEventIds`, a bare Set of ids marked 'adhered', because the two ring
+ * consumers wanted the same thing from it. They no longer do, and the split is the whole
+ * reason this returns a map:
+ *
+ *   - THE SOCIAL RING wants `state === 'adhered'`, strictly. An event on the calendar you
+ *     drifted from is not a social fortnight you had, and the fraction has nothing to say
+ *     about it — a social event is a thing that happened, not a quantity of hours, so half
+ *     an evening out is not half a social event.
+ *   - THE PORTFOLIO LAP wants `worked`, because it is measured in HOURS, and an hour worked
+ *     is an hour worked wherever it is read.
+ *
+ * One query rather than two over the same rows, and one place where a fifth reader of the
+ * state table would otherwise have appeared.
  */
-export async function adheredEventIds(
+export async function eventWorkIn(
   db: Client,
   from: string,
   to: string,
-): Promise<Set<string>> {
+): Promise<Map<string, EventWork>> {
   const r = await db.execute({
-    sql: `SELECT event_id FROM block_marks
-          WHERE date BETWEEN ? AND ? AND state='adhered'`,
+    sql: `SELECT event_id,state,worked_fraction FROM block_marks
+          WHERE date BETWEEN ? AND ?`,
     args: [from, to],
   });
-  return new Set(r.rows.map((x) => String(x.event_id)));
+  const m = new Map<string, EventWork>();
+  for (const x of r.rows) {
+    const state = String(x.state) as BlockState;
+    m.set(String(x.event_id), {
+      state,
+      worked: workedFraction(
+        state,
+        x.worked_fraction == null ? null : Number(x.worked_fraction),
+      ),
+    });
+  }
+  return m;
 }
 
 /** One skill's slice of the Portfolio ring: who it is, how it stands, and how many
@@ -427,14 +453,21 @@ export async function getPillars(db: Client): Promise<PillarView[]> {
 
 async function loadMarks(db: Client, date: string) {
   const r = await db.execute({
-    sql: "SELECT event_id,state,reason FROM block_marks WHERE date=?",
+    sql: "SELECT event_id,state,reason,worked_fraction FROM block_marks WHERE date=?",
     args: [date],
   });
-  const m = new Map<string, { state: BlockState; reason: string | null }>();
+  const m = new Map<
+    string,
+    { state: BlockState; reason: string | null; workedFraction: number | null }
+  >();
   for (const row of r.rows) {
     m.set(String(row.event_id), {
       state: String(row.state) as BlockState,
       reason: str(row.reason),
+      // NULL stays null rather than becoming 0: "nobody was asked" and "you said none of
+      // it" are different facts, and the coach is the reader that can use the difference.
+      workedFraction:
+        row.worked_fraction == null ? null : Number(row.worked_fraction),
     });
   }
   return m;

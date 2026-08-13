@@ -1,5 +1,7 @@
-// Per-day productivity. PURE — no DB, no React, zero imports, so this runs under
-// `node --test` with no dependencies.
+// Per-day productivity. PURE — no DB, no React, and exactly ONE import: worked.ts, which
+// is itself import-free. So this still runs under `node --test` with no dependencies, which
+// is the property that actually mattered; "zero imports" was only ever how it was achieved.
+// (adherence.ts has taken ./dates.ts the same way since the beginning.)
 //
 // A DELIBERATE, OWNER-APPROVED EXCEPTION to CLAUDE.md's "output is never scored" — see the
 // Productivity section there before changing anything here.
@@ -17,13 +19,16 @@
 // quarantine is enforced by data flow rather than discipline — the score is assembled in
 // /api/adherence and never reaches DayView, which is what the coach reads.
 
+import { workedFraction, type BlockState } from "./worked.ts";
+
 /** Google Calendar colorId. null = the calendar's default colour, which is a real tier
  *  here and not an absence — Google omits the field for default-coloured events. */
 export type ColorId = string | null;
 
-/** Re-declared rather than imported: this module must stay import-free. Keep in step with
- *  the identical union in adherence.ts. */
-export type BlockState = "adhered" | "drifted" | "skipped" | "dismissed";
+/** One union, defined in worked.ts beside the function that says what each state is worth.
+ *  It used to be written out here verbatim, which was harmless only while nothing read
+ *  across the two modules — the worked fraction reads across both. */
+export type { BlockState };
 
 export const POINTS_PER_HOUR = 100;
 export const POINTS_PER_HABIT = 25;
@@ -106,16 +111,11 @@ export const CALENDAR_RATES: {
 
 export const UNLISTED_RATE = 0;
 
-/**
- * Which marks count as time spent. One place, so the rule is arguable in one line.
- *
- * "adhered" only, by the owner's ruling. A drifted block is by definition time spent on
- * something else; a skipped one didn't happen; an unmarked one is unknown, and counting it
- * would inflate today's figure all morning off blocks never confirmed. The consequence
- * worth knowing: a day you worked but never marked scores no time points. That rewards
- * marking, which is the behaviour the whole app is built to protect.
- */
-export const COUNTED_STATES: readonly (BlockState | null)[] = ["adhered"];
+// WHICH MARKS COUNT AS TIME SPENT is `workedFraction` in worked.ts — one rule, five
+// readers, and the argument for it (which used to live here as COUNTED_STATES) moved there
+// with it. Nothing about it changed except that a drift can now be partial: it still pays
+// nothing for the part you drifted, an unmarked block still pays nothing at all, and a day
+// you worked but never marked still scores no time points.
 
 export type ProductiveBlock = {
   /** Scheduled minutes. 0 when unknown — the caller resolves null before it gets here. */
@@ -123,6 +123,8 @@ export type ProductiveBlock = {
   colorId: ColorId;
   /** The mark, or null when unmarked. */
   state: BlockState | null;
+  /** How much of a drifted block was worked, 0..1, or null. See worked.ts. */
+  workedFraction?: number | null;
 };
 
 export type ProductivityInput = {
@@ -160,7 +162,7 @@ export type ProductivityInput = {
    *
    * The consequence worth knowing, and it is the mirror of the old one: a session you
    * SCHEDULED but never logged scores nothing here. That is consistent with the rest of the
-   * file — COUNTED_STATES only pays for blocks you marked, and this only pays for sessions
+   * file — `workedFraction` only pays for blocks you marked, and this only pays for sessions
    * you wrote up. Both ask you to say what happened. The Physical ring reads the same
    * logged row, which is the ring's job and not a second payment.
    */
@@ -197,8 +199,13 @@ export type ProductivitySegment = {
   label: string;
   points: number;
   /**
-   * The RAW scheduled minutes behind this slab, before the colour's rate. 0 on the habits
-   * slab, which is not time at all.
+   * The minutes WORKED behind this slab, before the colour's rate. 0 on the habits slab,
+   * which is not time at all.
+   *
+   * Worked, not scheduled: a two-hour block drifted at 40% put 48 minutes into this slab
+   * and 48 is what earned the points, so 48 is what the workings must print. The 72 minutes
+   * that went elsewhere are accounted for in the drill-down's "didn't count" list, which is
+   * where every other unpaid minute of the day is already explained.
    *
    * Carried so the day's workings can be shown without a second implementation of this
    * rule. A breakdown computed anywhere else would eventually disagree with the bar it is
@@ -216,7 +223,8 @@ export type ProductivityScore = {
   habitPoints: number;
   /** Logged training, at a flat rate per session — see POINTS_PER_SESSION. */
   sessionPoints: number;
-  /** Raw minutes that scored anything at all. */
+  /** Minutes WORKED that scored anything at all, rounded. A partial drift contributes only
+   *  its worked share. */
   minutes: number;
   /** Those minutes after the colour rate is applied. */
   weightedMinutes: number;
@@ -252,14 +260,20 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
   const canon = new Map<string, ColorId>();
 
   for (const b of input.blocks) {
-    if (!COUNTED_STATES.includes(b.state)) continue;
+    // 1 for an adhered block, 0 for anything unmarked or skipped, and the slider's value
+    // for a partial drift. A day with no partial drifts scores exactly as it did before.
+    const worked = workedFraction(b.state, b.workedFraction);
+    if (worked <= 0) continue;
     const entry = CALENDAR_RATES.find((c) => c.id === b.colorId);
     // Not merely worth zero — an unlisted colour was never productive time, so it must not
-    // inflate the raw minutes figure either.
+    // inflate the raw minutes figure either. Checked AFTER the fraction and independently
+    // of it: an unlisted colour earns nothing at any fraction.
     if (!entry || entry.rate <= 0) continue;
     // Clamped: a malformed event with an end before its start must not subtract from
-    // the day.
-    const m = Math.max(0, b.minutes);
+    // the day. Then scaled by what was actually worked — the hour you drifted was never
+    // productive time either, so it must not reach the raw minutes figure any more than an
+    // unlisted colour does.
+    const m = Math.max(0, b.minutes) * worked;
     minutes += m;
     weightedMinutes += m * entry.rate;
     byCategory.set(entry.label, (byCategory.get(entry.label) ?? 0) + m * entry.rate);
@@ -307,7 +321,10 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
         colorId,
         label,
         points: pts,
-        minutes: rawByCategory.get(label) ?? 0,
+        // Accumulated exactly and rounded once, here. A partial drift can put a fractional
+        // number of minutes into a slab (a 50-minute block at 35% is 17.5), and rounding
+        // per block instead would let the slabs drift away from the total they explain.
+        minutes: Math.round(rawByCategory.get(label) ?? 0),
         rate: rateFor(colorId),
       });
   });
@@ -338,7 +355,7 @@ export function scoreDay(input: ProductivityInput): ProductivityScore {
     timePoints,
     habitPoints,
     sessionPoints,
-    minutes,
+    minutes: Math.round(minutes),
     weightedMinutes,
     segments,
   };

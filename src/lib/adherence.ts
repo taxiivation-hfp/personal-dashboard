@@ -3,6 +3,7 @@ import type { CalEvent } from "./google";
 // above is erased, so adherence.ts has exactly one runtime dependency and stays testable
 // with zero setup.
 import { APP_TZ } from "./dates.ts";
+import { workedFraction, type BlockState } from "./worked.ts";
 
 /**
  * Adherence maths.
@@ -20,7 +21,9 @@ import { APP_TZ } from "./dates.ts";
  * chose has no business in an adherence rate.
  */
 
-export type BlockState = "adhered" | "drifted" | "skipped" | "dismissed";
+// Defined in worked.ts, beside the function that says what each state is worth, and
+// re-exported here because half the app imports it from this module.
+export type { BlockState };
 
 export type Block = {
   event_id: string;
@@ -30,6 +33,15 @@ export type Block = {
   allDay: boolean;
   state: BlockState | null;
   reason: string | null;
+  /**
+   * How much of a DRIFTED block was worked, 0..1, or null where nobody was asked.
+   *
+   * Null is not zero. A drift marked before the slider existed, and one where the slider
+   * was simply left alone, both read null — and both are worth nothing, because
+   * `workedFraction` says so. The distinction is kept for the coach, which is the only
+   * reader that cares whether a question was answered or never put.
+   */
+  workedFraction: number | null;
   /** Its time has passed, so it counts toward today's rate. */
   due: boolean;
   /** Google's palette id, or null for the calendar default. Categorisation only — it
@@ -56,13 +68,21 @@ export type Adherence = {
    * looking, and a number nobody looks at cannot do its job. Now every hour worked and
    * every non-negotiable ticked ADDS, and nothing ever subtracts.
    *
-   * Drift is not punished here — it simply does not add. The three-state mark still
+   * Drift is not punished here — it simply does not add FOR THE PART YOU DRIFTED. A
+   * drifted block can carry a worked fraction (see worked.ts), and an afternoon whose first
+   * forty minutes went as planned adds those forty minutes. The three-state mark still
    * records what happened, and the coach still reads it; the hero figure just stops being
    * the place that holds it against you.
    */
   pct: number;
-  /** Blocked hours actually worked. */
-  adheredHours: number;
+  /**
+   * Blocked hours actually worked — INCLUDING the worked part of a drifted block.
+   *
+   * Renamed from `adheredHours`, which stopped being true the moment a drift could carry a
+   * fraction: the figure now contains hours from blocks that are not adhered, and a name
+   * that says otherwise is a trap for the next reader who trusts it.
+   */
+  workedHours: number;
   /** Blocked hours in the day, worked or not — the denominator for BLOCK_SHARE. */
   totalHours: number;
   adhered: number;
@@ -141,7 +161,10 @@ const durationMinutes = (
 export function buildBlocks(
   dateISO: string,
   events: CalEvent[],
-  marks: Map<string, { state: BlockState; reason: string | null }>,
+  marks: Map<
+    string,
+    { state: BlockState; reason: string | null; workedFraction?: number | null }
+  >,
   nowMs = Date.now(),
 ): Block[] {
   return events
@@ -156,6 +179,7 @@ export function buildBlocks(
         allDay: e.allDay,
         state: m?.state ?? null,
         reason: m?.reason ?? null,
+        workedFraction: m?.workedFraction ?? null,
         due: isDue(e, dateISO, nowMs),
         colorId: e.colorId,
         minutes: durationMinutes(e.start, e.end),
@@ -190,9 +214,21 @@ export function adherenceFor(
   const hoursOf = (b: Block) => (b.minutes ?? 0) / 60;
 
   const totalHours = counted.reduce((sum, b) => sum + hoursOf(b), 0);
-  const adheredHours = counted
-    .filter((b) => b.state === "adhered")
-    .reduce((sum, b) => sum + hoursOf(b), 0);
+  /**
+   * WHAT WAS WORKED, which is no longer the same question as what was adhered.
+   *
+   * `workedFraction` is 1 for an adhered block and 0 for everything except a drift that
+   * carries a slider value — so a day with no partial drifts computes exactly as it did
+   * before, and every figure already on record is unchanged. What is new is that a block
+   * you worked half of adds half of itself, instead of adding nothing.
+   *
+   * Drift still is not punished; it simply does not add FOR THE PART YOU DRIFTED. The
+   * figure can still only climb, and marking a block can still only ever raise it.
+   */
+  const workedHours = counted.reduce(
+    (sum, b) => sum + hoursOf(b) * workedFraction(b.state, b.workedFraction),
+    0,
+  );
 
   const drifted = counted.filter((b) => b.state === "drifted").length;
   const skipped = counted.filter((b) => b.state === "skipped").length;
@@ -204,13 +240,13 @@ export function adherenceFor(
     ? Math.max(0, Math.min(habits.done, habitsScheduled))
     : 0;
 
-  const blockPart = totalHours > 0 ? (adheredHours / totalHours) * BLOCK_SHARE : 0;
+  const blockPart = totalHours > 0 ? (workedHours / totalHours) * BLOCK_SHARE : 0;
   const habitPart =
     habitsScheduled > 0 ? (habitsDone / habitsScheduled) * HABIT_SHARE : 0;
 
   return {
     pct: Math.round(blockPart + habitPart),
-    adheredHours,
+    workedHours,
     totalHours,
     adhered,
     drifted,

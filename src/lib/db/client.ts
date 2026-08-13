@@ -81,6 +81,17 @@ async function ensure(c: Client): Promise<Client> {
   if (!(await has("habits", "unit"))) {
     await c.execute("ALTER TABLE habits ADD COLUMN unit TEXT");
   }
+  // How much of a drifted block was worked. Nullable with no default, so every drift
+  // already on record stays "nobody was asked" rather than being back-filled with a zero
+  // the owner never typed. A nullable ADD COLUMN cannot lose a row, which is why this
+  // needs no migrate.mjs block and no backup step.
+  if (!(await has("block_marks", "worked_fraction"))) {
+    await c.execute(
+      `ALTER TABLE block_marks ADD COLUMN worked_fraction REAL
+         CHECK (worked_fraction IS NULL
+                OR (worked_fraction >= 0 AND worked_fraction <= 1))`,
+    );
+  }
 
   // day_titles arrived after the last migration latch, so ensure() creates it here as
   // well as in schema.sql — a dev DB that never runs db:migrate still gets it.

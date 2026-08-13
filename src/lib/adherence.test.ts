@@ -14,6 +14,7 @@ const block = (
   state: BlockState | null,
   hours = 1,
   due = true,
+  workedFraction: number | null = null,
 ): Block => ({
   event_id: Math.random().toString(36).slice(2),
   title: "b",
@@ -22,6 +23,7 @@ const block = (
   allDay: false,
   state,
   reason: null,
+  workedFraction,
   due,
   colorId: null,
   minutes: hours * 60,
@@ -70,7 +72,7 @@ test("hours, not items — a 3h block outweighs a 1h block", () => {
 test("half the blocked hours is half the block share", () => {
   const a = adherenceFor([block("adhered", 2), block(null, 2)]);
   assert.equal(a.pct, Math.round(BLOCK_SHARE / 2));
-  assert.equal(a.adheredHours, 2);
+  assert.equal(a.workedHours, 2);
   assert.equal(a.totalHours, 4);
 });
 
@@ -86,6 +88,62 @@ test("drift and skip do not subtract, they simply do not add", () => {
   assert.equal(drifted.pct, Math.round(BLOCK_SHARE / 2));
   assert.equal(unmarked.pct, Math.round(BLOCK_SHARE / 2));
   assert.equal(drifted.pct, unmarked.pct, "drifting costs nothing the clock did not already cost");
+});
+
+// ---------------------------------------------------------------- a partial drift
+
+// The state table itself is pinned in worked.test.ts. These test what adherence DOES with
+// it, which is the division of labour the shared module exists to create.
+
+test("a drift worked in part adds that part, and no more", () => {
+  // 4 blocked hours; a 2h block drifted at 40% is 0.8 worked hours.
+  const a = adherenceFor([block("drifted", 2, true, 0.4), block(null, 2)]);
+  assert.equal(a.workedHours, 0.8);
+  assert.equal(a.totalHours, 4);
+  assert.equal(a.pct, Math.round((0.8 / 4) * BLOCK_SHARE));
+});
+
+// The behaviour of every drift written before the slider existed. If this ever breaks, the
+// figure for every past day changes silently.
+test("a drift with no fraction still adds nothing, exactly as it always did", () => {
+  const old = adherenceFor([block("adhered", 1), block("drifted", 1)]);
+  const zero = adherenceFor([block("adhered", 1), block("drifted", 1, true, 0)]);
+  assert.equal(old.pct, Math.round(BLOCK_SHARE / 2));
+  assert.equal(zero.pct, old.pct, "null and 0 are worth the same, whatever they mean");
+});
+
+test("a partial drift is still a DRIFT on the record, never a part-adherence", () => {
+  const a = adherenceFor([block("drifted", 2, true, 0.9)]);
+  assert.equal(a.drifted, 1);
+  assert.equal(a.adhered, 0, "the counts tally by state; only the hours are fractional");
+});
+
+// The whole point of the fraction: a block cannot earn more of the day than it occupies,
+// and no arrangement of drifts can beat working the day.
+test("a fully worked drift is worth exactly an adherence, and never more", () => {
+  const full = adherenceFor([block("drifted", 2, true, 1), block(null, 2)]);
+  const adhered = adherenceFor([block("adhered", 2), block(null, 2)]);
+  assert.equal(full.pct, adhered.pct);
+  assert.equal(full.workedHours, adhered.workedHours);
+});
+
+test("a corrupt fraction cannot push a block past its own length", () => {
+  const a = adherenceFor([block("drifted", 2, true, 4)]);
+  assert.equal(a.workedHours, 2, "clamped to the block");
+  assert.equal(a.pct, BLOCK_SHARE);
+});
+
+// The one property the whole climbing-figure design rests on. A negative fraction reaching
+// the arithmetic would make MARKING a block lower the number.
+test("no fraction can make the figure fall", () => {
+  const unmarked = adherenceFor([block(null, 2), block("adhered", 2)]).pct;
+  for (const f of [0, 0.5, 1, -3, NaN]) {
+    const marked = adherenceFor([
+      block("drifted", 2, true, f),
+      block("adhered", 2),
+    ]).pct;
+    assert.ok(marked >= unmarked, `fraction ${f} lowered the figure`);
+  }
 });
 
 test("marking a block can only ever raise the figure", () => {
@@ -166,6 +224,7 @@ const blk = (
   allDay: false,
   state: null,
   reason: null,
+  workedFraction: null,
   due: false,
   colorId: null,
   minutes: 60,

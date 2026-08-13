@@ -7,13 +7,13 @@ import { isISODate, todayISO } from "@/lib/dates";
 import {
   CALENDAR_RATES,
   CALORIE_FLOOR,
-  COUNTED_STATES,
   POINTS_PER_HABIT,
   POINTS_PER_HOUR,
   POINTS_PER_SESSION,
   rateFor,
   scoreDay,
 } from "@/lib/productivity";
+import { workedFraction } from "@/lib/worked";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,14 +38,25 @@ export const dynamic = "force-dynamic";
  * which is what keeps the score structurally invisible to the coach — see CLAUDE.md.
  */
 
-/** Why a scheduled block earned nothing. The words the screen prints, decided here so the
- *  rule and its explanation cannot drift apart. */
+/**
+ * Why a scheduled block earned nothing — or, for a partial drift, why part of it did not.
+ * The words the screen prints, decided here so the rule and its explanation cannot drift
+ * apart.
+ *
+ * THE ORDER IS THE ARGUMENT, and the PARTIAL branch must come last. A block that earns
+ * nothing at any fraction — no usable duration, or a colour the table has never been taught
+ * — must say so rather than report which share of it went elsewhere, because that share is
+ * not why it scored nothing and a reason pointing at the wrong fix is worse than a vague
+ * one. Everything above the partial branch is in its original order, so every case that
+ * predates the slider reads exactly as it always did.
+ */
 function ignoredReason(
   state: BlockState | null,
   colorId: string | null,
   minutes: number | null,
+  worked: number,
 ): string | null {
-  if (!COUNTED_STATES.includes(state))
+  if (worked <= 0)
     return state == null
       ? "not marked yet"
       : state === "drifted"
@@ -62,6 +73,12 @@ function ignoredReason(
     return "gym is scored from the logged session, not from the block";
   if (rateFor(colorId) <= 0)
     return "this colour is not in the table, so it scores nothing";
+  // A PARTIAL DRIFT IS IN BOTH HALVES OF THIS SCREEN, and that is correct: the minutes you
+  // worked are drawn on the bar, and the minutes you did not are explained here. Stated
+  // without scolding, exactly as an unmarked block is — the slider is a record of an
+  // afternoon, not a mark out of ten.
+  if (worked < 1)
+    return `drifted — the other ${Math.round((1 - worked) * 100)}% went elsewhere`;
   return null;
 }
 
@@ -74,15 +91,20 @@ export async function GET(req: Request) {
     const cal = await getCalendarForDate(date);
 
     const markRows = await db.execute({
-      sql: "SELECT event_id,state,reason FROM block_marks WHERE date=?",
+      sql: "SELECT event_id,state,reason,worked_fraction FROM block_marks WHERE date=?",
       args: [date],
     });
-    const marks = new Map<string, { state: BlockState; reason: string | null }>(
+    const marks = new Map<
+      string,
+      { state: BlockState; reason: string | null; workedFraction: number | null }
+    >(
       markRows.rows.map((r) => [
         String(r.event_id),
         {
           state: String(r.state) as BlockState,
           reason: r.reason == null ? null : String(r.reason),
+          workedFraction:
+            r.worked_fraction == null ? null : Number(r.worked_fraction),
         },
       ]),
     );
@@ -119,6 +141,7 @@ export async function GET(req: Request) {
             minutes: b.minutes ?? 0,
             colorId: b.colorId,
             state: b.state,
+            workedFraction: b.workedFraction,
           })),
           habitsDone,
           calories: cal_.total,
@@ -128,13 +151,28 @@ export async function GET(req: Request) {
 
     const ignored = blocks
       .filter((b) => b.state !== "dismissed")
-      .map((b) => ({
-        title: b.title,
-        minutes: b.minutes,
-        colorId: b.colorId,
-        state: b.state,
-        reason: ignoredReason(b.state, b.colorId, b.minutes),
-      }))
+      .map((b) => {
+        const worked = workedFraction(b.state, b.workedFraction);
+        /**
+         * The share of this block that actually EARNED something — which is not the same as
+         * the share you worked. An hour of an unlisted colour pays nothing however
+         * diligently it was worked, so a block disqualified by its colour or by having no
+         * duration forfeits all of itself and not merely the part you drifted.
+         */
+        const paid = b.minutes && rateFor(b.colorId) > 0 ? worked : 0;
+        return {
+          title: b.title,
+          // THE MINUTES THAT DID NOT COUNT, not the minutes that were scheduled. For
+          // everything except a partial drift that is the whole block, exactly as before;
+          // for a partial drift it is the part that went elsewhere, which is the only part
+          // this list is about.
+          minutes:
+            b.minutes == null ? null : Math.round(b.minutes * (1 - paid)),
+          colorId: b.colorId,
+          state: b.state,
+          reason: ignoredReason(b.state, b.colorId, b.minutes, worked),
+        };
+      })
       .filter((b) => b.reason != null);
 
     return Response.json({

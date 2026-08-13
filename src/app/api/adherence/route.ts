@@ -48,12 +48,15 @@ export async function GET(req: Request) {
     const { byDate, connected } = await getCalendarRange(start, end);
 
     const markRows = await db.execute({
-      sql: "SELECT date,event_id,state,reason FROM block_marks WHERE date BETWEEN ? AND ?",
+      sql: "SELECT date,event_id,state,reason,worked_fraction FROM block_marks WHERE date BETWEEN ? AND ?",
       args: [start, end],
     });
     const marksByDate = new Map<
       string,
-      Map<string, { state: BlockState; reason: string | null }>
+      Map<
+        string,
+        { state: BlockState; reason: string | null; workedFraction: number | null }
+      >
     >();
     for (const r of markRows.rows) {
       const d = String(r.date);
@@ -61,6 +64,8 @@ export async function GET(req: Request) {
       marksByDate.get(d)!.set(String(r.event_id), {
         state: String(r.state) as BlockState,
         reason: r.reason == null ? null : String(r.reason),
+        workedFraction:
+          r.worked_fraction == null ? null : Number(r.worked_fraction),
       });
     }
 
@@ -152,6 +157,7 @@ export async function GET(req: Request) {
               minutes: b.minutes ?? 0,
               colorId: b.colorId,
               state: b.state,
+              workedFraction: b.workedFraction,
             })),
             habitsDone,
             calories: calByDate.get(d) ?? null,

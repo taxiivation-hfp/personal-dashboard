@@ -212,7 +212,7 @@ export async function executeTool(
       const to = todayISO();
       const from = addDays(to, -(days - 1));
       const r = await db.execute({
-        sql: `SELECT date,title,time_start,time_end,state,reason FROM block_marks
+        sql: `SELECT date,title,time_start,time_end,state,reason,worked_fraction FROM block_marks
               WHERE date BETWEEN ? AND ? AND state != 'dismissed'
               ORDER BY date DESC, time_start`,
         args: [from, to],
@@ -226,6 +226,20 @@ export async function executeTool(
           time: m.time_start == null ? null : String(m.time_start),
           state: String(m.state),
           reason: m.reason == null ? null : String(m.reason),
+          /**
+           * How much of a drifted block was worked, 0..1, or null.
+           *
+           * NULL IS NOT ZERO, and this is the one reader that can use the difference: null
+           * means the slider was never touched, 0 means the owner said none of it. A drift
+           * pattern is worth noticing either way, but "drifts at 0.7 every Thursday" and
+           * "drifts entirely every Thursday" are different observations.
+           *
+           * It is a FACT, like the reason beside it. The coach's standing prohibition
+           * applies unchanged: it may notice a shape and must never rate, rank, congratulate
+           * or compare. A fraction is not a mark out of ten.
+           */
+          worked:
+            m.worked_fraction == null ? null : Number(m.worked_fraction),
         })),
       };
     }

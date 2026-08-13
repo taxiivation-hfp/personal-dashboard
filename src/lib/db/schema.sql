@@ -202,6 +202,19 @@ CREATE TABLE IF NOT EXISTS block_marks (
   -- Optional, always. Never required, never blocking. Stored so the coach can spot
   -- patterns ("Mandarin drifts on weeknights") rather than to justify anything.
   reason      TEXT,
+  -- HOW MUCH OF A DRIFTED BLOCK WAS ACTUALLY WORKED, 0..1. Belongs to a drift and to
+  -- nothing else — engine.markBlock nulls it on every other state, exactly as it does the
+  -- reason, so a fraction can never survive onto an 'adhered' mark.
+  --
+  -- NULLABLE, and never DEFAULT 0. For a drift the two are arithmetically identical, so
+  -- this is purely about truth: NULL means nobody was asked, 0 means you said none of it.
+  -- Every drift written before the slider existed is the former, and a default would have
+  -- put words in the owner's mouth retroactively.
+  --
+  -- 1 is unreachable here in practice: a drift worked in full IS an adherence, and the
+  -- write rewrites it as one rather than storing a row that argues with itself.
+  worked_fraction REAL CHECK (worked_fraction IS NULL
+                              OR (worked_fraction >= 0 AND worked_fraction <= 1)),
   marked_at   TEXT NOT NULL,
   UNIQUE (date, event_id)
 );

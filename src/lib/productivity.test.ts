@@ -135,6 +135,93 @@ test("an unproductive colour contributes no points AND no minutes", () => {
   assert.equal(s.minutes, 0);
 });
 
+// ---------------------------------------------------------------- a partial drift
+
+// The state table is pinned in worked.test.ts. These test what the SCORE does with it.
+
+test("a drift worked in part is paid for that part, at its colour's rate", () => {
+  // 2h of Basil at 40% = 48 minutes at the full rate.
+  const s = day({
+    blocks: [{ minutes: 120, colorId: "10", state: "drifted", workedFraction: 0.4 }],
+  });
+  assert.equal(s.points, 80);
+  assert.equal(s.minutes, 48, "the minutes worked, not the minutes scheduled");
+});
+
+test("the slab prints the minutes that earned it, so it cannot disagree with the bar", () => {
+  const s = day({
+    blocks: [{ minutes: 120, colorId: "10", state: "drifted", workedFraction: 0.4 }],
+  });
+  const [slab] = s.segments.filter((x) => x.kind === "time");
+  assert.equal(slab.minutes, 48);
+  assert.equal(slab.points, s.points);
+  assert.equal(slab.label, "Work Projects");
+});
+
+// The behaviour of every drift written before the slider existed — and the reason a day of
+// unmarked or drifted blocks still scores nothing at all.
+test("a drift with no fraction still pays nothing, exactly as it always did", () => {
+  assert.equal(day({ blocks: [basil(120, "drifted")] }).points, 0);
+  assert.equal(
+    day({ blocks: [{ minutes: 120, colorId: "10", state: "drifted", workedFraction: 0 }] })
+      .points,
+    0,
+  );
+  assert.equal(day({ blocks: [basil(120, null)] }).points, 0, "unmarked is unknown");
+  assert.equal(day({ blocks: [basil(120, "skipped")] }).points, 0);
+});
+
+// The order in the loop is load-bearing: an unlisted colour is disqualified whatever the
+// slider says, and must not inflate the minutes figure by its worked share either.
+test("an unlisted colour scores nothing at ANY fraction", () => {
+  for (const f of [0.25, 0.5, 1]) {
+    const s = day({
+      blocks: [{ minutes: 480, colorId: "7", state: "drifted", workedFraction: f }],
+    });
+    assert.equal(s.points, 0, `fraction ${f}`);
+    assert.equal(s.minutes, 0, `fraction ${f} must not inflate minutes`);
+  }
+  // Gym is the same rule with its own explanation: the block never pays, the session does.
+  assert.equal(
+    day({ blocks: [{ minutes: 120, colorId: "3", state: "drifted", workedFraction: 1 }] })
+      .points,
+    0,
+  );
+});
+
+test("a fully worked drift scores exactly what adhering to it would", () => {
+  const full = day({
+    blocks: [{ minutes: 120, colorId: "10", state: "drifted", workedFraction: 1 }],
+  });
+  assert.equal(full.points, day({ blocks: [basil(120)] }).points);
+});
+
+// Fractional minutes are real — a 50-minute block at 35% is 17.5 — and they must be
+// accumulated exactly and rounded once, or the slabs stop summing to the total.
+test("fractional worked minutes still sum to the total they explain", () => {
+  const s = day({
+    blocks: [
+      { minutes: 50, colorId: "10", state: "drifted", workedFraction: 0.35 },
+      { minutes: 50, colorId: "5", state: "drifted", workedFraction: 0.35 },
+      { minutes: 50, colorId: "1", state: "drifted", workedFraction: 0.35 },
+    ],
+  });
+  const sum = s.segments.reduce((n, x) => n + x.points, 0);
+  assert.equal(sum, s.points, "the stack is a picture of the total");
+  assert.ok(Number.isInteger(s.minutes), "the reported figure is whole");
+});
+
+test("a corrupt fraction cannot buy more than the block is worth", () => {
+  const s = day({
+    blocks: [{ minutes: 60, colorId: "10", state: "drifted", workedFraction: 9 }],
+  });
+  assert.equal(s.points, 100, "clamped to the block");
+  const neg = day({
+    blocks: [{ minutes: 60, colorId: "10", state: "drifted", workedFraction: -4 }],
+  });
+  assert.equal(neg.points, 0, "and never negative");
+});
+
 test("each non-negotiable is 25", () => {
   assert.equal(POINTS_PER_HABIT, 25);
   assert.equal(day({ habitsDone: 4 }).points, 100);

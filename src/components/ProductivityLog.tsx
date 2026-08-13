@@ -314,7 +314,7 @@ export default function ProductivityLog({
               <div className="section-head">
                 <h3 className="text-small font-semibold">Didn&apos;t count</h3>
                 <span className="text-micro text-[var(--color-muted)]">
-                  scheduled, but earned nothing
+                  time that earned nothing
                 </span>
               </div>
               <ul className="divide-y divide-[var(--color-line)]">

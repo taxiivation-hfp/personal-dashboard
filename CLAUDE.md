@@ -38,7 +38,7 @@ A calendar block is not done/not-done. It is exactly one of:
 | State | Means |
 |---|---|
 | **Adhered** | Worked the block as planned — *regardless of what got produced* |
-| **Drifted** | Did something else during that time |
+| **Drifted** | Did something else during *some or all* of that time |
 | **Skipped** | Didn't happen at all |
 
 - Marking is **tap-as-you-go during the day**. The evening review is a catch-up pass
@@ -46,6 +46,43 @@ A calendar block is not done/not-done. It is exactly one of:
 - **Drifted** opens an optional short reason field. Optional. Never blocking. Never a
   required field, never a modal you have to dismiss.
 - Reasons are stored so the coach can spot patterns over time.
+
+#### A DRIFT CAN BE PARTIAL — the worked fraction
+
+Still three states, and the tallies still count by state: a partial drift is a **drift** on
+the record and a drift to the coach. What it also carries is `block_marks.worked_fraction`,
+0–1 — how much of the block was actually worked — set on a 5% slider that opens beside the
+reason.
+
+**It exists because the block share was already a claim about HOURS** and the only fractions
+it could express were 0 and 1. An afternoon whose first forty minutes went as planned was
+recorded as if nothing had happened, which understates a day that was genuinely half-lived.
+
+**The rule lives in ONE place: `workedFraction()` in `src/lib/worked.ts`** — import-free, and
+also the home of the `BlockState` union, which used to be written out verbatim in three
+files. Five readers take it: adherence, productivity, `eventWorkIn`, the Portfolio lap and
+the productivity drill-down. Five hand-written copies of one state table would diverge
+silently — two screens quietly disagreeing about the same 48 minutes, with no error and no
+failing test. **Do not inline this rule anywhere.**
+
+- **The fraction is HOURS, and hours count wherever hours are counted** — the ring, the
+  score, and the Portfolio project-hours lap. **The Social ring is untouched**: it counts
+  *events*, and half an evening out is not half a social event.
+- **NULL is not 0.** Null means nobody was asked; 0 means you said none of it. Both are worth
+  nothing, so every drift written before the slider is unchanged — and the distinction is
+  kept because the coach is a reader that can use it.
+- **100% converts the mark to Adhered**, in `engine.markBlock` and not in the client. At the
+  top of the slider the arithmetic is already identical, and a chip reading "Drifted" over a
+  block worked end to end is the record holding two names for one fact. `/api/blocks` returns
+  the **resulting** state; the screen closes its row on that answer rather than predicting it.
+- **The slider never gates the mark.** Tap Drifted → saved instantly at 0 → the row opens.
+  One tap is still a complete drift. The honest-logging rule governs a second control exactly
+  as it governs the first.
+- **The percentage is drawn beside the chip, never inside it** — all three chips must keep
+  measuring the same. Its fill is the **accent**, not the drift colour: this is the part you
+  *worked*, and it feeds the amber ring, so it wears the ring's hue.
+- **Tapping the Drifted chip reopens the row.** A slider you cannot correct is worse than no
+  slider.
 
 **Adherence rate is the hero stat**: today's adherence % is the single largest number
 on the screen, drawn as a large amber ring with a 7-day strip beneath it.
@@ -82,9 +119,14 @@ Consequences worth knowing, all of them intended:
 - **There is no habit cutoff any more.** `app_meta['habit_cutoff']` and `habitsDueOn` are
   gone. An unticked non-negotiable is simply 6 points not yet earned; nothing has to
   become "due" for the figure to be honest, because nothing is ever held against you.
-- **Drift is not punished, it just does not add.** The three-state mark still records what
-  happened and the coach still reads it. The hero figure stops being the place that holds
-  it against you.
+- **Drift is not punished, it just does not add — for the part you drifted.** A drifted block
+  carrying a worked fraction adds that fraction of itself, so an afternoon half-lived reads
+  as half-lived. The three-state mark still records what happened and the coach still reads
+  it. The hero figure stops being the place that holds it against you.
+- **Nothing can make the figure fall, and no fraction may.** A clamp in `workedFraction`
+  is what enforces it: above 1 a block could earn more of the day than it occupies, and
+  below 0 *marking* a block would lower the number — the one thing a climbing figure must
+  never do. A test pins it.
 - **A day ends wherever it got to.** 60% is not a failure grade; it is sixty points earned.
 - Blocks with no duration are excluded from both sides — an all-day event is not eight
   hours of work you failed to do.
@@ -457,13 +499,24 @@ didn't schedule a productive day. Both numbers matter.
   This REVERSES the arrangement that shipped first (an hour of Grape at half rate, with the
   `workouts` input deleted). The double-count guard is unchanged; only which side of it pays
   has swapped. The consequence is the mirror of the old one: a session you SCHEDULED but
-  never wrote up scores nothing, which is consistent with `COUNTED_STATES` paying only for
+  never wrote up scores nothing, which is consistent with `workedFraction` paying only for
   blocks you marked — both ask you to say what happened. The Physical ring reads the same
   logged row, and that is the ring's job, not a second payment.
 
   The slab takes `SLAB_GYM` — Grape's projection, free now that no blocked time can draw it.
   Not achromatic: grey belongs to the ticked things, and two grey slabs cannot be told apart
   at eighty pixels tall.
+- **A PARTIALLY WORKED BLOCK PAYS ITS WORKED SHARE**, at its colour's rate — two hours of
+  Basil drifted at 40% is 48 minutes at the full rate. Consistent with everything above:
+  this file prices HOURS, and 48 of those minutes were hours. The disqualifications come
+  FIRST and hold at any fraction — an unlisted colour and an all-day event earn nothing
+  however much of them you worked.
+
+  A segment's `minutes` are therefore the minutes **worked**, not the minutes scheduled,
+  because those are the minutes that earned the points and a breakdown must not disagree
+  with the bar it explains. The forfeited remainder is accounted for in the drill-down's
+  **"didn't count"** list, which is now keyed on *minutes that earned nothing* rather than
+  whole blocks — a partial drift appears in both halves of that screen, correctly.
 - **Non-negotiables stay in the score even though adherence counts them too.** Not a double
   count: adherence and productivity are two different questions asked of the same day, and
   ticking a non-negotiable is a true answer to both.

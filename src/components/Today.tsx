@@ -823,7 +823,7 @@ export default function Today({
           <p className="mt-3 max-w-[11rem] text-micro text-[var(--color-muted)]">
             {/* What the figure is MADE of, so the number is never a black box. Hours to one
                 decimal — "3.5 of 8h" is the shape of a day; "3.4999" is noise. */}
-            {round1(a.adheredHours)} of {round1(a.totalHours)}h blocked
+            {round1(a.workedHours)} of {round1(a.totalHours)}h blocked
             {a.habitsScheduled > 0 && (
               <>
                 {" · "}

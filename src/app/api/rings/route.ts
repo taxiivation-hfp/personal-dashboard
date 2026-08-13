@@ -3,7 +3,7 @@ import {
   getRingCounts,
   getObservedDays,
   getPillarFacts,
-  adheredEventIds,
+  eventWorkIn,
   skillSlices,
 } from "@/lib/queries";
 import { workoutsOn } from "@/lib/engine";
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
     // possibly false claim.
     // ADHERED ONLY, and that is the pivot: an event on the calendar you drifted from is
     // not a social fortnight you had. The marks are the record; the ring reads the record.
-    const adhered = await adheredEventIds(db, from, anchor);
+    const marked = await eventWorkIn(db, from, anchor);
 
     const cal = await getCalendarRange(from, anchor);
     let socialEvents: number | undefined;
@@ -85,21 +85,31 @@ export async function GET(req: Request) {
       let projectMinutes = 0;
       for (const [date, events] of cal.byDate) {
         for (const e of events) {
-          if (!adhered.has(e.id)) continue;
+          const mark = marked.get(e.id);
+          if (!mark) continue;
 
           if (e.colorId === PROJECT_COLOR_ID) {
+            // HOURS, so the worked fraction applies: a project block drifted at 40% put
+            // 40% of its span into the lap. An hour worked is an hour worked wherever it
+            // is read, and this lap is the app's only metric measured in hours.
+            //
             // Minutes from the event's own span. An all-day block contributes nothing —
             // the same ruling adherence makes, and for the same reason: a day marked
             // "projects" is not fourteen hours of project work.
-            if (e.start && e.end && !e.allDay) {
+            if (mark.worked > 0 && e.start && e.end && !e.allDay) {
               const mins =
-                (Date.parse(e.end) - Date.parse(e.start)) / 60_000;
+                ((Date.parse(e.end) - Date.parse(e.start)) / 60_000) *
+                mark.worked;
               if (Number.isFinite(mins) && mins > 0) projectMinutes += mins;
             }
             continue;
           }
 
           if (e.colorId !== SOCIAL_COLOR_ID) continue;
+          // ADHERED STRICTLY, and no fraction. This ring counts EVENTS, not hours — half an
+          // evening out is not half a social event, and there is nothing here for a slider
+          // to divide. An event you drifted from is not a social fortnight you had.
+          if (mark.state !== "adhered") continue;
           socialEvents += 1;
           // A standing commitment is an instance of a repeating series; a one-off is not.
           (e.recurring ? socialEventList : oneOffEventList).push({

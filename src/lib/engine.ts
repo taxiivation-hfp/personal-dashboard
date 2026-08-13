@@ -12,11 +12,14 @@
 import type { Client } from "./db/client";
 import { addDays, todayISO } from "./dates";
 import { isPaletteHex } from "./rings";
+import { FULLY_WORKED, normaliseFraction, type BlockState } from "./worked";
 
 type Tx = Awaited<ReturnType<Client["transaction"]>>;
 type Exec = Pick<Tx, "execute">;
 
-export type BlockState = "adhered" | "drifted" | "skipped" | "dismissed";
+// Re-exported so the many callers that import BlockState from here keep working. The union
+// is DEFINED in worked.ts now, beside the function that says what each state is worth.
+export type { BlockState };
 
 const now = () => new Date().toISOString();
 const num = (v: unknown) => (v == null ? 0 : Number(v));
@@ -40,14 +43,40 @@ export async function markBlock(
     time_start?: string | null;
     time_end?: string | null;
     reason?: string | null;
+    /** How much of a DRIFTED block was worked, 0..1. Ignored on every other state. */
+    worked_fraction?: number | null;
   },
-): Promise<void> {
+): Promise<BlockState> {
+  const fraction = normaliseFraction(m.worked_fraction);
+
+  /**
+   * A DRIFT WORKED IN FULL IS AN ADHERENCE, so it is stored as one.
+   *
+   * At the top of the slider the arithmetic is already identical — same hours to the ring,
+   * same points to the score, same lap on Portfolio — and the only thing left distinguishing
+   * the two would be a chip reading "Drifted" over a block worked from end to end, and a
+   * coach counting a drift pattern that did not happen. The record must not hold two names
+   * for one fact.
+   *
+   * It lives HERE rather than in the client because that is this file's whole job: the
+   * screen is one caller of several, and a rule enforced in a component is a rule the
+   * coach's tools walk straight past.
+   *
+   * The reason clears as a CONSEQUENCE of the rule below rather than as a second special
+   * case — there is no drift left to explain.
+   */
+  const state: BlockState =
+    m.state === "drifted" && fraction != null && fraction >= FULLY_WORKED
+      ? "adhered"
+      : m.state;
+
   await db.execute({
-    sql: `INSERT INTO block_marks (date,event_id,title,time_start,time_end,state,reason,marked_at)
-          VALUES (?,?,?,?,?,?,?,?)
+    sql: `INSERT INTO block_marks (date,event_id,title,time_start,time_end,state,reason,worked_fraction,marked_at)
+          VALUES (?,?,?,?,?,?,?,?,?)
           ON CONFLICT(date,event_id) DO UPDATE SET
             state=excluded.state,
             reason=excluded.reason,
+            worked_fraction=excluded.worked_fraction,
             title=COALESCE(excluded.title, block_marks.title),
             time_start=COALESCE(excluded.time_start, block_marks.time_start),
             time_end=COALESCE(excluded.time_end, block_marks.time_end),
@@ -58,13 +87,23 @@ export async function markBlock(
       m.title ?? null,
       m.time_start ?? null,
       m.time_end ?? null,
-      m.state,
+      state,
       // A reason only ever belongs to a drift. Carrying one onto "adhered" would be
       // a stale justification attached to the wrong event.
-      m.state === "drifted" ? m.reason?.trim() || null : null,
+      state === "drifted" ? m.reason?.trim() || null : null,
+      // The fraction inherits that rule exactly, and for the same reason: a partial figure
+      // attached to a block that was adhered or skipped is a number about a question
+      // nobody asked of it. Note this is UNCONDITIONAL on the update path — re-marking a
+      // drift as adhered clears the old fraction rather than leaving it behind.
+      state === "drifted" ? fraction : null,
       now(),
     ],
   });
+
+  // The RESULTING state, not the requested one. The caller cannot know about the
+  // conversion above, and a screen that assumes its own answer would draw a Drifted chip
+  // over a row the database calls adhered.
+  return state;
 }
 
 /** Undo a mark entirely — back to unmarked, which is distinct from "skipped". */
