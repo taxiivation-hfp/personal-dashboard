@@ -923,59 +923,6 @@ export async function deleteSkillSession(
   }
 }
 
-/**
- * Remove the most recent entry for (skill, date). Returns false when there was nothing
- * to undo, so the caller can hide the control rather than pretending it did something.
- *
- * last_touched is RECOMPUTED from the rows that remain rather than left as it was —
- * otherwise undoing the only session for a skill leaves it looking recently worked, and
- * the stalled-rotation prompt reads a lie.
- */
-export async function undoSkillTime(
-  db: Client,
-  skillId: number,
-  date: string,
-): Promise<boolean> {
-  const tx = await db.transaction("write");
-  try {
-    const last = await tx.execute({
-      sql: "SELECT id FROM skill_time WHERE skill_id=? AND date=? ORDER BY id DESC LIMIT 1",
-      args: [skillId, date],
-    });
-    if (!last.rows.length) {
-      await tx.rollback();
-      return false;
-    }
-    await tx.execute({
-      sql: "DELETE FROM skill_time WHERE id=?",
-      args: [num(last.rows[0].id)],
-    });
-    const rest = await tx.execute({
-      sql: "SELECT MAX(date) AS d FROM skill_time WHERE skill_id=?",
-      args: [skillId],
-    });
-    const d = rest.rows[0]?.d;
-    await tx.execute({
-      sql: "UPDATE skills SET last_touched=?, updated_at=? WHERE id=?",
-      args: [d == null ? null : `${String(d)}T00:00:00.000Z`, now(), skillId],
-    });
-    await tx.commit();
-    return true;
-  } catch (e) {
-    await tx.rollback();
-    throw e;
-  }
-}
-
-// ---------------------------------------------------------------- gym
-//
-// One row per SESSION. A day can hold two lifts and a run, and each is its own document.
-//
-// This used to be one row per (date, kind), enforced by a unique index that the writers
-// leaned on via ON CONFLICT. The owner's ruling reversed it: two lifts on a Tuesday are
-// two things that happened. The index is gone, so every writer here is addressed by ROW
-// ID — there is no (date, kind) upsert left, and adding one back would throw.
-
 export type WorkoutKind = "strength" | "cardio" | "misc";
 
 export type Workout = {
