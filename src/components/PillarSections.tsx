@@ -19,6 +19,7 @@ import Ring, {
 import WorkoutLog, { type Workout } from "./WorkoutLog";
 import StatsLink from "./StatsLink";
 import { addDays } from "@/lib/dates";
+import { sessionTitle } from "@/lib/sessions";
 import type {
   GoalView,
   SkillView,
@@ -146,13 +147,13 @@ const LABEL_ROOM = LABEL_PAD_Y * 2;
 const RING_STROKE = 9;
 const QUICK_ADD = [15, 30, 60];
 
-/** The first line of a note, for a chip that has to fit a 250px column. The line breaks
- *  ARE the log, so the first line is reliably the most identifying thing in it. */
-const firstLine = (note: string | null): string =>
-  (note ?? "").split(/\r?\n/)[0]!.trim();
+// The first line of a note is its TITLE — the rule this file invented for its chips and
+// which now lives in src/lib/sessions.ts, shared with the log dialog, /sessions and the
+// search. It was the only place in the app that read a session the way the owner writes one.
 
-/** A dated session, as /api/gym/history returns it. */
-type PastSession = Workout & { date: string };
+/** A dated session, as /api/gym/history returns it. Workout carries its own date now, so
+ *  this is the same type — kept as a name because "past session" is what the list means. */
+type PastSession = Workout;
 
 /** "2026-08-08" -> "Sat 8 Aug". Noon, never midnight: a bare ISO date parses as UTC and
  *  lands on the day before anywhere west of Greenwich. */
@@ -426,13 +427,26 @@ export default function PillarSections({
    */
   const [gymLog, setGymLog] = useState<PastSession[] | null>(null);
   const gymLogWanted = useRef(false);
-  const wantGymLog = () => {
-    if (gymLogWanted.current) return;
-    gymLogWanted.current = true;
+  const pullGymLog = () =>
     fetch("/api/gym/history")
       .then((r) => r.json())
       .then((d) => setGymLog(d.error ? [] : (d.sessions ?? [])))
       .catch(() => setGymLog([]));
+  const wantGymLog = () => {
+    if (gymLogWanted.current) return;
+    gymLogWanted.current = true;
+    void pullGymLog();
+  };
+  /**
+   * The cached log after a write, because a session can now be opened FROM it.
+   *
+   * `wantGymLog` latches so the fetch happens once; that was fine while the list was
+   * read-only, and stops being fine the moment editing a session from it can change the very
+   * text and date the list is drawn from. Re-pulled only if it was ever wanted — a save from
+   * the Log button on a pillar that never opened a drill-down still costs nothing.
+   */
+  const refreshGymLog = () => {
+    if (gymLogWanted.current) void pullGymLog();
   };
   /** The rolling window's first day — the same `addDays(anchor, -13)` the server uses. */
   const windowFrom = addDays(date, -13);
@@ -852,7 +866,13 @@ export default function PillarSections({
                       const drilled = drills && openMetric === m.key;
                       // The fortnight behind the count, resolved here so the list below is
                       // pure rendering. null = still loading / unreachable.
-                      const fortnight: { key: string; date: string; title: string }[] | null =
+                      //
+                      // `id` is what makes an entry OPENABLE. A session has one and a
+                      // calendar event does not, which is exactly the distinction the list
+                      // needs: the log is ours to open, the calendar is not.
+                      const fortnight:
+                        | { key: string; date: string; title: string; id: number | null }[]
+                        | null =
                         !drilled
                           ? null
                           : kind
@@ -869,9 +889,8 @@ export default function PillarSections({
                                     key: `s${s.id}`,
                                     date: s.date,
                                     title:
-                                      s.title ||
-                                      firstLine(s.note) ||
-                                      "untitled session",
+                                      sessionTitle(s) || "untitled session",
+                                    id: s.id,
                                   }))
                             : socialEvents == null
                               ? null
@@ -884,6 +903,7 @@ export default function PillarSections({
                                     key: `e${i}`,
                                     date: e.date,
                                     title: e.title,
+                                    id: null,
                                   }));
                       return (
                         <li
@@ -988,19 +1008,51 @@ export default function PillarSections({
                                 </span>
                               ) : (
                                 <span className="block">
-                                  {fortnight.map((f) => (
-                                    <span
-                                      key={f.key}
-                                      className="flex items-baseline gap-2 border-t border-[var(--color-line)] py-1.5 first:border-t-0"
-                                    >
-                                      <span className="w-16 shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
-                                        {shortDay(f.date)}
+                                  {fortnight.map((f) => {
+                                    const row = (
+                                      <>
+                                        <span className="w-16 shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                                          {shortDay(f.date)}
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate font-serif text-small">
+                                          {f.title}
+                                        </span>
+                                      </>
+                                    );
+                                    /* The width is NOT in here, deliberately. A bleeding
+                                       row needs `-mx-1` paired with an explicit
+                                       `calc(100% + 0.5rem)`: with a plain `w-full` the box
+                                       is over-constrained, CSS discards the right margin in
+                                       LTR, and the row slides 4px left instead of growing
+                                       4px each side. Same paired idiom as every other
+                                       bleeding control in this file. */
+                                    const line =
+                                      "flex items-baseline gap-2 border-t border-[var(--color-line)] py-1.5 first:border-t-0";
+                                    /* THE TITLE IS THE WAY IN. A list of the fortnight's
+                                       sessions that you cannot open is a list you read and
+                                       then go looking for the real thing — so each session
+                                       opens its own document, in place, over the pillar you
+                                       already had open. A calendar event has no document
+                                       here and stays a plain line rather than a dead
+                                       control. */
+                                    return f.id != null && kind ? (
+                                      <button
+                                        key={f.key}
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenLog({ kind, id: f.id! });
+                                        }}
+                                        aria-haspopup="dialog"
+                                        className={`${line} -mx-1 w-[calc(100%+0.5rem)] rounded px-1 text-left transition-colors hover:bg-[var(--color-panel)]`}
+                                      >
+                                        {row}
+                                      </button>
+                                    ) : (
+                                      <span key={f.key} className={`${line} w-full`}>
+                                        {row}
                                       </span>
-                                      <span className="min-w-0 flex-1 truncate font-serif text-small">
-                                        {f.title}
-                                      </span>
-                                    </span>
-                                  ))}
+                                    );
+                                  })}
                                 </span>
                               )}
                             </span>
@@ -1022,7 +1074,7 @@ export default function PillarSections({
                                       aria-haspopup="dialog"
                                       className="max-w-[11rem] truncate rounded-full border border-[var(--color-line)] px-2 py-0.5 text-micro text-[var(--color-muted)] transition-colors hover:bg-[var(--color-panel)] hover:text-[var(--color-ink)]"
                                     >
-                                      {firstLine(w.note) || `session ${i + 1}`}
+                                      {sessionTitle(w) || `session ${i + 1}`}
                                     </button>
                                   </li>
                                 ))}
@@ -1326,6 +1378,11 @@ export default function PillarSections({
           collapsed the section underneath. */}
       {openLog && (
         <WorkoutLog
+          /* One dialog per SESSION. `note` and `day` are seeded from props into state, so
+             swapping which session this instance is about without remounting would leave the
+             previous one's text and date in the controls. The modal makes that unreachable
+             today; the key makes it unreachable regardless. */
+          key={openLog.id ?? "new"}
           kind={openLog.kind}
           label={WORKOUTS.find((w) => w.kind === openLog.kind)!.label}
           date={date}
@@ -1333,17 +1390,26 @@ export default function PillarSections({
           workout={
             openLog.id == null
               ? null
-              : (workouts.find((x) => x.id === openLog.id) ?? null)
+              : // TODAY'S FIRST, THEN THE WHOLE LOG. The chips under a metric are today's
+                // sessions and resolve from `workouts`; the drill-down list is the
+                // fortnight and resolves from `gymLog`. Looking only in the first would
+                // hand the dialog a null for every session older than this morning — which
+                // reads as "write a new one" and is how you lose an old session by
+                // clicking on it.
+                (workouts.find((x) => x.id === openLog.id) ??
+                gymLog?.find((x) => x.id === openLog.id) ??
+                null)
           }
           hue={toneColor("physical", colors.physical)}
-          onSave={(note, day) =>
-            onSaveWorkout(openLog.kind, note, openLog.id, day)
-          }
-          onDelete={() =>
-            openLog.id == null
-              ? Promise.resolve()
-              : onDeleteWorkout(openLog.id)
-          }
+          onSave={async (note, day) => {
+            await onSaveWorkout(openLog.kind, note, openLog.id, day);
+            refreshGymLog();
+          }}
+          onDelete={async () => {
+            if (openLog.id == null) return;
+            await onDeleteWorkout(openLog.id);
+            refreshGymLog();
+          }}
           onClose={() => setOpenLog(null)}
         />
       )}

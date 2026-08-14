@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { WorkoutKind } from "@/lib/rings";
+import { splitSession } from "@/lib/sessions";
 
 /**
  * Three kinds, three SEPARATE documents per day.
@@ -24,14 +25,13 @@ import type { WorkoutKind } from "@/lib/rings";
  *  distinguishes them. */
 export type Workout = {
   id: number;
+  /** The day it happened — its OWN day, which is not always the day the screen is showing.
+   *  Editing opens here; see `origin` below. */
+  date: string;
   kind: WorkoutKind;
   title: string | null;
   note: string | null;
 };
-
-/** What the history pane reads. Dated, because out of the day's context the date is the
- *  only thing that tells two sessions apart. */
-type PastSession = Workout & { date: string };
 
 const PLACEHOLDER: Record<WorkoutKind, string> = {
   strength: "Beat the Logbook. Stimulate, Don't Annihilate.",
@@ -75,17 +75,29 @@ export default function WorkoutLog({
 }) {
   const [note, setNote] = useState(workout?.note ?? "");
   /**
+   * THE DAY THIS DIALOG IS ABOUT — the session's own when editing one, the screen's when
+   * writing a new one.
+   *
+   * The distinction is the fix for a real bug rather than a nicety. Both callers used to
+   * pass the screen's date and the dialog opened on it unconditionally; SessionHistory even
+   * carried a comment arguing that the dialog "cannot tell" an edit from a fresh write. It
+   * can — `workout` is null for one and not the other. Opening a 3 August session on the
+   * 12th put the wrong date in the picker, and saving then sent that wrong date to a write
+   * that took it literally.
+   */
+  const origin = workout?.date ?? date;
+  /**
    * WHEN it happened, and it is editable.
    *
    * Sessions get written up after the fact — on the train home, or on Sunday for the week —
-   * and a log that can only record today is a log you fall behind on and then abandon. It
-   * opens on the day being viewed, so the common case is still one tap.
+   * and a log that can only record today is a log you fall behind on and then abandon.
+   * Moving it MOVES the session now; it used to silently clone it onto the new day.
    */
-  const [day, setDay] = useState(date);
+  const [day, setDay] = useState(origin);
   const [busy, setBusy] = useState(false);
   // null while the fetch is out: an empty list and an unanswered one are different facts,
   // and printing "Nothing logged yet." during the wait would state the wrong one.
-  const [recent, setRecent] = useState<PastSession[] | null>(null);
+  const [recent, setRecent] = useState<Workout[] | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -104,9 +116,7 @@ export default function WorkoutLog({
     // pane empty and the writing surface untouched.
     fetch(`/api/gym/recent?${q}`)
       .then((r) => (r.ok ? r.json() : { recent: [] }))
-      .then(
-        (d: { recent?: PastSession[] }) => alive && setRecent(d.recent ?? []),
-      )
+      .then((d: { recent?: Workout[] }) => alive && setRecent(d.recent ?? []))
       .catch(() => alive && setRecent([]));
     return () => {
       alive = false;
@@ -170,17 +180,19 @@ export default function WorkoutLog({
           onChange={(e) => e.target.value && setDay(e.target.value)}
           className="rounded border border-transparent bg-transparent px-1 py-0.5 font-serif text-micro text-[var(--color-ink)] outline-none transition-colors hover:border-[var(--color-line)] focus:border-[var(--color-accent)]"
         />
-        {day !== date && (
+        {day !== origin && (
           <button
             type="button"
-            onClick={() => setDay(date)}
+            onClick={() => setDay(origin)}
             className="underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
           >
-            {/* Back to the day the dialog OPENED on, which is not always today any more. */}
+            {/* Back to the day the dialog OPENED on — which is the SESSION's day when
+                editing one, and not always today either way. Undoing a stray tap on the
+                picker must put the date back where it was, not where the screen is. */}
             back to{" "}
-            {date === (today ?? date)
+            {origin === (today ?? date)
               ? "today"
-              : onDay(date).toLocaleDateString("en-AU", {
+              : onDay(origin).toLocaleDateString("en-AU", {
                   day: "numeric",
                   month: "short",
                 })}
@@ -293,18 +305,28 @@ export default function WorkoutLog({
                     })}
                   </div>
 
-                  <div className="min-w-0">
-                    {s.title && (
-                      <p className="font-serif text-small text-[var(--color-muted)]">
-                        {s.title}
-                      </p>
-                    )}
-                    {/* pre-wrap because the line breaks ARE the log — a set per line is
-                        the only structure this document has. */}
-                    <p className="whitespace-pre-wrap font-serif text-small text-[var(--color-ink)]">
-                      {s.note}
-                    </p>
-                  </div>
+                  {/* THE FIRST LINE IS THE TITLE — derived, never stored, so a session
+                      written here reads the same way the rescued history does. See
+                      splitSession: it is one document, and this is a view of it. */}
+                  {(() => {
+                    const { title, body } = splitSession(s);
+                    return (
+                      <div className="min-w-0">
+                        {title && (
+                          <p className="font-serif text-small text-[var(--color-muted)]">
+                            {title}
+                          </p>
+                        )}
+                        {/* pre-wrap because the line breaks ARE the log — a set per line is
+                            the only structure this document has. */}
+                        {body && (
+                          <p className="whitespace-pre-wrap font-serif text-small text-[var(--color-ink)]">
+                            {body}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>

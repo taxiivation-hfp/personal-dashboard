@@ -407,6 +407,49 @@ date off the chart's axis and typing it in from memory.
 by kind, deliberately unpaginated. Two lifts on one Tuesday read as one Tuesday with two
 entries. It is a COUNT, never a score: no streaks, no personal bests, no volume totals.
 
+### The first line of a session is its TITLE
+
+`src/lib/sessions.ts`, pure and import-free, shared by all four surfaces that show a session:
+the log dialog's history pane, `/sessions`, the Physical pillar's drill-down and its chips.
+
+**DERIVED ON READ, never stored.** The note stays ONE document and the dialog stays ONE
+textarea — the first line is an ordinary line you can rewrite or delete. Splitting the text
+into a title and a body on save would turn the log into a form, which is the one thing this
+document refuses to be. Nothing migrates, and a stored split could never go stale because
+there isn't one.
+
+**A stored `gym_sessions.title` wins, and its note is left whole.** That column is only ever
+filled by the rescued Discord history, where the title is a separate fact rather than the
+note's first line — promoting the first line as well would eat a real set out of the body.
+
+**The dialog's own textarea is deliberately exempt.** Titles are for LISTS. In the editor the
+document is the document.
+
+### Searching the log
+
+On `/sessions` only, and it **composes** with the kind chips rather than replacing them.
+
+- **The result is the matching LINE**, with its 1-based line number, grouped under the
+  session it came from. Searching a training log is asking "where did I last do this and what
+  did I lift" — the answer is the line. Clicking opens the whole session.
+- **A phrase, not tokens.** Case-insensitive substring on the raw query. `incline db` finds
+  that pair together; `incline bench` does not find them ten lines apart. Predictable beats
+  clever on a record you are trying to trust.
+- **`SEARCH_PAGE` (10) sessions, then the rest on request.** Filtered in memory, not fetched:
+  `/api/gym/history` is deliberately unpaginated so the whole log is already there. The
+  staging is about the READING — a keyword like "bench" can match half the log.
+
+### A session can be MOVED, and editing one never clones it
+
+`saveWorkout` sets the date rather than matching on it: `SET note=?, date=? WHERE id=? AND
+kind=?`. The old `AND date=?` in the WHERE meant an edit whose date differed matched nothing
+and fell through to the INSERT — writing a **second** row at the new date and leaving the
+first. Two sessions, one a ghost, and the Physical ring counting both.
+
+**The dialog opens on the SESSION's own date when editing**, and on the screen's when writing
+a new one. It tells them apart by whether it was given a workout — which is why `Workout`
+carries `date` everywhere now, including from `workoutsOn`.
+
 ## /stats — the record, and the only place history lives
 
 A route, not a fourth pane, reached from the fourth phone tab and from `StatsLink` under

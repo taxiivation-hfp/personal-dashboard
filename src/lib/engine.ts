@@ -913,6 +913,13 @@ export type WorkoutKind = "strength" | "cardio" | "misc";
 
 export type Workout = {
   id: number;
+  /**
+   * The day it happened. Carried on EVERY session, including the ones read for a date the
+   * caller already knows, because the dialog opens on the session's own day when editing —
+   * and a session that does not know its date can only be opened on the screen's, which is
+   * the bug saveWorkout's comment describes from the other end.
+   */
+  date: string;
   kind: WorkoutKind;
   title: string | null;
   note: string | null;
@@ -923,11 +930,12 @@ export async function workoutsOn(db: Client, date: string): Promise<Workout[]> {
   const r = await db.execute({
     // Ordered by kind then id so a day's sessions read in a stable order and the second
     // lift always follows the first.
-    sql: "SELECT id,kind,title,note FROM gym_sessions WHERE date=? ORDER BY kind, id",
+    sql: "SELECT id,date,kind,title,note FROM gym_sessions WHERE date=? ORDER BY kind, id",
     args: [date],
   });
   return r.rows.map((x) => ({
     id: Number(x.id),
+    date: String(x.date),
     kind: String(x.kind) as WorkoutKind,
     title: x.title == null ? null : String(x.title),
     note: x.note == null ? null : String(x.note),
@@ -939,9 +947,25 @@ export async function workoutsOn(db: Client, date: string): Promise<Workout[]> {
  *
  * Saving is what logs the session: there is no separate "did it" toggle to forget.
  *
- * The UPDATE is guarded on date AND kind as well as id. A stale id from a client that has
- * been open across midnight would otherwise rewrite a different day's note, and the note
- * is the irreplaceable part. A stale id simply falls through to an insert instead.
+ * THE DATE IS SET, NOT MATCHED, and that fix is the whole reason this comment was rewritten.
+ *
+ * It used to read `WHERE id=? AND date=? AND kind=?`, on the argument that a stale id from a
+ * client left open across midnight must not rewrite a different day's note. The guard was
+ * right about the danger and wrong about the remedy: an id that matched a real session whose
+ * date simply differed also failed the WHERE, and the miss fell through to the INSERT below —
+ * so editing a session logged on the 3rd from a screen showing the 12th did not move it and
+ * did not fail. It wrote a SECOND row dated the 12th and left the first one sitting there.
+ * Two sessions, one of them a ghost, and the Physical ring counting both.
+ *
+ * The date now travels in the SET, so changing it MOVES the session — which is what the
+ * picker in the dialog has always looked like it did. A session written up on Sunday for
+ * Thursday is the ordinary case in a log that exists to be caught up on.
+ *
+ * KIND STAYS IN THE WHERE. It is the half of the old guard that was never in tension with
+ * editing: nothing in the app can change a session's kind, so an id arriving under the wrong
+ * one is a genuinely stale id and still falls through to an insert. What the guard cannot do
+ * is protect a note from a client that has the RIGHT id — and never could, because that is
+ * simply what editing is.
  */
 export async function saveWorkout(
   db: Client,
@@ -950,8 +974,8 @@ export async function saveWorkout(
   const note = w.note.trim() || null;
   if (w.id) {
     const r = await db.execute({
-      sql: "UPDATE gym_sessions SET note=? WHERE id=? AND date=? AND kind=?",
-      args: [note, w.id, w.date, w.kind],
+      sql: "UPDATE gym_sessions SET note=?, date=? WHERE id=? AND kind=?",
+      args: [note, w.date, w.id, w.kind],
     });
     if (r.rowsAffected > 0) return w.id;
   }
@@ -969,7 +993,7 @@ export async function recentWorkouts(
   kind: WorkoutKind,
   before: string,
   limit = 5,
-): Promise<(Workout & { date: string })[]> {
+): Promise<Workout[]> {
   const r = await db.execute({
     sql: `SELECT id,date,kind,title,note FROM gym_sessions
           WHERE kind=? AND date < ? AND COALESCE(note,'') <> ''
@@ -999,7 +1023,7 @@ export async function recentWorkouts(
 export async function allWorkouts(
   db: Client,
   kind?: WorkoutKind,
-): Promise<(Workout & { date: string })[]> {
+): Promise<Workout[]> {
   const r = await db.execute(
     kind
       ? {
