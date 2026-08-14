@@ -30,7 +30,6 @@ type Session = Workout;
 const LABEL: Record<WorkoutKind, string> = {
   strength: "Strength",
   cardio: "Cardio",
-  misc: "Misc",
 };
 
 /**

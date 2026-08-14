@@ -15,11 +15,60 @@ const API = "https://www.googleapis.com/calendar/v3";
 
 const clientId = () => process.env.GOOGLE_CLIENT_ID || "";
 const clientSecret = () => process.env.GOOGLE_CLIENT_SECRET || "";
-const redirectUri = () =>
-  process.env.GOOGLE_REDIRECT_URI ||
-  "http://localhost:3000/api/google/callback";
 
 export const googleConfigured = () => Boolean(clientId() && clientSecret());
+
+/**
+ * The OAuth callback URL, DERIVED FROM THE REQUEST — never from configuration.
+ *
+ * This was `process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/..."`, and that
+ * fallback is a trapdoor rather than a default. A deployment that simply never set the
+ * variable did not fail: it built a perfectly valid consent screen and handed Google a
+ * redirect to LOCALHOST, so pressing Connect on the live site sent the owner's browser to
+ * their own laptop. On 2026-08-14 that laptop happened to have a dev server running, which
+ * answered the callback and rejected it as `badstate` — the live site's state lives in a
+ * different database — so the only symptom was "it connected to localhost". With nothing on
+ * port 3000 it would have read as a dead link instead. Neither says "an env var is missing".
+ *
+ * It was also configuration that could not be right in two places at once: `fly.toml` set a
+ * fly.dev value that would have been just as wrong on Vercel, and one variable cannot name
+ * two origins. Deriving it deletes the question. The redirect must return to the origin the
+ * consent was started from — there is no deployment where you want it to land anywhere else —
+ * so the request already carries the only correct answer.
+ *
+ * `x-forwarded-*` FIRST because both Vercel and Fly terminate TLS at a proxy and forward
+ * plain HTTP inland: `req.url` says `http://` on a real HTTPS visit, and an `http://` redirect
+ * URI does not match the `https://` one registered with Google. Same reasoning as
+ * `isSecureRequest` in auth.ts, which needs the scheme for the session cookie.
+ *
+ * GOOGLE_REDIRECT_URI is still honoured, but ONLY when it names this very origin — an
+ * override for a proxy this cannot read, never a way to point one host at another. A stale
+ * value is ignored rather than obeyed, which is the whole bug above.
+ *
+ * The URL must still be registered in Google Cloud Console; Google matches it exactly and
+ * nothing here can waive that.
+ */
+export function callbackUrl(req: Request): string {
+  const first = (h: string | null) => (h ? h.split(",")[0].trim() : "");
+  const proto = first(req.headers.get("x-forwarded-proto"));
+  const host = first(req.headers.get("x-forwarded-host"));
+
+  let origin: string;
+  try {
+    const u = new URL(req.url);
+    origin = `${proto || u.protocol.replace(":", "")}://${host || u.host}`;
+  } catch {
+    origin = `${proto || "http"}://${host || "localhost:3000"}`;
+  }
+
+  const configured = process.env.GOOGLE_REDIRECT_URI || "";
+  if (configured) {
+    try {
+      if (new URL(configured).origin === origin) return configured;
+    } catch {} // unparseable config is ignored, not thrown — Connect must still work
+  }
+  return `${origin}/api/google/callback`;
+}
 
 export type CalEvent = {
   id: string;
@@ -58,10 +107,10 @@ export type CalEvent = {
 
 // ---- OAuth ----
 
-export function getAuthUrl(state: string): string {
+export function getAuthUrl(state: string, redirect: string): string {
   const p = new URLSearchParams({
     client_id: clientId(),
-    redirect_uri: redirectUri(),
+    redirect_uri: redirect,
     response_type: "code",
     scope: SCOPE,
     access_type: "offline",
@@ -72,7 +121,17 @@ export function getAuthUrl(state: string): string {
   return `${AUTH}?${p.toString()}`;
 }
 
-export async function exchangeCode(db: Client, code: string): Promise<void> {
+/**
+ * `redirect` MUST be byte-identical to the one sent to getAuthUrl — Google compares the
+ * two and answers `redirect_uri_mismatch` if they differ. Both call sites derive it from
+ * their own request via callbackUrl(), and the two requests are the same browser on the
+ * same origin, so they agree by construction rather than by two places being kept in step.
+ */
+export async function exchangeCode(
+  db: Client,
+  code: string,
+  redirect: string,
+): Promise<void> {
   const res = await fetch(TOKEN, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -80,7 +139,7 @@ export async function exchangeCode(db: Client, code: string): Promise<void> {
       code,
       client_id: clientId(),
       client_secret: clientSecret(),
-      redirect_uri: redirectUri(),
+      redirect_uri: redirect,
       grant_type: "authorization_code",
     }),
   });

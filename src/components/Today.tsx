@@ -1478,16 +1478,20 @@ export default function Today({
           body: JSON.stringify({ done }),
         })
       }
-      onLogTime={(skillId, minutes) =>
+      /* The DIALOG's date, not the screen's: it carries its own picker, capped at the real
+         today, so a session written from a past day lands where it happened. `id` present
+         is an edit — the same contract saveWorkout runs under. */
+      onLogSession={(skillId, note, day, id) =>
         mutateSkills(`/api/skills/${skillId}/time`, {
           method: "POST",
-          body: JSON.stringify({ minutes, date: data.date }),
+          body: JSON.stringify({ note, date: day, id }),
         })
       }
-      onUndoTime={(skillId) =>
-        mutateSkills(`/api/skills/${skillId}/time?date=${data.date}`, {
-          method: "DELETE",
-        })
+      onDeleteSession={(skillId, id) =>
+        mutateSkills(
+          `/api/skills/${skillId}/time?session=${id}&date=${data.date}`,
+          { method: "DELETE" },
+        )
       }
       onSaveWorkout={saveWorkout}
       onDeleteWorkout={deleteWorkout}

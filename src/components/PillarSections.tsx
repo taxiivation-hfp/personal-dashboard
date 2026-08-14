@@ -17,6 +17,7 @@ import Ring, {
   type EventItem,
 } from "./PillarRing";
 import WorkoutLog, { type Workout } from "./WorkoutLog";
+import SkillLog, { type SkillSession } from "./SkillLog";
 import StatsLink from "./StatsLink";
 import { addDays } from "@/lib/dates";
 import { sessionTitle } from "@/lib/sessions";
@@ -28,20 +29,38 @@ import type {
 } from "@/lib/queries";
 import {
   pillarCaption,
+  skillDefaultHex,
   type MetricRing,
   type PillarFactInput,
   type PillarRingView,
   type WorkoutKind,
 } from "@/lib/rings";
 
-/** 640 -> "10h 40m". Time is shown as time — an abstract number would invite reading it
- *  as a score, which is the one thing this figure is not. */
-function asTime(minutes: number): string {
-  if (minutes <= 0) return "—";
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (!h) return `${m}m`;
-  return m ? `${h}h ${m}m` : `${h}h`;
+/**
+ * 3 -> "3 sessions", 1 -> "1 session", 0 -> "—".
+ *
+ * Was asTime(minutes). Skills stopped being measured in hours by the owner's ruling: a
+ * session is a document now, and turning up is the unit. The em dash for zero is the same
+ * reticence the caption keeps — a bare "0" invites reading a count as a score, which is the
+ * one thing this figure is not.
+ */
+function asSessions(n: number): string {
+  if (n <= 0) return "—";
+  return `${n} ${n === 1 ? "session" : "sessions"}`;
+}
+
+/**
+ * A skill's own hue — the one its arc wears on the Portfolio ring.
+ *
+ * Resolved the same way PillarRing resolves it (`s.color ?? skillDefaultHex(s.id)`) so the
+ * dialog and the segment it was opened from cannot show two different colours for one
+ * skill. The slice list is the source when the skill appears in it; a skill with nothing
+ * logged this fortnight is absent from it and falls back to the same stable default, which
+ * is cycled from the palette by id rather than chosen, so it never moves between screens.
+ */
+function skillHue(id: number, slices: SkillSlice[] | null): string {
+  const chosen = slices?.find((x) => x.id === id)?.color;
+  return chosen ?? skillDefaultHex(id);
 }
 
 const PILLAR_NAME: Record<PillarKey, string> = {
@@ -145,7 +164,6 @@ const RING_GAP = 8;
  *  so the two cannot disagree about how much space a label needs. */
 const LABEL_ROOM = LABEL_PAD_Y * 2;
 const RING_STROKE = 9;
-const QUICK_ADD = [15, 30, 60];
 
 // The first line of a note is its TITLE — the rule this file invented for its chips and
 // which now lives in src/lib/sessions.ts, shared with the log dialog, /sessions and the
@@ -181,10 +199,11 @@ const wantsMotion = (): boolean =>
   typeof window.matchMedia !== "function" ||
   !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// Misc is gone: what it held was bouldering and calisthenic skills, and Calisthenics is a
+// SKILL under Portfolio that now logs sessions of its own. One row, one place to write it.
 const WORKOUTS: { kind: WorkoutKind; label: string }[] = [
   { kind: "strength", label: "Strength" },
   { kind: "cardio", label: "Cardio" },
-  { kind: "misc", label: "Misc" },
 ];
 
 
@@ -214,8 +233,8 @@ export default function PillarSections({
   date,
   today,
   onSubgoal,
-  onLogTime,
-  onUndoTime,
+  onLogSession,
+  onDeleteSession,
   onSaveWorkout,
   onDeleteWorkout,
   onOpenRecord,
@@ -243,8 +262,15 @@ export default function PillarSections({
    *  where the calendar actually ends. */
   today?: string;
   onSubgoal: (id: number, done: boolean) => Promise<void>;
-  onLogTime: (skillId: number, minutes: number) => Promise<void>;
-  onUndoTime: (skillId: number) => Promise<void>;
+  /** Write a skill session. `id` present means edit; the date travels because the dialog
+   *  may have moved it. */
+  onLogSession: (
+    skillId: number,
+    note: string,
+    day: string,
+    id: number | null,
+  ) => Promise<void>;
+  onDeleteSession: (skillId: number, id: number) => Promise<void>;
   /**
    * id null = log a NEW session; an id edits that one.
    *
@@ -275,6 +301,13 @@ export default function PillarSections({
    */
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
   const [openSkill, setOpenSkill] = useState<number | null>(null);
+  /** Which skill's log dialog is open, and which of its sessions is being edited. `session:
+   *  null` is a new one. Held as a pair so picking another session inside the dialog can
+   *  re-key it, which is what re-seeds the textarea. */
+  const [logSkill, setLogSkill] = useState<{
+    id: number;
+    session: SkillSession | null;
+  } | null>(null);
 
   /**
    * The FLIP, and everything it needs to survive one commit.
@@ -453,8 +486,11 @@ export default function PillarSections({
 
   // Relative to the largest FORTNIGHT figure, so the bars compare where time went
   // recently. No target and no full state — nothing here is completable.
-  const maxMinutes = Math.max(1, ...skills.map((s) => s.minutes14));
-  const anyRecent = skills.some((s) => s.minutes14 > 0);
+  // The bar scales against the busiest skill's SESSIONS now, not its minutes. Same shape,
+  // same meaning — relative attention across the fortnight — in the unit skills are logged
+  // in. Math.max guards the divide when nothing has been logged at all.
+  const maxSessions = Math.max(1, ...skills.map((s) => s.sessions14));
+  const anyRecent = skills.some((s) => s.sessions14 > 0);
 
   /**
    * Toggle a pillar. Everything happens at once, and that is the change.
@@ -1258,7 +1294,7 @@ export default function PillarSections({
                       {myS.map((s) => (
                         <li key={s.id} className="page-margin py-3">
                           <div className="pt-2 text-right text-micro tabular-nums text-[var(--color-muted)]">
-                            {asTime(s.minutes14)}
+                            {asSessions(s.sessions14)}
                           </div>
 
                           <div className="min-w-0">
@@ -1291,7 +1327,7 @@ export default function PillarSections({
                                 )}
                               </span>
                               <span className="mt-0.5 block text-micro tabular-nums text-[var(--color-muted)]">
-                                {asTime(s.minutes)} lifetime
+                                {asSessions(s.sessions)} lifetime
                               </span>
                             </button>
 
@@ -1300,7 +1336,7 @@ export default function PillarSections({
                                 <div
                                   className="motion-data h-full w-full origin-left rounded-full"
                                   style={{
-                                    transform: `scaleX(${s.minutes14 / maxMinutes})`,
+                                    transform: `scaleX(${s.sessions14 / maxSessions})`,
                                     // Parked reads as quiet, not as failed: the same muted
                                     // ink the name already takes. --color-line-strong sat a
                                     // point off the track and made the bar vanish rather
@@ -1319,32 +1355,35 @@ export default function PillarSections({
                                 same row: it belongs to the tap that just happened, and it
                                 is quiet type rather than a fourth chip so it cannot be hit
                                 by accident while reaching for +60m. */}
+                            {/* One control where three quick-add chips used to be. The
+                                chips could only say HOW LONG, which is the thing this
+                                pillar stopped measuring; what is worth recording is what
+                                you worked on, and that needs a document. The fortnight's
+                                sessions open from inside the dialog rather than listing
+                                here — a 250px column is not where a log is read. */}
                             {openSkill === s.id && (
-                              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                                {QUICK_ADD.map((min) => (
-                                  <button
-                                    key={min}
-                                    onClick={() =>
-                                      run(`st${s.id}`, () =>
-                                        onLogTime(s.id, min),
-                                      )
-                                    }
-                                    disabled={busy === `st${s.id}`}
-                                    className="rounded-full border border-[var(--color-line-strong)] px-3 py-1.5 text-small tabular-nums transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
-                                  >
-                                    +{min}m
-                                  </button>
-                                ))}
-                                {s.sessions14 > 0 && (
+                              <div className="mt-2.5 flex flex-wrap items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setLogSkill({ id: s.id, session: null })
+                                  }
+                                  className="rounded-full border border-[var(--color-line-strong)] px-3 py-1.5 text-small transition-colors hover:bg-[var(--color-panel)]"
+                                >
+                                  Log a session
+                                </button>
+                                {s.recent.length > 0 && (
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      run(`st${s.id}`, () => onUndoTime(s.id))
+                                      setLogSkill({
+                                        id: s.id,
+                                        session: s.recent[0],
+                                      })
                                     }
-                                    disabled={busy === `st${s.id}`}
-                                    className="ml-1 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
+                                    className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
                                   >
-                                    undo
+                                    last: {sessionTitle({ note: s.recent[0].note, title: null }) || "untitled"}
                                   </button>
                                 )}
                               </div>
@@ -1413,6 +1452,41 @@ export default function PillarSections({
           onClose={() => setOpenLog(null)}
         />
       )}
+
+      {/* The skill log, same contract as the workout one above it. Keyed by session id for
+          the same reason: the textarea and the date are seeded from props into state, so
+          swapping which session the instance is about without remounting would leave the
+          previous one's words in a box now claiming another day. */}
+      {logSkill &&
+        (() => {
+          const sk = skills.find((x) => x.id === logSkill.id);
+          if (!sk) return null;
+          return (
+            <SkillLog
+              key={logSkill.session?.id ?? "new"}
+              name={sk.name}
+              date={date}
+              today={today}
+              session={logSkill.session}
+              recent={sk.recent}
+              hue={skillHue(sk.id, skills14)}
+              onSave={async (note, day) => {
+                await onLogSession(
+                  sk.id,
+                  note,
+                  day,
+                  logSkill.session?.id ?? null,
+                );
+              }}
+              onDelete={async () => {
+                if (!logSkill.session) return;
+                await onDeleteSession(sk.id, logSkill.session.id);
+              }}
+              onPick={(s) => setLogSkill({ id: sk.id, session: s })}
+              onClose={() => setLogSkill(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

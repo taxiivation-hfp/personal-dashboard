@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/client";
-import { exchangeCode } from "@/lib/google";
+import { callbackUrl, exchangeCode } from "@/lib/google";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,9 @@ export async function GET(req: Request) {
     return Response.redirect(`${base}/?gcal=badstate`, 302);
   }
   try {
-    await exchangeCode(db, code);
+    // Same derivation as /connect, so the redirect_uri Google is asked to verify is the one
+    // it was given — see exchangeCode.
+    await exchangeCode(db, code, callbackUrl(req));
     return Response.redirect(`${base}/?gcal=connected`, 302);
   } catch {
     return Response.redirect(`${base}/?gcal=error`, 302);

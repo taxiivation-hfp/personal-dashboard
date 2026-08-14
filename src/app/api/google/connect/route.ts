@@ -1,9 +1,9 @@
 import { getDb } from "@/lib/db/client";
-import { getAuthUrl, googleConfigured } from "@/lib/google";
+import { callbackUrl, getAuthUrl, googleConfigured } from "@/lib/google";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: Request) {
   if (!googleConfigured()) {
     return Response.json(
       {
@@ -19,5 +19,7 @@ export async function GET() {
     sql: "INSERT INTO app_meta (key,value) VALUES ('google_oauth_state',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     args: [state],
   });
-  return Response.redirect(getAuthUrl(state), 302);
+  // Derived from THIS request, so the consent screen always points back at the origin the
+  // owner pressed Connect on — see callbackUrl.
+  return Response.redirect(getAuthUrl(state, callbackUrl(req)), 302);
 }

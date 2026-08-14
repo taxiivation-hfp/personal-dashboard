@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   METRICS,
+  STEPS_FLOOR,
   WINDOW_DAYS,
   buildRings,
   metricFill,
@@ -60,23 +61,37 @@ test("a null required yields null rather than NaN or Infinity", () => {
   assert.equal(metricFill(3, 0, true), null);
 });
 
-test("steps is LIVE: a resolved count scores it against 12 qualifying days", () => {
-  // The phone pushes to /api/health now, so sourceReady is true and a resolved count
-  // fills the ring like any other metric — at weight 0, as an outer lap.
+test("steps is a VOLUME: the fortnight's total against floor x window", () => {
+  // The phone pushes to /api/health, so sourceReady is true and a resolved count fills
+  // the ring like any other metric — at weight 0, as an outer lap.
+  //
+  // The count is now TOTAL STEPS, not qualifying days: 49,000 of 98,000 is half a
+  // fortnight's walking however it was shaped. Under the old rule the same fortnight
+  // could read anywhere from 0 to 100% depending only on which days it fell on.
   const r = find(
-    buildRings(counts({ steps: ok(6) }), WINDOW_DAYS),
+    buildRings(counts({ steps: ok(49_000) }), WINDOW_DAYS),
     "physical",
     "steps",
   );
   assert.equal(r.state, "scored");
-  assert.equal(r.fill, 0.5); // 6 of 12 qualifying days
-  assert.equal(r.fact, "6 of 12 days");
+  assert.equal(r.fill, 0.5);
+  // Grouped, because a five-figure fact line is unreadable ungrouped.
+  assert.equal(r.fact, "49,000 of 98,000 steps");
+});
+
+test("the steps target is DERIVED from the daily floor, never written twice", () => {
+  // Retuning the floor must move the fortnight target with it. If these are ever written
+  // as two independent numbers, the checklist row and the ring start disagreeing about
+  // what a good day is, silently.
+  const steps = METRICS.find((m) => m.key === "steps")!;
+  assert.equal(steps.dailyThreshold, STEPS_FLOOR);
+  assert.equal(steps.required, STEPS_FLOOR * WINDOW_DAYS);
 });
 
 test("a sourceless metric is EXCLUDED from its pillar mean, not counted as 0", () => {
-  // Physical = strength + cardio (live) + misc (unscored) + steps (ghost). With both
-  // scored metrics met the pillar must read exactly 1 — if steps counted as a zero it
-  // would be capped below full forever, which no behaviour could fix.
+  // Physical = strength + cardio (live) + steps (ghost). With both scored metrics met the
+  // pillar must read exactly 1 — if steps counted as a zero it would be capped below full
+  // forever, which no behaviour could fix.
   const physical = buildRings(
     counts({ strength: ok(8), cardio: ok(2) }),
     WINDOW_DAYS,
@@ -86,7 +101,7 @@ test("a sourceless metric is EXCLUDED from its pillar mean, not counted as 0", (
 
 test("a pillar with no live metric is null, not NaN", () => {
   const c = counts();
-  for (const k of ["strength", "cardio", "misc"])
+  for (const k of ["strength", "cardio", "steps"])
     c[k] = { count: 0, resolved: false };
   const physical = buildRings(c, WINDOW_DAYS).find(
     (p) => p.pillar === "physical",
@@ -151,19 +166,33 @@ test("every day-capped metric requires no more than the window allows", () => {
 });
 
 test("the gym metrics count SESSIONS — a second lift on a Tuesday is a second thing", () => {
-  for (const key of ["strength", "cardio", "misc"]) {
+  for (const key of ["strength", "cardio"]) {
     const m = METRICS.find((x) => x.key === key)!;
     assert.equal(m.perDayCapped, false, `${key} is not per-day capped`);
     assert.equal(m.unit, "sessions", `${key} says so in its fact line`);
   }
 });
 
+test("MISC IS GONE from Physical — it was Calisthenics written twice", () => {
+  // Removed by the owner's ruling: Misc held bouldering and calisthenic skills, and
+  // Calisthenics is a Portfolio SKILL that logs sessions of its own. Two places to write
+  // one session is one place to forget it.
+  assert.equal(
+    METRICS.find((m) => m.key === "misc"),
+    undefined,
+  );
+  assert.deepEqual(
+    METRICS.filter((m) => m.pillar === "physical").map((m) => m.key),
+    ["strength", "cardio", "steps"],
+  );
+});
+
 test("things capped by nature stay capped", () => {
-  // A non-negotiable is ticked once; 15k steps IS the same day as 7k. If either of these
-  // ever flips, the ring stops meaning what its threshold says.
-  for (const key of ["outreach", "steps"]) {
-    assert.equal(METRICS.find((x) => x.key === key)!.perDayCapped, true);
-  }
+  // A non-negotiable is ticked once. Steps is deliberately NOT here any more: it sums a
+  // fortnight, and de-duplicating by date would discard every step after each day's first
+  // row. If this ever flips back, the ring silently stops meaning what its threshold says.
+  assert.equal(METRICS.find((x) => x.key === "outreach")!.perDayCapped, true);
+  assert.equal(METRICS.find((x) => x.key === "steps")!.perDayCapped, false);
 });
 
 test("the printed noun and the counting rule are allowed to disagree, but not by accident", () => {
@@ -174,8 +203,8 @@ test("the printed noun and the counting rule are allowed to disagree, but not by
     outreach: true,
     strength: false,
     cardio: false,
-    misc: false,
-    steps: true,
+    // Steps sums the fortnight now — see "things capped by nature stay capped".
+    steps: false,
     skills: false,
     // Hours, and two blocks on one Tuesday are two blocks — nothing about a day caps them.
     project_hours: false,
@@ -197,7 +226,7 @@ test("every pillar appears exactly once and metric keys are unique", () => {
 test("thresholds match the owner's stated minimums", () => {
   const by = Object.fromEntries(METRICS.map((m) => [m.key, m.required]));
   assert.equal(by.outreach, 2); // 1 / week
-  assert.equal(by.steps, 12); // 7k / day
+  assert.equal(by.steps, 98_000); // 7k/day x 14 — the fortnight's walking, not its shape
   assert.equal(by.skills, 4); // 4 sessions / 14 days
 });
 
@@ -269,42 +298,21 @@ test("no amount of strength reaches 100 without cardio", () => {
 
 // ---------------------------------------------------------------- unscored
 
-test("misc has a floor of its own but never enters the Physical mean", () => {
-  const m = find(
-    buildRings(counts({ misc: ok(3) }), WINDOW_DAYS),
-    "physical",
-    "misc",
-  );
-  // A threshold, so it fills its own mark — drawn as a thin outer lap, not a slice.
-  assert.equal(m.state, "scored");
-  assert.equal(m.fill, 1);
-  assert.equal(m.fact, "3 of 1 sessions");
-  // Weight 0 is what keeps it out of the average: bouldering is visible, never a quota.
-  assert.equal(m.weight, 0);
-});
-
-test("no amount of misc moves Physical", () => {
-  const none = find(buildRings(counts({ strength: ok(4) }), WINDOW_DAYS), "physical", "strength");
-  const withMisc = buildRings(counts({ strength: ok(4), misc: ok(9) }), WINDOW_DAYS).find(
-    (p) => p.pillar === "physical",
-  )!;
-  const withoutMisc = buildRings(counts({ strength: ok(4) }), WINDOW_DAYS).find(
-    (p) => p.pillar === "physical",
-  )!;
-  assert.equal(withMisc.fill, withoutMisc.fill);
-  assert.ok(none.fill !== null);
-});
-
-test("misc is excluded from the Physical mean entirely", () => {
-  const without = buildRings(
-    counts({ strength: ok(8), cardio: ok(2) }),
+test("no amount of STEPS moves Physical", () => {
+  // The property Misc used to pin, now carried by the metric that still needs it most: a
+  // phone sensor must never be able to fill — or cap — a pillar about training. Steps is
+  // weight 0 for exactly this reason, and summing a fortnight made the number it can reach
+  // very much larger, so this matters more than it did.
+  const withSteps = buildRings(
+    counts({ strength: ok(4), steps: ok(200_000) }),
     WINDOW_DAYS,
-  ).find((x) => x.pillar === "physical")!;
-  const withMisc = buildRings(
-    counts({ strength: ok(8), cardio: ok(2), misc: ok(9) }),
+  ).find((p) => p.pillar === "physical")!;
+  const withoutSteps = buildRings(
+    counts({ strength: ok(4) }),
     WINDOW_DAYS,
-  ).find((x) => x.pillar === "physical")!;
-  assert.equal(withMisc.fill, without.fill);
+  ).find((p) => p.pillar === "physical")!;
+  assert.equal(withSteps.fill, withoutSteps.fill);
+  assert.ok(withSteps.fill !== null);
 });
 
 // The lap is what lets Misc have a floor without having a share. If a metric that carries
@@ -312,17 +320,17 @@ test("misc is excluded from the Physical mean entirely", () => {
 // still looking like it was being drawn — the ring would be lying by omission.
 test("only a floor-without-weight is drawn as an outer lap", () => {
   const all = buildRings(
-    counts({ strength: ok(8), cardio: ok(2), misc: ok(1) }),
+    counts({ strength: ok(8), cardio: ok(2), steps: ok(98_000) }),
     WINDOW_DAYS,
   ).flatMap((p) => p.metrics);
 
-  // THREE laps: misc and steps on Physical, project hours on Portfolio. Each carries a
-  // floor at weight 0, so each rides the thin outer band and none can move its pillar's
-  // mean — a phone sensor must not cap Physical, and blocked hours must not fill
-  // Portfolio when nothing came of them.
+  // TWO laps now that Misc is gone: steps on Physical, project hours on Portfolio. Each
+  // carries a floor at weight 0, so each rides the thin outer band and neither can move
+  // its pillar's mean — a phone sensor must not cap Physical, and blocked hours must not
+  // fill Portfolio when nothing came of them.
   assert.deepEqual(
     all.filter((m) => m.lap).map((m) => m.key),
-    ["misc", "steps", "project_hours"],
+    ["steps", "project_hours"],
   );
   // Nothing that counts is ever moved off the donut.
   assert.ok(all.every((m) => !m.lap || m.weight === 0));
@@ -357,34 +365,34 @@ test("thresholds match the owner's stated minimums", () => {
   const by = Object.fromEntries(METRICS.map((m) => [m.key, m.required]));
   assert.equal(by.strength, 8);
   assert.equal(by.cardio, 2);
-  assert.equal(by.misc, 1); // one a fortnight, as an outer lap rather than a slice
-  assert.equal(by.social_events, 6); // adhered graphite, ~6 / 14 days — revised from 2
+  // ALL adhered graphite events, standing and one-off alike. Counting only the recurring
+  // kind made the ring unfillable by socialising — five events read as 1 of 6.
+  assert.equal(by.social_events, 6);
 });
 
 // --- the plain-words fortnight ------------------------------------------------------------
 
-test("portfolio counts hours, and a zero is a word rather than a figure", () => {
-  const base = { skillMinutes: 0, workoutSessions: 0, outreach: 0 };
+test("portfolio counts SESSIONS, and a zero is a word rather than a figure", () => {
+  // Hours until the owner's ruling: a skill session is a text document like a workout, so
+  // the caption counts the same thing the ring does. "no sessions" rather than "0 sessions"
+  // keeps a true zero from reading as a score of nought.
+  const base = { skillSessions: 0, workoutSessions: 0, outreach: 0 };
   assert.equal(
     pillarCaption("portfolio", base),
-    "no hours logged past fortnight",
+    "no sessions logged past fortnight",
   );
   assert.equal(
-    pillarCaption("portfolio", { ...base, skillMinutes: 90 }),
-    "1.5 hours logged past fortnight",
+    pillarCaption("portfolio", { ...base, skillSessions: 1 }),
+    "1 session logged past fortnight",
   );
   assert.equal(
-    pillarCaption("portfolio", { ...base, skillMinutes: 60 }),
-    "1 hour logged past fortnight",
-  );
-  assert.equal(
-    pillarCaption("portfolio", { ...base, skillMinutes: 725 }),
-    "12.1 hours logged past fortnight",
+    pillarCaption("portfolio", { ...base, skillSessions: 6 }),
+    "6 sessions logged past fortnight",
   );
 });
 
 test("physical counts SESSIONS, and never caps at the ring's threshold", () => {
-  const base = { skillMinutes: 0, workoutSessions: 0, outreach: 0 };
+  const base = { skillSessions: 0, workoutSessions: 0, outreach: 0 };
   assert.equal(
     pillarCaption("physical", base),
     "no sessions logged past fortnight",
@@ -401,7 +409,7 @@ test("physical counts SESSIONS, and never caps at the ring's threshold", () => {
 });
 
 test("social names both of its sources", () => {
-  const base = { skillMinutes: 0, workoutSessions: 0, outreach: 3 };
+  const base = { skillSessions: 0, workoutSessions: 0, outreach: 3 };
   assert.equal(
     pillarCaption("social_capital", { ...base, socialEvents: 2 }),
     "3 outreaches sent, 2 events",
@@ -420,7 +428,7 @@ test("social names both of its sources", () => {
 // must not be reported as a fortnight with no social life in it.
 test("an unreachable calendar says so — it never prints a zero", () => {
   const c = pillarCaption("social_capital", {
-    skillMinutes: 0,
+    skillSessions: 0,
     workoutSessions: 0,
     outreach: 2,
   });

@@ -93,6 +93,55 @@ async function ensure(c: Client): Promise<Client> {
     );
   }
 
+  /**
+   * skill_time.minutes goes NULLABLE — skills log SESSIONS now, not hours.
+   *
+   * SQLite cannot alter a column's nullability, so this is the standard rebuild: new table,
+   * copy every row, drop, rename. It runs inside one transaction via batch(), so a failure
+   * halfway leaves the original table exactly as it was.
+   *
+   * IDEMPOTENT BY INSPECTION, not by a latch: it fires only when PRAGMA table_info still
+   * reports minutes as NOT NULL. That matters because ensure() runs on EVERY boot — the
+   * same trap the gym index comment below describes — and a rebuild that ran unconditionally
+   * would rewrite the whole table on every cold start.
+   *
+   * The column is KEPT rather than dropped. Every hour logged under the old model is real
+   * data and "preserve data; migrate, never drop" outranks a tidy schema. Nothing writes it
+   * from here on, so NULL comes to mean "a session, logged the current way".
+   *
+   * No FK anywhere points AT skill_time, so dropping it cannot orphan another table's rows;
+   * its own FK to skills(id) is re-declared and every copied row already satisfies it.
+   */
+  const skillMinutesNotNull = async (): Promise<boolean> => {
+    const r = await c.execute("PRAGMA table_info(skill_time)");
+    return r.rows.some((x) => {
+      const col = x as Record<string, unknown>;
+      return String(col.name) === "minutes" && Number(col.notnull) === 1;
+    });
+  };
+  if (await skillMinutesNotNull()) {
+    await c.batch(
+      [
+        `CREATE TABLE skill_time_rebuild (
+           id         INTEGER PRIMARY KEY,
+           skill_id   INTEGER NOT NULL REFERENCES skills(id),
+           date       TEXT NOT NULL CHECK (date GLOB '????-??-??'),
+           minutes    INTEGER CHECK (minutes IS NULL OR minutes > 0),
+           note       TEXT,
+           created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+         )`,
+        // Columns named explicitly: a bare INSERT ... SELECT * would silently mis-map if
+        // the source table's order ever differed from the declaration above.
+        `INSERT INTO skill_time_rebuild (id, skill_id, date, minutes, note, created_at)
+           SELECT id, skill_id, date, minutes, note, created_at FROM skill_time`,
+        "DROP TABLE skill_time",
+        "ALTER TABLE skill_time_rebuild RENAME TO skill_time",
+        "CREATE INDEX IF NOT EXISTS idx_skill_time_skill ON skill_time(skill_id, date)",
+      ],
+      "write",
+    );
+  }
+
   // day_titles arrived after the last migration latch, so ensure() creates it here as
   // well as in schema.sql — a dev DB that never runs db:migrate still gets it.
   await c.execute(`CREATE TABLE IF NOT EXISTS day_titles (

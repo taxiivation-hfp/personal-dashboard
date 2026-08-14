@@ -36,7 +36,6 @@ export type Workout = {
 const PLACEHOLDER: Record<WorkoutKind, string> = {
   strength: "Beat the Logbook. Stimulate, Don't Annihilate.",
   cardio: "Pace yourself. Focus on your breathing, focus on your form.",
-  misc: "Let's have some fun.",
 };
 
 /** Noon, never midnight: a bare ISO date parses as UTC and lands on the day before

@@ -126,12 +126,28 @@ export async function GET(req: Request) {
     }
 
     const [counts, observedDays, workouts, facts, skills14] = await Promise.all([
-      // The METRIC (target 6) counts the RECURRING kind only. A one-off is the outer
-      // band's own story and never fills the inner ring: the six-a-fortnight minimum is
-      // about standing commitments kept, and a farewell you happened to be invited to is
-      // not evidence you kept one.
+      /**
+       * EVERY ADHERED SOCIAL EVENT counts toward the six — standing and one-off alike.
+       *
+       * This passed `socialEventList.length`, the RECURRING events only, on the reasoning
+       * that "a farewell you happened to be invited to is not evidence you kept a standing
+       * commitment". Measured against the owner's actual fortnight, that reasoning failed:
+       * five adhered social events, one of them recurring, and a ring reading 1 of 6. Most
+       * of a social life is one-offs, so the metric could not be filled by socialising —
+       * only by socialising on a repeat rule.
+       *
+       * That is precisely the shape CLAUDE.md refuses everywhere else. It is why the gym
+       * is kept off the non-negotiables: "an item you are designed to fail teaches distrust
+       * of the whole list." A ring stuck at 1 of 6 through a busy fortnight teaches exactly
+       * that about the rings.
+       *
+       * The standing/one-off split SURVIVES where it was always honest — as the two drawn
+       * bands, and as the two lists the drill-down opens. It just stopped deciding the
+       * score. `socialEvents` is the same tally the caption prints, so the ring and the
+       * words beneath it can no longer disagree about the same fortnight.
+       */
       getRingCounts(db, from, anchor, {
-        social_events: socialEventList?.length,
+        social_events: socialEvents,
         project_hours: projectHours,
       }),
       getObservedDays(db, anchor),

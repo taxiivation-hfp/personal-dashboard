@@ -168,11 +168,22 @@ CREATE INDEX IF NOT EXISTS idx_subgoals_goal ON subgoals(goal_id, sort_order);
 -- milestones anywhere: the number only ever says how long you spent, which is a fact
 -- rather than a score. Kept as a log rather than a running total so the history stays
 -- honest and a mistaken entry can be removed.
+-- One SESSION of a skill. The table is still called skill_time for the reason renaming a
+-- live table is never worth a tidier noun, but it no longer measures time: a skill session
+-- is a text document, exactly as a workout is.
+--
+-- `minutes` is NULLABLE and nothing writes it any more. Every hour ever logged is still
+-- here — the column was kept rather than dropped, because "preserve data" outranks a clean
+-- schema and those hours were real. NULL means "a session happened", which is the whole
+-- unit now; a number means "and it was logged under the old hours model".
+--
+-- An existing database gets this widened in client.ts's ensure(), which rebuilds the table
+-- when it finds minutes still NOT NULL. SQLite cannot ALTER a column's nullability.
 CREATE TABLE IF NOT EXISTS skill_time (
   id         INTEGER PRIMARY KEY,
   skill_id   INTEGER NOT NULL REFERENCES skills(id),
   date       TEXT NOT NULL CHECK (date GLOB '????-??-??'),
-  minutes    INTEGER NOT NULL CHECK (minutes > 0),
+  minutes    INTEGER CHECK (minutes IS NULL OR minutes > 0),
   note       TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );

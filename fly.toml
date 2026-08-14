@@ -12,9 +12,14 @@ primary_region = "syd"
 
 [env]
   # Non-secret config only. Everything sensitive goes in `fly secrets set` — see
-  # docs/deploy.md. Update this to the real hostname after the first deploy.
+  # docs/deploy.md.
   NODE_ENV = "production"
-  GOOGLE_REDIRECT_URI = "https://personal-dashboard.fly.dev/api/google/callback"
+
+  # NO GOOGLE_REDIRECT_URI. It was here, naming a fly.dev host, and it was never in effect:
+  # THE LIVE DEPLOYMENT IS VERCEL, which does not read this file. The app now derives the
+  # OAuth callback from the incoming request (callbackUrl() in src/lib/google.ts), so it is
+  # correct on Fly, on Vercel and on localhost without anyone maintaining a hostname in
+  # three places. Do not add it back.
 
 [http_service]
   internal_port = 3000

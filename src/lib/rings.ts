@@ -71,9 +71,30 @@ export type MetricSource =
   | "calendar_social"
   | "calendar_project_hours";
 
-/** Workout kinds. Misc is deliberately unscored — see METRICS. */
-export type WorkoutKind = "strength" | "cardio" | "misc";
-export const WORKOUT_KINDS: WorkoutKind[] = ["strength", "cardio", "misc"];
+/**
+ * Workout kinds.
+ *
+ * MISC IS GONE, by the owner's ruling, and the reason is duplication rather than dislike:
+ * what Misc actually held was bouldering and calisthenic skills, and Calisthenics is a
+ * SKILL under Portfolio. Now that skills log sessions rather than hours the two were the
+ * same row written in two places, and a thing you log twice is a thing you eventually log
+ * in whichever place you remember — which makes both counts wrong.
+ *
+ * `gym_sessions.kind` still ACCEPTS 'misc' at the database level; the CHECK constraint is
+ * untouched. Nothing writes it any more and no metric counts it, so any surviving row is
+ * inert rather than corrupt.
+ */
+export type WorkoutKind = "strength" | "cardio";
+export const WORKOUT_KINDS: WorkoutKind[] = ["strength", "cardio"];
+
+/**
+ * The daily step floor, in one place because three unrelated things read it.
+ *
+ * It is NO LONGER what the ring counts — see the steps metric — but it is still the line
+ * the checklist row dashes against and the chart draws its floor at. Those are per-day
+ * statements and stay per-day; only the ring changed.
+ */
+const STEPS_DAILY = 7000;
 
 /** How far past its threshold a ring may visibly run. Visual only — see metricOverdrive. */
 export const OVERDRIVE_CAP = 2;
@@ -106,7 +127,7 @@ export type Metric = {
    * now lives in `perDayCapped`, and these two must be allowed to disagree — `misc` reads
    * "sessions" and always did, even while it was being counted by day.
    */
-  unit: "days" | "sessions" | "hours";
+  unit: "days" | "sessions" | "hours" | "steps";
   /**
    * Whether one date can contribute at most once.
    *
@@ -166,37 +187,50 @@ export const METRICS: Metric[] = [
     sourceReady: true,
   },
   {
-    key: "misc",
-    pillar: "physical",
-    label: "Misc",
-    source: "gym",
-    workoutKind: "misc",
-    // A FLOOR, and a VISUAL one. Misc has a threshold now — one session a fortnight — but
-    // keeps weight 0, so it fills its own mark without ever entering the Physical mean.
-    // It draws as a thin outer lap on the donut rather than a slice of it: bouldering and
-    // calisthenic skills should be visible and should never become a quota.
-    required: 1,
-    unit: "sessions",
-    // Was counted by DATE while declaring "sessions" — the label and the counter
-    // disagreed. Fixed for free by the perDayCapped split.
-    perDayCapped: false,
-    weight: 0,
-    sourceReady: true,
-  },
-  {
     key: "steps",
     pillar: "physical",
     label: "Steps",
     source: "health_steps",
-    dailyThreshold: 7000,
-    required: 12, // 7k / day
-    unit: "days",
-    perDayCapped: true, // 15k steps IS the same day as 7k
+    /**
+     * The daily floor, kept HERE because the checklist row and the chart's floor line read
+     * it through STEPS_FLOOR. It no longer gates the ring — see `required`.
+     */
+    dailyThreshold: STEPS_DAILY,
+    /**
+     * TOTAL STEPS ACROSS THE FORTNIGHT, not qualifying days — the owner's ruling.
+     *
+     * This ring used to count days that reached 7k, which made it a CONSISTENCY measure:
+     * 6,900 steps scored exactly what 0 did, and a 20k Saturday scored exactly what 7,001
+     * did. Two of the owner's real weeks read as near-empty rings while the actual distance
+     * walked was most of the fortnight's target, because the walking was not evenly shaped.
+     *
+     * Summing says the honest thing for this particular quantity: steps ACCUMULATE. A long
+     * day genuinely is more walking, and nothing about a body cares which date it fell on.
+     *
+     * Derived as floor x window rather than written as 98,000, so retuning the daily line
+     * moves the fortnight target with it and the two can never disagree.
+     *
+     * KNOWN AND ACCEPTED: this is the one metric where a single big day can carry several
+     * quiet ones. That is a real change in meaning, not an oversight — it is why the daily
+     * floor stays drawn on the checklist and the chart, where consistency is still the
+     * question being asked.
+     */
+    required: STEPS_DAILY * WINDOW_DAYS,
+    unit: "steps",
+    /**
+     * FALSE now, and it has to be: `perDayCapped` switches the counter between
+     * COUNT(DISTINCT date) and a per-row aggregate, and a sum that de-duplicated by date
+     * would throw away every step after the first row of each day. health_logs holds one
+     * row per date by construction, so this flag is documentation more than arithmetic —
+     * but the two must still agree, which is the whole reason it stopped being inferred
+     * from `unit`.
+     */
+    perDayCapped: false,
     weight: 0,
     // LIVE: an iOS Shortcut POSTs the day's count to /api/health, which upserts
-    // health_logs. Weight stays 0, so like Misc it draws as a thin outer lap and never
-    // moves the Physical mean — a phone sensor must not be able to cap the pillar. It
-    // still ghosts whenever the count is unresolved.
+    // health_logs. Weight stays 0, so it draws as a thin outer lap and never moves the
+    // Physical mean — a phone sensor must not be able to cap the pillar. It still ghosts
+    // whenever the count is unresolved.
     sourceReady: true,
   },
   {
@@ -385,12 +419,29 @@ export function metricOverdrive(
   return Math.min(1, (ratio - 1) / (OVERDRIVE_CAP - 1));
 }
 
+/**
+ * 45231 -> "45,231", 7.4 -> "7.4", 8 -> "8".
+ *
+ * Written out rather than `toLocaleString`, which depends on the ICU build and would make
+ * this module's tests environment-sensitive — the one thing an import-free, dependency-free
+ * module exists to avoid.
+ *
+ * It earns its place with the steps metric: that fact line now reads in the tens of
+ * thousands, and "45231 of 98000 steps" is a number you have to count digits in.
+ */
+const grouped = (n: number): string => {
+  const [whole, frac] = String(n).split(".");
+  return (
+    whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (frac ? `.${frac}` : "")
+  );
+};
+
 function factLine(m: Metric, count: number, state: MetricState): string {
   if (state === "ghost") return "no data source yet";
   // Unscored: a count, and an explicit statement that it is not being measured against
   // anything. Saying "no data source yet" here would be a lie — there IS data.
-  if (state === "unscored") return `${count} ${m.unit} · not scored`;
-  return `${count} of ${m.required} ${m.unit}`;
+  if (state === "unscored") return `${grouped(count)} ${m.unit} · not scored`;
+  return `${grouped(count)} of ${grouped(m.required as number)} ${m.unit}`;
 }
 
 /** Day one must not read like a fortnight of neglect: while the window is still filling,
@@ -463,8 +514,9 @@ export function buildRings(
  * rather than in a component where it would drift.
  */
 export type PillarFactInput = {
-  /** Portfolio: total minutes across every skill in the window. */
-  skillMinutes: number;
+  /** Portfolio: skill SESSIONS in the window. Was total minutes — skills stopped being
+   *  measured in hours, so the caption counts the same thing the ring does. */
+  skillSessions: number;
   /** Physical: gym_sessions ROWS in the window, all three kinds. */
   workoutSessions: number;
   /** Social: outreach non-negotiable ticks in the window. */
@@ -490,11 +542,10 @@ export function pillarCaption(
   f: PillarFactInput,
 ): string {
   if (pillar === "portfolio") {
-    const h = asHours(f.skillMinutes);
-    // "no hours", not "0 hours": the zero is true, and saying it as a word rather than a
-    // figure keeps it from reading as a score of nought.
-    if (f.skillMinutes <= 0) return "no hours logged past fortnight";
-    return `${h} ${plural(Number(h), "hour", "hours")} logged past fortnight`;
+    // "no sessions", not "0 sessions": the zero is true, and saying it as a word rather
+    // than a figure keeps it from reading as a score of nought.
+    if (f.skillSessions <= 0) return "no sessions logged past fortnight";
+    return `${f.skillSessions} ${plural(f.skillSessions, "session", "sessions")} logged past fortnight`;
   }
 
   if (pillar === "physical") {

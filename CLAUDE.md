@@ -140,10 +140,18 @@ dependent (e.g. laundry on Sundays).
 Gym is deliberately **not** one of these. The owner trains "any 4 of 5 weekdays" — a
 frequency, which `days_mask` cannot express. On the checklist it would be engineered to
 sit unticked once a week, and an item you are designed to fail teaches distrust of the
-whole list. Workouts are logged separately, by kind: **Strength / Cardio / Misc**, one
+whole list. Workouts are logged separately, by kind: **Strength / Cardio**, one
 row per SESSION — a day can hold two lifts and a run, and each is its own document.
 
-Each kind opens **its own free-text document** — three separate notes per day, not one
+**MISC IS GONE.** What it held was bouldering and calisthenic skills, and Calisthenics is a
+Portfolio SKILL. Once skills started logging sessions rather than hours the two were the
+same document with two places to write it — so it got written in whichever the owner
+remembered, and both counts were wrong. One activity, one row. `gym_sessions.kind` still
+ACCEPTS `'misc'` at the database level and any surviving row is left alone: nothing writes
+it and no metric counts it, so it is inert rather than corrupt. Preserve data; migrate,
+never drop.
+
+Each kind opens **its own free-text document** — a separate note per session, not one
 shared field. Saving IS logging; there is no second "did it" toggle to forget. The text is
 deliberately unstructured: a workout log is numbers scribbled between sets, and any form
 imposed here is a form to fight on a bad day.
@@ -237,8 +245,9 @@ truth, what counts is the cap.
   turning up is the unit, and project work has no session shape. It is the thing that
   quietly gets none of the week, so the honest question is how much of the week it got.
 - **A metric may have a floor without having a share, and it is drawn OUTSIDE the ring.**
-  Misc — bouldering, calisthenic skills — has `required: 1` (one session a fortnight) and
-  `weight: 0`. It fills its own mark and never enters the Physical mean.
+  Steps and the Portfolio project-hours lap both do: a threshold of their own at `weight: 0`,
+  so each fills its own mark and neither ever enters its pillar's mean. (Misc used to be the
+  third and is gone — see the non-negotiables section.)
 
   As a slice it would have been wrong either way: weighted, it would take circle from the
   metrics that count; at weight 0 it would sit there looking like a slice switched off. As
@@ -254,9 +263,19 @@ truth, what counts is the cap.
   and passed to `getRingCounts`; on a calendar failure the count is left UNDEFINED so the
   ring goes ghost rather than reporting a false zero. ADHERED only: an event you drifted
   from is not a social fortnight you had.
-- **The two Social bands split on RECURRENCE, never on colour.** Inner (the metric, six a
-  fortnight) is the standing kind — Church, a weekly night out; the mid band is the one-offs
-  and fills no quota. Both are graphite.
+- **EVERY ADHERED SOCIAL EVENT COUNTS TOWARD THE SIX** — standing and one-off alike. The
+  metric was fed the RECURRING events only, on the reasoning that a farewell you were invited
+  to is not evidence you kept a standing commitment. Measured against a real fortnight that
+  reasoning collapsed: five adhered social events, one recurring, ring reading **1 of 6**.
+  Most of a social life is one-offs, so the ring could not be filled by socialising — only by
+  socialising on a repeat rule. That is the same shape that keeps the gym off the checklist:
+  an item you are designed to fail teaches distrust of the whole board. The ring is now fed
+  the SAME tally the caption prints, so the two can never disagree about one fortnight.
+
+- **The two Social BANDS still split on RECURRENCE, never on colour.** Inner is the standing
+  kind — Church, a weekly night out; the mid band is the one-offs. Both are graphite, and the
+  split now decides only what is DRAWN and which drill-down list an event lands in — never
+  what is scored.
 
   It was two colour ids until it was measured, and the lesson is worth keeping: **the
   Calendar API reports only the ELEVEN LEGACY colour ids while the calendar UI's palette is
@@ -274,6 +293,22 @@ truth, what counts is the cap.
   already counts its own work from `gym_sessions`. The `skills` metric counts every
   `skill_time` row regardless of pillar and always did, so this decides where a skill is
   listed and nothing else.
+- **A SKILL LOGS SESSIONS, NOT HOURS**, and a session is a free-text document — the same
+  object a workout is, written on the same surface, with the first line as its title via the
+  same `src/lib/sessions.ts`. Portfolio stopped being a stopwatch: three quick-add chips
+  could only say how LONG, and what is worth recording is what you worked on.
+
+  The table is still `skill_time` — renaming a live table is churn for a noun — but
+  `minutes` is now NULLABLE and nothing writes it. Every hour ever logged is still in it,
+  because preserving data outranks a tidy schema; `NULL` means "a session", a number means
+  "logged under the old hours model", and both count as exactly one session. `client.ts`'s
+  `ensure()` widens the column on boot by rebuilding the table when it finds it still
+  `NOT NULL`, since SQLite cannot alter nullability.
+
+  Sessions are ROWS, so a skill may hold several on one day — two sittings at the piano are
+  two sessions, the ruling gym already runs under. That also finally matches what the metric
+  always DECLARED: `perDayCapped: false`, `unit: "sessions"`. It was being counted
+  `DISTINCT (skill_id, date)`, the exact label-versus-counter drift the registry warns about.
 - **The real number is always printed beneath the ring** (`11 of 8 days`). The arc caps;
   the text never does. A cap must never hide the truth.
 - **`null` is not `0`.** A metric with no source is a dashed ghost and is excluded from
@@ -763,9 +798,19 @@ not change how that push works**; everything below is additive to it.
 
 `STEPS_FLOOR` (7,000) is exported from `rings.ts`, derived from the metric — the checklist
 row, the chart's floor line and the ring read the same constant, and there is deliberately
-no second `METRICS.find` anywhere. The ring wants 12 qualifying days of 14 at `weight: 0`,
-so like Misc it draws as a thin outer lap and a phone sensor can never move the Physical
-mean.
+no second `METRICS.find` anywhere.
+
+**THE RING COUNTS TOTAL STEPS, NOT QUALIFYING DAYS** — `SUM(steps)` over the fortnight
+against `STEPS_FLOOR x WINDOW_DAYS` (98,000), derived rather than written down so retuning
+the daily line moves the fortnight target with it. It used to count days that reached 7k,
+which made it a CONSISTENCY measure: 6,900 steps scored what 0 did, and a 20k Saturday
+scored what 7,001 did. Steps ACCUMULATE, and nothing about a body cares which date they
+fell on.
+
+Known and accepted: this is the one metric where a big day can carry several quiet ones.
+That is a real change of meaning, which is why the daily floor stays drawn on the checklist
+row and on the chart — those still ask about consistency. `weight: 0`, so it draws as a
+thin outer lap and a phone sensor can never move the Physical mean.
 
 - **The count is READ-ONLY everywhere.** The phone is the instrument, and a hand-typed step
   count is a number nobody measured. The step dialog therefore has no entry control — the
@@ -807,8 +852,32 @@ mean.
 - **Preserve data.** Goals, habit history, gym sessions, journal pages and Google
   tokens are real and irreplaceable. Migrate; never drop.
 - **Confirm any migration plan before running it.**
-- Stack: Next.js 16 (Turbopack) + React 19 + Tailwind v4 + libSQL. Local file DB;
-  a Turso/Fly deploy is deferred until the local MVP is complete.
+- Stack: Next.js 16 (Turbopack) + React 19 + Tailwind v4 + libSQL.
+
+### THE LIVE DEPLOYMENT IS VERCEL + TURSO — `taxiivation-dashboard.vercel.app`
+
+Read this before touching anything deploy-shaped, because the repo still LOOKS like a Fly
+app and it is not one. `fly.toml`, `Dockerfile` and `docs/deploy.md` describe a Fly + Turso
+deploy that was written first and never became the live one, and this line used to say the
+deploy was "deferred". None of them mention Vercel. There is no `vercel.json` and no
+`.vercel/` in the tree either, so nothing in the repo pointed at the real host.
+
+That cost real time on 2026-08-14: Connect on the live site sent the owner's browser to
+localhost, and the obvious suspect was `fly.toml`'s `GOOGLE_REDIRECT_URI` — a file Vercel
+never reads. The variable was simply unset on Vercel, and `google.ts` fell back to a
+hardcoded localhost default. **Deployment config is not documentation; if the tree and the
+truth disagree, believe neither until you have checked the host.**
+
+- **Local dev is a FILE database** (`DATABASE_URL=file:./data/dashboard.db`); production is
+  **Turso**. They are two different databases and they do not sync. The gym backlog that
+  `scripts/import-strength.mjs` imported lives in Turso — that importer refuses to
+  `--commit` against a `file:` URL for exactly this reason. A local screen showing four
+  sessions is not evidence that anything was lost.
+- **`scripts/db-copy.mjs` WIPES ITS TARGET.** It is a one-way mirror of the local file onto
+  Turso, not a merge. Running it from a dev box replaces production with local data. Do not
+  run it to "sync"; there is no sync.
+- **Env vars must be set in the VERCEL project**, not in `fly.toml` and not in
+  `.env.local` — neither is read by the live app.
 - SQLite `GLOB` uses `?`/`*` wildcards, not `_` — date CHECKs use `GLOB '????-??-??'`.
 - **Tests: `npm test`.** `node --test` on Node 24, which strips TypeScript natively — zero
   dependencies. `src/lib/rings.ts`, `goals.ts` and `dates.ts` are import-free on purpose so

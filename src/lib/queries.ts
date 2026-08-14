@@ -80,14 +80,16 @@ export type SkillView = {
   name: string;
   pillar: PillarKey | null;
   state: "always_on" | "active" | "parked";
-  /** Lifetime minutes logged. A measurement of time spent — not a score, not a level.
-   *  Only ever accumulates, so this is the continuity number. */
-  minutes: number;
-  /** Minutes in the rolling 14-day window — the LIVE number. Answers "what am I on
-   *  now", which the lifetime total cannot. */
-  minutes14: number;
-  /** Distinct days this skill was touched in the window. */
+  /** Lifetime SESSIONS logged. A count of times you turned up — not a score, not a level.
+   *  Only ever accumulates, so this is the continuity number. Was lifetime minutes. */
+  sessions: number;
+  /** Sessions in the rolling 14-day window — the LIVE number. Answers "what am I on
+   *  now", which the lifetime total cannot. ROWS, not distinct days: two sittings at the
+   *  piano on one Saturday are two sessions, the ruling gym already runs under. */
   sessions14: number;
+  /** The window's sessions themselves, newest first — the log the dialog reopens. Skills
+   *  hold few enough of these that a list is cheaper than a second round trip per skill. */
+  recent: { id: number; date: string; note: string }[];
   staleDays: number | null;
 };
 
@@ -682,31 +684,51 @@ export async function listSkills(
 ): Promise<SkillView[]> {
   const { byId } = await pillarMaps(db);
   const from = addDays(anchor, -(WINDOW_DAYS - 1));
+  // COUNT(*), not COUNT(DISTINCT date): a row is a session now, and a skill may hold
+  // several on one day. The old DISTINCT capped each skill at one a day while the metric
+  // declared perDayCapped:false — the label-versus-counter drift the registry warns about.
   const r = await db.execute({
     sql: `SELECT s.id, s.name, s.pillar_id, s.state, s.last_touched,
-            COALESCE((SELECT SUM(minutes) FROM skill_time t WHERE t.skill_id = s.id), 0) AS minutes,
-            COALESCE((SELECT SUM(minutes) FROM skill_time t
-                       WHERE t.skill_id = s.id AND t.date BETWEEN ? AND ?), 0) AS minutes14,
-            COALESCE((SELECT COUNT(DISTINCT date) FROM skill_time t
+            COALESCE((SELECT COUNT(*) FROM skill_time t WHERE t.skill_id = s.id), 0) AS sessions,
+            COALESCE((SELECT COUNT(*) FROM skill_time t
                        WHERE t.skill_id = s.id AND t.date BETWEEN ? AND ?), 0) AS sessions14
      FROM skills s
      ORDER BY CASE s.state WHEN 'active' THEN 0 WHEN 'always_on' THEN 1 ELSE 2 END, s.sort_order, s.id`,
-    args: [from, anchor, from, anchor],
+    args: [from, anchor],
   });
+
+  // The window's sessions, in one query rather than one per skill. Ordered newest first so
+  // the UI never re-sorts; `note` may be NULL on a row imported under the hours model, and
+  // an empty document is the honest rendering of "an hour was logged, nothing was written".
+  const notes = await db.execute({
+    sql: `SELECT id, skill_id, date, COALESCE(note,'') AS note
+            FROM skill_time WHERE date BETWEEN ? AND ?
+           ORDER BY date DESC, id DESC`,
+    args: [from, anchor],
+  });
+  const bySkill = new Map<number, { id: number; date: string; note: string }[]>();
+  for (const x of notes.rows) {
+    const k = num(x.skill_id);
+    const list = bySkill.get(k) ?? [];
+    list.push({ id: num(x.id), date: String(x.date), note: String(x.note) });
+    bySkill.set(k, list);
+  }
+
   const today = Date.now();
   return r.rows.map((s) => {
     const t =
       s.last_touched == null ? null : Date.parse(String(s.last_touched));
+    const id = num(s.id);
     return {
-      id: num(s.id),
+      id,
       name: String(s.name),
       pillar: s.pillar_id == null ? null : (byId.get(num(s.pillar_id)) ?? null),
       state: String(s.state) as SkillView["state"],
       // num() is mandatory on every aggregate: libSQL returns them as BigInt, and
       // `bigint / number` THROWS rather than producing a wrong answer.
-      minutes: num(s.minutes),
-      minutes14: num(s.minutes14),
+      sessions: num(s.sessions),
       sessions14: num(s.sessions14),
+      recent: bySkill.get(id) ?? [],
       staleDays:
         t == null || Number.isNaN(t)
           ? null
@@ -734,9 +756,10 @@ export async function listSkills(
  * and does not want them counted twice; the caption follows the ring's rule.
  */
 export type PillarFacts = {
-  /** Portfolio: total minutes across every skill in the window. */
-  skillMinutes: number;
-  /** Physical: gym_sessions ROWS in the window, all three kinds. Sessions, not days. */
+  /** Portfolio: skill SESSIONS in the window. Was summed minutes — skills log documents
+   *  now, not hours, so the caption counts what the ring counts. */
+  skillSessions: number;
+  /** Physical: gym_sessions ROWS in the window. Sessions, not days. */
   workoutSessions: number;
   /** Social: outreach non-negotiable ticks in the window. */
   outreach: number;
@@ -747,9 +770,12 @@ export async function getPillarFacts(
   from: string,
   to: string,
 ): Promise<PillarFacts> {
-  const [mins, sessions, out] = await Promise.all([
+  const [skillRows, sessions, out] = await Promise.all([
+    // SESSIONS, not summed minutes — skills stopped being measured in hours. Rows that
+    // still carry a `minutes` value are pre-ruling history and count as one session each,
+    // which is what they always were.
     db.execute({
-      sql: "SELECT COALESCE(SUM(minutes),0) AS n FROM skill_time WHERE date BETWEEN ? AND ?",
+      sql: "SELECT COUNT(*) AS n FROM skill_time WHERE date BETWEEN ? AND ?",
       args: [from, to],
     }),
     db.execute({
@@ -768,7 +794,7 @@ export async function getPillarFacts(
   // num() at the boundary, every time: libSQL returns aggregates as BigInt and
   // `bigint / number` throws.
   return {
-    skillMinutes: num(mins.rows[0].n),
+    skillSessions: num(skillRows.rows[0].n),
     workoutSessions: num(sessions.rows[0].n),
     outreach: num(out.rows[0].n),
   };
@@ -847,22 +873,39 @@ export async function getRingCounts(
     }
 
     if (m.source === "health_steps") {
-      // Qualifying DAYS: one health_logs row per date by construction, counted only
-      // when the day reached the metric's own floor. 15k steps is the same day as 7k —
-      // the perDayCapped ruling, enforced here by the schema's one-row-per-day shape.
+      /**
+       * TOTAL STEPS in the window — a SUM, not a count of qualifying days.
+       *
+       * This used to be `COUNT(*) ... AND steps >= dailyThreshold`, which scored 6,900
+       * steps identically to zero and a 20k day identically to 7,001. Steps accumulate,
+       * so the ring now asks how far you actually walked. `m.dailyThreshold` is still the
+       * daily floor the checklist and the chart draw; it deliberately no longer filters
+       * here, and the metric's own `required` carries floor x window.
+       *
+       * COALESCE because SUM over no rows is NULL, and `num(null)` is not 0 — an empty
+       * window must read as a real zero, not as a broken source. `resolved` stays true
+       * for the same reason it always did: the table answered.
+       */
       const r = await db.execute({
-        sql: "SELECT COUNT(*) AS n FROM health_logs WHERE date BETWEEN ? AND ? AND steps >= ?",
-        args: [from, to, m.dailyThreshold ?? 1],
+        sql: "SELECT COALESCE(SUM(steps), 0) AS n FROM health_logs WHERE date BETWEEN ? AND ?",
+        args: [from, to],
       });
       out[m.key] = { count: num(r.rows[0].n), resolved: true };
       continue;
     }
 
     if (m.source === "skill_session") {
-      // Sessions, not days: three skills on one Saturday is three. Several of these are
-      // social activities rather than crammed practice. The ring's own cap still bounds it.
+      /**
+       * ROWS, because a row IS a session now.
+       *
+       * This counted DISTINCT (skill_id, date), which silently capped each skill at one a
+       * day while the metric declared `perDayCapped: false` and printed "sessions" — the
+       * exact label-versus-counter disagreement that Misc carried for its whole life and
+       * that the perDayCapped split exists to prevent. Two sittings at the piano on one
+       * Saturday are two sessions, the same ruling gym runs under.
+       */
       const r = await db.execute({
-        sql: "SELECT COUNT(*) AS n FROM (SELECT DISTINCT skill_id, date FROM skill_time WHERE date BETWEEN ? AND ?)",
+        sql: "SELECT COUNT(*) AS n FROM skill_time WHERE date BETWEEN ? AND ?",
         args: [from, to],
       });
       out[m.key] = { count: num(r.rows[0].n), resolved: true };

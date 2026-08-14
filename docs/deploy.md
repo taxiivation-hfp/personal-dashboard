@@ -1,5 +1,22 @@
 2# Deploying (Fly.io + Turso)
 
+> ## ⚠️ THE LIVE APP IS ON VERCEL, NOT FLY
+>
+> **`https://taxiivation-dashboard.vercel.app`**, with the database on **Turso**.
+>
+> This document, `fly.toml` and the `Dockerfile` describe a Fly deploy that was written
+> first and never became the live one. Everything below about images, machines, volumes and
+> `fly secrets` applies to Fly and **not** to what is actually serving.
+>
+> The practical consequence, and the reason this banner exists: **`fly.toml` is not
+> configuration, it is a document.** Vercel never reads it. Environment variables for the
+> live app are set in the Vercel project, and a value put in `fly.toml` will look correct in
+> a code review while having no effect at all — which is precisely how the live Connect
+> button came to send a browser to `localhost:3000`.
+>
+> Still accurate below regardless of host: the Turso setup, the passcode/`SESSION_SECRET`
+> rules, the Google Cloud steps in §4, and the hazard table.
+
 Single-user private app. The whole point of deploying is reach: your phone can push
 health data and open the board from anywhere, instead of only this PC while
 `npm run dev` happens to be running.
@@ -83,9 +100,15 @@ in `fly.toml` to match before deploying.
 
 In Google Cloud Console → Credentials → your OAuth 2.0 Web client:
 
-- **Add** `https://<your-app>.fly.dev/api/google/callback` to Authorized redirect URIs.
-  Keep the localhost one so development still works.
-- Set `GOOGLE_REDIRECT_URI` in `fly.toml` to the same value.
+- **Add** `https://<your-host>/api/google/callback` to Authorized redirect URIs — the real
+  one is `https://taxiivation-dashboard.vercel.app/api/google/callback`. Keep the localhost
+  entry so development still works; Google matches these byte-for-byte.
+- **Set no redirect variable.** The app derives the callback from the incoming request
+  (`callbackUrl()` in `src/lib/google.ts`), so it returns to whichever origin you pressed
+  Connect on. This used to be `GOOGLE_REDIRECT_URI`, and because the live deployment is
+  Vercel — which never reads `fly.toml` — the value below was never in effect and the code
+  fell back to a hardcoded `http://localhost:3000/...`. Connect on the live site opened a
+  valid consent screen and then sent the browser to the owner's own laptop.
 - **Publishing status matters.** While the app is in *Testing*, Google expires refresh
   tokens after **7 days** — you'd be re-connecting Calendar every week forever. Move it
   to *In production*; for a single-user app requesting Calendar scopes this normally

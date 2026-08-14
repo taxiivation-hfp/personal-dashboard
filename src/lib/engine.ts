@@ -830,26 +830,93 @@ export async function reorderSubgoals(
 // Kept as a log rather than a running total so a mistaken entry can be removed, which is
 // exactly what undoSkillTime does.
 
-export async function logSkillTime(
+/**
+ * Write one skill SESSION — a text document, the same shape a workout is.
+ *
+ * This replaced logSkillTime, which took minutes. Skills stopped being measured in hours by
+ * the owner's ruling: Calisthenics was being logged twice, once as a Physical "Misc" workout
+ * and once as Portfolio hours, and a thing you log in two places is a thing you log in
+ * whichever one you remember. One document, one place, and turning up is the unit.
+ *
+ * SESSIONS, PLURAL, PER DAY — no unique index on (skill_id, date). Two sittings at the piano
+ * on one Saturday are two sessions, exactly as two lifts on a Tuesday are. That also finally
+ * matches what the metric has always DECLARED: `perDayCapped: false`, `unit: "sessions"`.
+ *
+ * `id` present means EDIT, absent means new — and the date travels in the SET rather than
+ * the WHERE, so changing it MOVES the session. That is the bug saveWorkout had: an
+ * `AND date=?` guard meant an edit whose date differed matched nothing, fell through to the
+ * INSERT, and left a duplicate behind. Not repeating it here.
+ *
+ * `minutes` is never written. Rows that carry one are pre-ruling history and keep it.
+ */
+export async function saveSkillSession(
   db: Client,
-  skillId: number,
-  minutes: number,
-  date: string,
-  note?: string | null,
+  skill: { id?: number | null; skillId: number; date: string; note: string },
 ): Promise<void> {
-  if (!Number.isFinite(minutes) || minutes <= 0) return;
   const ts = now();
   const tx = await db.transaction("write");
   try {
+    let wrote = false;
+    if (skill.id != null) {
+      const r = await tx.execute({
+        sql: "UPDATE skill_time SET note=?, date=? WHERE id=? AND skill_id=?",
+        args: [skill.note, skill.date, skill.id, skill.skillId],
+      });
+      // skill_id stays in the WHERE: nothing may move a session between skills, so an id
+      // arriving under the wrong one is genuinely stale rather than merely re-dated.
+      wrote = r.rowsAffected > 0;
+    }
+    if (!wrote) {
+      await tx.execute({
+        sql: "INSERT INTO skill_time (skill_id,date,minutes,note) VALUES (?,?,NULL,?)",
+        args: [skill.skillId, skill.date, skill.note],
+      });
+    }
+    // Drives the "stalled ~2 weeks" rotation prompt. MAX over what is actually there, so
+    // moving a session backwards cannot leave the skill looking recently worked.
     await tx.execute({
-      sql: "INSERT INTO skill_time (skill_id,date,minutes,note) VALUES (?,?,?,?)",
-      args: [skillId, date, Math.round(minutes), note ?? null],
-    });
-    await tx.execute({
-      sql: "UPDATE skills SET last_touched=?, updated_at=? WHERE id=?",
-      args: [ts, ts, skillId],
+      sql: `UPDATE skills
+               SET last_touched = (SELECT MAX(date) || 'T00:00:00.000Z'
+                                     FROM skill_time WHERE skill_id=?),
+                   updated_at = ?
+             WHERE id = ?`,
+      args: [skill.skillId, ts, skill.skillId],
     });
     await tx.commit();
+  } catch (e) {
+    await tx.rollback();
+    throw e;
+  }
+}
+
+/** Remove one session by id. Returns false when there was nothing to delete, so the caller
+ *  can say so rather than pretending. last_touched is recomputed for the same reason it is
+ *  in saveSkillSession — deleting the only session must not leave a skill looking worked. */
+export async function deleteSkillSession(
+  db: Client,
+  skillId: number,
+  id: number,
+): Promise<boolean> {
+  const tx = await db.transaction("write");
+  try {
+    const r = await tx.execute({
+      sql: "DELETE FROM skill_time WHERE id=? AND skill_id=?",
+      args: [id, skillId],
+    });
+    if (!r.rowsAffected) {
+      await tx.rollback();
+      return false;
+    }
+    await tx.execute({
+      sql: `UPDATE skills
+               SET last_touched = (SELECT MAX(date) || 'T00:00:00.000Z'
+                                     FROM skill_time WHERE skill_id=?),
+                   updated_at = ?
+             WHERE id = ?`,
+      args: [skillId, now(), skillId],
+    });
+    await tx.commit();
+    return true;
   } catch (e) {
     await tx.rollback();
     throw e;
