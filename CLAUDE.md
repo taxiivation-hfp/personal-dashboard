@@ -163,6 +163,17 @@ box is DASHED until met — "not yet" rather than "failed", since most of a day 
 spent below the line — and below the floor scores nothing, because partial credit would make
 it a target you can half-hit.
 
+**A non-negotiable may carry a DOCUMENT** — outreach, today. `habit_entries.note`, one per
+day by that table's own UNIQUE constraint, which is the shape the metric already counts in:
+outreach is `perDayCapped: true`, so a second message on a Tuesday is the same Tuesday. What
+is counted is consistency at the floor, never volume past it.
+
+Writing it TICKS the day in the same upsert — saving is logging, no second control to forget.
+**Clearing the note does not untick**: deleting a sentence you no longer like must not
+retract the day, and the box is what retracts it. It sits BESIDE the tick rather than
+replacing it, so a day you did it and have nothing to say is still one tap. The Journal row
+deliberately has no such note — a page IS the document, and a note about it is a second diary.
+
 A non-negotiable may take a **number** instead of a tick (`habits.input = 'number'`, with
 `habits.unit`). Daily weight uses it. The value lives in `habit_entries.value`, which is
 already a REAL, so adherence and the rings need no special case — an entry exists or it
@@ -438,6 +449,13 @@ PWA is a system sheet dropped on the page. Under the control sit the recent read
 one a tap that selects its date, because reaching a bad reading used to mean recognising its
 date off the chart's axis and typing it in from memory.
 
+`/sessions` lists BOTH logs — Strength / Cardio / **Skills** — because a skill session became
+the same object a workout is. Two pages would mean two searches, and a search that sees half
+your sessions is one you stop trusting. They stay different tables; the page merges them and
+opens the right dialog for the row. A new SKILL session cannot be written from there, and the
+control says so instead of failing quietly: "which skill" has no answer on a page listing all
+of them, and on the board it is answered by the row you tapped.
+
 `/sessions` is the whole gym log — every session ever, newest first, grouped by day, filtered
 by kind, deliberately unpaginated. Two lifts on one Tuesday read as one Tuesday with two
 entries. It is a COUNT, never a score: no streaks, no personal bests, no volume totals.
@@ -485,6 +503,29 @@ first. Two sessions, one a ghost, and the Physical ring counting both.
 a new one. It tells them apart by whether it was given a workout — which is why `Workout`
 carries `date` everywhere now, including from `workoutsOn`.
 
+## THE WRITTEN LOG — the record's second half
+
+`/stats` is two tabs now: **Stats** and **Log**, chosen in the masthead with the same chip
+idiom as the 30 days / 3 months / a year control beside them. One expansion, two questions —
+"what do the numbers say" and "what did I write" — and the window control hides on the Log,
+which is a continuous scroll with no window to set.
+
+Everything the owner writes lived on a different screen from everything else they wrote:
+journal pages on `/journal`, workouts on `/sessions`, skill sessions in a pillar drill-down,
+drift reasons nowhere at all. `src/lib/dayLog.ts` (pure, tested) merges them by day and
+`/api/log` pages them.
+
+- **PAGED BY DAY, never by row.** A row limit would cut a Tuesday in half and the next page
+  would open mid-session.
+- **A day with nothing written never appears.** An empty fortnight costs one thin page rather
+  than fourteen cards saying you wrote nothing — the same ruling that makes a blank day draw
+  nothing on the charts. Only an EMPTY page ends the scroll; a short page is not the end.
+- **IT OWNS NOTHING.** A reader, with no editing: a journal page opens in the journal, where a
+  page can actually be rewritten. Two places that can change one row eventually disagree.
+- Entry order within a day is fixed in one place: journal, gym, skill, outreach, drift. The
+  journal leads because it is about the day as a whole; a drift reason is a footnote to one
+  block of it.
+
 ## /stats — the record, and the only place history lives
 
 A route, not a fourth pane, reached from the fourth phone tab and from `StatsLink` under
@@ -519,8 +560,41 @@ line you can be found wanting against, and this app draws none.
 Adherence is the one series with a real ceiling, so it is scaled to 100 rather than to its
 own high: scaling it to itself would make a week of 40s look like a week of 100s.
 
+**Two charts and two figures open their workings**, and only where there is a derivation
+worth showing. Hours opens the productivity breakdown — the SAME `ProductivityLog` the Today
+strip opens, so the record can never explain an hour differently from the screen it was marked
+on. Adherence opens what did and did not add, blocks AND non-negotiables, since adherence is
+an even split and a sheet showing only the calendar would explain half a figure while
+appearing to explain all of it. The hours FIGURE opens where the window's hours went, summed
+from the series the chart already holds — in MINUTES, never points, because the score stays
+quarantined off the record. Weight, calories and steps open nothing: behind those days is a
+single number, and a control opening an empty sheet is worse than no control.
+
+**The second column is "didn't add", never "failed".** Nothing in this app's arithmetic
+subtracts.
+
+**The weight line is CONTINUOUS, and the bridge is drawn differently.** A faint dashed
+polyline joins every reading across the gaps, under the solid measured runs. Weight is the
+only series that earns even the inference — a body HAS a weight on a morning nobody wrote one
+down, where an unlogged day's intake is not a number that quietly existed. Bars stay broken.
+
 **No average, no delta, no target line, no smoothing, no window-over-window comparison.**
 Every one of those is a judgement about a number this app has no business judging.
+
+## The month's chapter
+
+The masthead reads **"The Book of Nero: <name>"**, and the second half is editable in place —
+one row per month in `chapters`, keyed `'YYYY-MM'`. A NAME, not a number: "Chapter 8",
+"August", "The Thesis Month" are all valid and none is derivable from a date, so deriving one
+would mean the app deciding what the eighth month of a life is called. Clearing it DELETES the
+row, so "unnamed" has exactly one representation.
+
+The journal's month dividers print it **alongside** the month rather than instead of it: a
+chapter names a stretch of life, "August 2026" is where it sits in a record you scan by date,
+and losing the second to gain the first trades navigation for atmosphere. Edited only on
+Today — the archive is what has already been written.
+
+**It feeds nothing**, exactly like the day's title below, and for the same reason.
 
 ## The day's title
 
@@ -655,13 +729,17 @@ didn't schedule a productive day. Both numbers matter.
   start scoring, and removing one makes them stop. There is no stored score to migrate and
   no warning on screen. Retune deliberately.
 
-## The coach
+## The coach — REMOVED
 
-Its job is **pattern-spotting on drift**, using the stored reasons. For example:
-*"Mandarin has drifted 3 of the last 5 nights — move it earlier?"*
+There is no coach. `src/lib/coach/`, `/api/coach`, `/api/coach/note`, `CoachNote.tsx` and the
+`coach_messages` table are all deleted, by the owner's ruling. `ANTHROPIC_API_KEY`,
+`COACH_MODEL` and `COACH_EFFORT` are dead config.
 
-- **Non-judgmental, always.** See the honest-logging rule above.
-- **Minimal by default**: roughly one comment a day. It speaks more only when asked.
+Comments elsewhere still say a thing is "quarantined from the coach" or "stored so the coach
+can spot patterns". Those stay true as history and as the REASON a boundary exists — the
+productivity score is fenced off from `DayView` by data flow, and that fence is worth keeping
+whatever reads it next. **Drift reasons are kept**: their reader is now the owner, and they
+surface in the written log below.
 
 ## Visual language
 
@@ -684,6 +762,11 @@ Light beige, premium, clean.
   to 4.10:1 and `skipped` to 3.97:1, both failures.
 - Generous whitespace. One clear visual hierarchy. Restrained colour.
 - Big, clean number treatment for the adherence stat.
+- **There is no bottom tab bar.** Removed by the owner's ruling — the panes are reached by
+  tapping the window you want, and swiping, which is what was actually used. `PhoneSwipe`
+  stays. Removing a navigation control must never strand a screen: `/stats` is reached from
+  `StatsLink` and left by the record's own ×, which falls back to `href="/"` when there is no
+  in-place close to call.
 - **Two font weights only** — 400 and 600. No 500, no `font-medium`. A third weight is a
   bug, not a choice.
 - **Eight type steps, documented in `globals.css`.** 11 / 12 / 13 / 14 / 15 / 16 / 28 / 52.

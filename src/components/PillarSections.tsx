@@ -11,7 +11,9 @@ import Link from "next/link";
 import Ring, {
   SegmentedRing,
   bandsForPillar,
+  segmentShade,
   toneColor,
+  TONE_HEX,
   LABEL_PAD_X,
   LABEL_PAD_Y,
   type EventItem,
@@ -674,8 +676,8 @@ export default function PillarSections({
          * the pillars ARE different. Built by bandsForPillar, which the record page also
          * uses, so the two surfaces cannot drift:
          *
-         *   social     inner = adhered graphite events, one slot each against six;
-         *              mid = adhered one-off social events; outer thin = outreach
+         *   social     inner = adhered social events, one slot each against six, six slots
+         *              flat; mid = the events past the sixth; outer thin = outreach
          *   portfolio  inner = active skills, arcs by session in each skill's own colour;
          *              mid = parked skills, same unit
          *   physical   the metric donut it always was, misc riding the thin lap
@@ -892,6 +894,32 @@ export default function PillarSections({
                 {ring && ring.metrics.length > 0 && (
                   <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
                     {ring.metrics.map((m, mi) => {
+                      /**
+                       * THE ROW MARKER WEARS ITS OWN ARC'S COLOUR.
+                       *
+                       * Every one of these 18px rings used to be handed `colors[pk]` — the
+                       * flat pillar hue — so a pillar with three metrics drew three
+                       * identical markers beside a donut of three different shades, and
+                       * there was no way to tell which label belonged to which arc. The
+                       * legend was the same colour as itself.
+                       *
+                       * Resolved through the SAME `segmentShade` the donut strokes with, at
+                       * the same index, off the same TONE_HEX base. A legend that computes
+                       * its own shades is a legend that eventually disagrees with the chart.
+                       *
+                       * Two exceptions, both honest. Portfolio's donut is SKILLS, not
+                       * metrics, so "Skills" and "Projects" have no arc of their own to
+                       * match and keep the plain hue — the skill colours are shown per skill
+                       * in the drill-down instead. And a lap is a thin outer band rather
+                       * than a slice, so it is not in the donut's index at all.
+                       */
+                      const donutIdx = ring.metrics
+                        .filter((x) => !x.lap)
+                        .findIndex((x) => x.key === m.key);
+                      const markerHue =
+                        pk === "portfolio" || donutIdx < 0
+                          ? hue
+                          : segmentShade(colors[pk] ?? TONE_HEX[pk], donutIdx);
                       // Hoisted out of the JSX: TypeScript drops a property narrowing the
                       // moment it crosses into a callback, and the onClick below is one.
                       const kind = m.workoutKind;
@@ -967,7 +995,7 @@ export default function PillarSections({
                                 size={18}
                                 stroke={2.5}
                                 tone={pk}
-                                color={colors[pk]}
+                                color={markerHue}
                               />
                             )}
                           </span>

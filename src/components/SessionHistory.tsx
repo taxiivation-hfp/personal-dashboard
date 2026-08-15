@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import WorkoutLog, { type Workout } from "./WorkoutLog";
+import SkillLog, { type SkillSession } from "./SkillLog";
 import { toneColor } from "./PillarRing";
 import { WORKOUT_KINDS, type WorkoutKind } from "@/lib/rings";
 import {
@@ -25,12 +26,35 @@ import {
  * and nothing here is allowed to rank one session against another.
  */
 
-type Session = Workout;
+/**
+ * WHAT THIS PAGE LISTS, and it is no longer only the gym.
+ *
+ * Skill sessions joined the log because they became the same object: a dated free-text
+ * document with its first line as its title. Two pages listing one kind of thing each would
+ * mean two searches, and a search that can only see half your sessions is a search you stop
+ * trusting. One page, one query, three chips.
+ *
+ * They stay DIFFERENT ROWS in different tables — a workout has a kind, a skill session has a
+ * skill — so this type is the union and nothing merges them in the database.
+ */
+type LogKind = WorkoutKind | "skill";
 
-const LABEL: Record<WorkoutKind, string> = {
+type Session = Omit<Workout, "kind"> & {
+  kind: LogKind;
+  /** Set only on a skill session; the skill it belongs to. */
+  skillId?: number;
+  skillName?: string;
+};
+
+const LABEL: Record<LogKind, string> = {
   strength: "Strength",
   cardio: "Cardio",
+  skill: "Skills",
 };
+
+/** The chips, in the order they are read. Skills last because it is the newest and because
+ *  the two gym kinds belong together. */
+const LOG_KINDS: LogKind[] = [...WORKOUT_KINDS, "skill"];
 
 /**
  * The query, marked where it lands.
@@ -80,21 +104,79 @@ const heading = (iso: string) =>
 
 export default function SessionHistory({ today }: { today: string }) {
   const [all, setAll] = useState<Session[] | null>(null);
-  const [filter, setFilter] = useState<WorkoutKind | null>(null);
+  /**
+   * Seeded from `?kind=` so the record can link straight at one chip — the sessions figure
+   * there names physical and skills separately and each opens its own half of this log.
+   * Read once, on mount: after that the chips own it, and a link that kept re-asserting
+   * itself would fight the control.
+   */
+  const [filter, setFilter] = useState<LogKind | null>(null);
   const [query, setQuery] = useState("");
   /** Searching shows a screenful, then the rest on request — see SEARCH_PAGE. */
   const [showAll, setShowAll] = useState(false);
   /** `id: null` writes a new one. The dialog carries its own date. */
   const [open, setOpen] = useState<{
-    kind: WorkoutKind;
+    kind: LogKind;
     id: number | null;
   } | null>(null);
 
+  useEffect(() => {
+    const k = new URLSearchParams(window.location.search).get("kind");
+    if (k && (LOG_KINDS as string[]).includes(k)) setFilter(k as LogKind);
+  }, []);
+
+  /**
+   * BOTH LOGS, merged and sorted as one.
+   *
+   * Two requests rather than one endpoint switching on a parameter: these are different
+   * tables with different columns, and a single route doing both would be two queries
+   * wearing one name. Merged here, where the page already wants them in one list.
+   *
+   * `Promise.all`, so a slow half cannot make the other half arrive first and flash a
+   * partial log. Either failing yields an empty list for that half rather than an error
+   * page — half a record is worth reading, and the chips still say which half is missing.
+   */
   const load = () => {
-    fetch("/api/gym/history")
+    const gym = fetch("/api/gym/history")
       .then((r) => r.json())
-      .then((d) => !d.error && setAll(d.sessions ?? []))
-      .catch(() => setAll([]));
+      .then((d) => (d.error ? [] : ((d.sessions ?? []) as Session[])))
+      .catch(() => []);
+    const skills = fetch("/api/skills/history")
+      .then((r) => r.json())
+      .then((d) =>
+        d.error
+          ? []
+          : ((d.sessions ?? []) as {
+              id: number;
+              skillId: number;
+              skillName: string;
+              date: string;
+              note: string;
+            }[]
+            ).map(
+              (x): Session => ({
+                // Ids collide across the two tables, so the list is keyed by kind AND id
+                // everywhere below — see the map keys.
+                id: x.id,
+                date: x.date,
+                kind: "skill",
+                // A skill session has no stored title; its first line IS the title, which
+                // splitSession derives. Passing null keeps that rule in one place.
+                title: null,
+                note: x.note,
+                skillId: x.skillId,
+                skillName: x.skillName,
+              }),
+            ),
+      )
+      .catch(() => []);
+    Promise.all([gym, skills]).then(([g, k]) =>
+      setAll(
+        [...g, ...k].sort(
+          (a, b) => b.date.localeCompare(a.date) || b.id - a.id,
+        ),
+      ),
+    );
   };
   useEffect(load, []);
 
@@ -141,12 +223,17 @@ export default function SessionHistory({ today }: { today: string }) {
   }, [shown]);
 
   const counts = useMemo(() => {
-    const m = new Map<WorkoutKind, number>();
+    const m = new Map<LogKind, number>();
     for (const s of all ?? []) m.set(s.kind, (m.get(s.kind) ?? 0) + 1);
     return m;
   }, [all]);
 
-  const hue = toneColor("physical", null);
+  /** A session wears its PILLAR's hue: the gym is Physical, a skill is Portfolio. The
+   *  chip you filtered by and the dialog you open from it therefore agree about what kind
+   *  of thing you are looking at, without either naming it again. */
+  const hueFor = (k: LogKind) =>
+    k === "skill" ? toneColor("portfolio", null) : toneColor("physical", null);
+  const hue = hueFor(filter ?? "strength");
 
   return (
     // The WINDOW LOOK, the same architecture the record and the journal wear: the masthead
@@ -175,7 +262,7 @@ export default function SessionHistory({ today }: { today: string }) {
         <div className="flex flex-wrap items-center gap-1.5">
           {/* "All" first and selected by default: the page is the record, and a filter is
               something you reach for rather than something you arrive inside. */}
-          {[null, ...WORKOUT_KINDS].map((k) => {
+          {[null, ...LOG_KINDS].map((k) => {
             const on = filter === k;
             const n = k == null ? (all?.length ?? 0) : (counts.get(k) ?? 0);
             return (
@@ -197,13 +284,31 @@ export default function SessionHistory({ today }: { today: string }) {
             );
           })}
 
-          <button
-            onClick={() => setOpen({ kind: filter ?? "strength", id: null })}
-            aria-haspopup="dialog"
-            className="ml-auto rounded-full bg-[var(--color-accent)] px-4 py-1.5 text-micro text-white transition-opacity hover:opacity-90"
-          >
-            Write one down
-          </button>
+          {/* A NEW SKILL SESSION CANNOT BE WRITTEN FROM HERE, and the control says so
+              rather than failing quietly.
+              This page lists sessions across every skill, so "which skill" has no answer
+              here — on the board it is answered by the row you tapped. The button would
+              otherwise open a dialog with no skill to write to, which is the worst kind of
+              dead control: one that looks live. A gym session has no such ambiguity, since
+              the chip you are standing on IS its kind. */}
+          {filter === "skill" ? (
+            <Link
+              href="/"
+              className="ml-auto rounded-full border border-[var(--color-line-strong)] px-4 py-1.5 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-ink)] hover:text-[var(--color-ink)]"
+            >
+              Log a skill on the board
+            </Link>
+          ) : (
+            <button
+              onClick={() =>
+                setOpen({ kind: (filter as WorkoutKind) ?? "strength", id: null })
+              }
+              aria-haspopup="dialog"
+              className="ml-auto rounded-full bg-[var(--color-accent)] px-4 py-1.5 text-micro text-white transition-opacity hover:opacity-90"
+            >
+              Write one down
+            </button>
+          )}
         </div>
 
         {/* A LINE, not a box — the app's own input idiom, and the one that keeps a control
@@ -434,12 +539,67 @@ export default function SessionHistory({ today }: { today: string }) {
         </div>
       </main>
 
-      {open && (
+      {/* THE RIGHT DIALOG FOR THE ROW. Two logs share this page, and they are not the same
+          document: a workout belongs to a kind and writes to /api/gym, a skill session
+          belongs to a SKILL and writes to /api/skills/[id]/time. Branching here rather than
+          widening one dialog keeps each one's rules where they already live. */}
+      {open?.kind === "skill" &&
+        (() => {
+          const row =
+            open.id == null
+              ? null
+              : ((all ?? []).find(
+                  (x) => x.kind === "skill" && x.id === open.id,
+                ) ?? null);
+          // A NEW skill session cannot be written from here: this page lists sessions across
+          // every skill, and "which skill" is a question the board answers by being the
+          // place you tapped. Sending you there beats guessing.
+          if (!row?.skillId) return null;
+          const session: SkillSession = {
+            id: row.id,
+            date: row.date,
+            note: row.note ?? "",
+          };
+          return (
+            <SkillLog
+              key={`sk${row.id}`}
+              name={row.skillName ?? "Skill"}
+              date={today}
+              today={today}
+              session={session}
+              recent={(all ?? [])
+                .filter((x) => x.kind === "skill" && x.skillId === row.skillId)
+                .map((x) => ({ id: x.id, date: x.date, note: x.note ?? "" }))}
+              hue={hueFor("skill")}
+              onSave={async (note, day) => {
+                await fetch(`/api/skills/${row.skillId}/time`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ id: row.id, note, date: day }),
+                }).catch(() => {});
+                load();
+              }}
+              onDelete={async () => {
+                await fetch(
+                  `/api/skills/${row.skillId}/time?session=${row.id}&date=${today}`,
+                  { method: "DELETE" },
+                ).catch(() => {});
+                load();
+              }}
+              onPick={(picked) =>
+                setOpen(picked ? { kind: "skill", id: picked.id } : null)
+              }
+              onClose={() => setOpen(null)}
+            />
+          );
+        })()}
+
+      {open && open.kind !== "skill" && (
         <WorkoutLog
           /* One dialog per SESSION — see the same key in PillarSections. `note` and `day`
              are state seeded from props, and only a remount re-seeds them. */
           key={open.id ?? "new"}
-          kind={open.kind}
+          kind={open.kind as WorkoutKind}
           label={LABEL[open.kind]}
           // The day a NEW session defaults to. Editing an existing one ignores this and
           // opens on the session's own date — the dialog reads that off `workout`, which
@@ -451,7 +611,9 @@ export default function SessionHistory({ today }: { today: string }) {
           workout={
             open.id == null
               ? null
-              : ((all ?? []).find((x) => x.id === open.id) ?? null)
+              : ((all ?? []).find(
+                  (x) => x.kind === open.kind && x.id === open.id,
+                ) as Workout | undefined) ?? null
           }
           hue={hue}
           onSave={async (note, day) => {

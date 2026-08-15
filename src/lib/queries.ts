@@ -1,6 +1,7 @@
 // Read models. No XP, no levels, no points — see CLAUDE.md.
 
 import type { Client } from "./db/client";
+import { groupByDay, firstLine, type LogDay, type LogEntry } from "./dayLog";
 import { getStreak, weekdayBit } from "./engine";
 import {
   adherenceFor,
@@ -46,6 +47,18 @@ export type HabitView = {
   unit: string | null;
   /** The logged number for a numeric habit; null when nothing is entered. */
   value: number | null;
+  /**
+   * The document behind this non-negotiable — outreach, today.
+   *
+   * ONE PER DAY, which is the shape of the thing rather than a limitation: habit_entries is
+   * UNIQUE (habit_id, date) and the outreach metric is `perDayCapped: true`, so a second
+   * message on a Tuesday is the same Tuesday however many were sent. Consistency in reaching
+   * the floor is what is counted; volume past it deliberately is not.
+   *
+   * null means nothing written — which is NOT the same as unticked. A tick with no note is a
+   * day you did it and said nothing about it, and that stays a perfectly good tick.
+   */
+  note: string | null;
 };
 
 export type SubgoalView = {
@@ -491,7 +504,7 @@ export async function habitsForDate(
     sql: `SELECT h.id,
                  COALESCE(o.name, h.name) AS name,
                  COALESCE(o.pillar_id, h.pillar_id) AS pillar_id,
-                 h.days_mask,h.system_key,h.input,h.unit, he.value AS v
+                 h.days_mask,h.system_key,h.input,h.unit, he.value AS v, he.note AS note
           FROM habits h
           LEFT JOIN habit_entries he ON he.habit_id=h.id AND he.date=?
           LEFT JOIN habit_overrides o ON o.habit_id=h.id AND o.date=?
@@ -509,6 +522,7 @@ export async function habitsForDate(
     input: (str(h.input) ?? "check") as "check" | "number",
     unit: str(h.unit),
     value: h.v == null ? null : Number(h.v),
+    note: str(h.note),
   }));
 }
 
@@ -546,11 +560,15 @@ export async function allHabits(db: Client): Promise<HabitView[]> {
     name: String(h.name),
     pillar: h.pillar_id == null ? null : (byId.get(num(h.pillar_id)) ?? null),
     days_mask: num(h.days_mask),
+    // The EDITOR's view: the roster, not a day. `done`, `value` and `note` are all facts
+    // about a specific date and there is no date here, so they are stated as absent rather
+    // than guessed at.
     done: false,
     system_key: str(h.system_key),
     input: (str(h.input) ?? "check") as "check" | "number",
     unit: str(h.unit),
     value: null,
+    note: null,
   }));
 }
 
@@ -935,3 +953,182 @@ export async function getObservedDays(
 
 // logSkillTime moved to engine.ts — it is a write, and every write in this app runs
 // transactionally in the engine.
+
+// ---------------------------------------------------------------- the written record
+
+/**
+ * Every WRITTEN thing, for the most recent `limit` days that hold one, ending at `before`.
+ *
+ * Paged BY DAY rather than by row, because the screen is grouped by day: a row limit would
+ * cut the 12th in half and the next page would open mid-Tuesday. The dates are chosen first
+ * — a cheap UNION of distinct dates — and only then are the entries for those dates fetched.
+ *
+ * DAYS WITH NOTHING WRITTEN ARE NEVER RETURNED. The union only sees dates that have a row in
+ * one of these tables, so an empty week costs nothing and draws nothing. See groupByDay.
+ *
+ * Reads only. Every entry already belongs to the surface that created it; this assembles a
+ * view and stores no copy, so the log can never disagree with the journal or the gym record.
+ */
+export async function logDays(
+  db: Client,
+  before: string,
+  limit: number,
+): Promise<LogDay[]> {
+  const dates = await db.execute({
+    sql: `SELECT date FROM (
+            SELECT date FROM journal_entries WHERE date <= ?
+            UNION SELECT date FROM gym_sessions WHERE date <= ?
+            UNION SELECT date FROM skill_time  WHERE date <= ?
+            UNION SELECT e.date FROM habit_entries e JOIN habits h ON h.id = e.habit_id
+                   WHERE h.system_key = 'outreach' AND e.note IS NOT NULL AND e.date <= ?
+            UNION SELECT date FROM block_marks
+                   WHERE state = 'drifted' AND reason IS NOT NULL AND reason <> '' AND date <= ?
+          ) ORDER BY date DESC LIMIT ?`,
+    args: [before, before, before, before, before, limit],
+  });
+  if (!dates.rows.length) return [];
+
+  const days = dates.rows.map((r) => String(r.date));
+  const lo = days[days.length - 1]!;
+  const hi = days[0]!;
+
+  // One round trip per table over the resolved span, rather than one per day. The span is
+  // contiguous only in the sense that it brackets the chosen days; any extra dates it sweeps
+  // up are filtered below, which is cheaper than `limit` separate queries.
+  const inSpan = { args: [lo, hi] };
+  const [journal, gym, skill, outreach, drift] = await Promise.all([
+    db.execute({
+      sql: "SELECT id, date, kind, body FROM journal_entries WHERE date BETWEEN ? AND ?",
+      ...inSpan,
+    }),
+    db.execute({
+      sql: "SELECT id, date, kind, title, note FROM gym_sessions WHERE date BETWEEN ? AND ?",
+      ...inSpan,
+    }),
+    db.execute({
+      sql: `SELECT t.id, t.date, t.note, s.name FROM skill_time t
+              JOIN skills s ON s.id = t.skill_id WHERE t.date BETWEEN ? AND ?`,
+      ...inSpan,
+    }),
+    db.execute({
+      sql: `SELECT e.id, e.date, e.note FROM habit_entries e
+              JOIN habits h ON h.id = e.habit_id
+             WHERE h.system_key = 'outreach' AND e.note IS NOT NULL
+               AND e.date BETWEEN ? AND ?`,
+      ...inSpan,
+    }),
+    db.execute({
+      sql: `SELECT id, date, title, reason FROM block_marks
+             WHERE state = 'drifted' AND reason IS NOT NULL AND reason <> ''
+               AND date BETWEEN ? AND ?`,
+      ...inSpan,
+    }),
+  ]);
+
+  const keep = new Set(days);
+  const out: LogEntry[] = [];
+
+  for (const r of journal.rows) {
+    if (!keep.has(String(r.date))) continue;
+    const isText = String(r.kind) === "text";
+    out.push({
+      kind: "journal",
+      id: num(r.id),
+      date: String(r.date),
+      // A drawing has no words to lead with — its page IS the image, and inventing a
+      // heading for it would be the app writing in the owner's diary.
+      title: isText ? firstLine(r.body == null ? null : String(r.body)) : null,
+      body: isText && r.body != null ? String(r.body) : null,
+      meta: isText ? null : "drawing",
+    });
+  }
+  for (const r of gym.rows) {
+    if (!keep.has(String(r.date))) continue;
+    const note = r.note == null ? null : String(r.note);
+    // A STORED title wins — that is rescued Discord history, where the title is a separate
+    // fact rather than the note's first line. Exactly the rule sessions.ts encodes.
+    const stored = r.title == null ? "" : String(r.title).trim();
+    out.push({
+      kind: "gym",
+      id: num(r.id),
+      date: String(r.date),
+      title: stored || firstLine(note),
+      body: note,
+      meta: String(r.kind),
+    });
+  }
+  for (const r of skill.rows) {
+    if (!keep.has(String(r.date))) continue;
+    const note = r.note == null ? null : String(r.note);
+    out.push({
+      kind: "skill",
+      id: num(r.id),
+      date: String(r.date),
+      title: firstLine(note),
+      body: note,
+      meta: String(r.name),
+    });
+  }
+  for (const r of outreach.rows) {
+    if (!keep.has(String(r.date))) continue;
+    const note = r.note == null ? null : String(r.note);
+    out.push({
+      kind: "outreach",
+      id: num(r.id),
+      date: String(r.date),
+      title: firstLine(note),
+      body: note,
+      meta: "outreach",
+    });
+  }
+  for (const r of drift.rows) {
+    if (!keep.has(String(r.date))) continue;
+    out.push({
+      kind: "drift",
+      id: num(r.id),
+      date: String(r.date),
+      // The BLOCK's title heads the row and the reason is the body: "why did the afternoon
+      // go elsewhere" is only answerable if you can see which afternoon.
+      title: r.title == null ? null : String(r.title),
+      body: String(r.reason),
+      meta: "drifted",
+    });
+  }
+
+  return groupByDay(out);
+}
+
+/** One skill session as the log lists it — the skill's name travels, because a session
+ *  headed only by its first line cannot say which skill it belonged to. */
+export type SkillSessionRow = {
+  id: number;
+  skillId: number;
+  skillName: string;
+  date: string;
+  note: string;
+};
+
+/** EVERY skill session, newest first. Unpaginated — see /api/skills/history. */
+export async function allSkillSessions(db: Client): Promise<SkillSessionRow[]> {
+  const r = await db.execute(
+    `SELECT t.id, t.skill_id, t.date, COALESCE(t.note,'') AS note, s.name
+       FROM skill_time t JOIN skills s ON s.id = t.skill_id
+      ORDER BY t.date DESC, t.id DESC`,
+  );
+  return r.rows.map((x) => ({
+    id: num(x.id),
+    skillId: num(x.skill_id),
+    skillName: String(x.name),
+    date: String(x.date),
+    note: String(x.note),
+  }));
+}
+
+/** Every named month, as a map from 'YYYY-MM' to its chapter name. Small by construction —
+ *  one row per month of the app's life — so it is fetched whole rather than by range. */
+export async function allChapters(db: Client): Promise<Record<string, string>> {
+  const r = await db.execute("SELECT month, name FROM chapters");
+  const out: Record<string, string> = {};
+  for (const x of r.rows) out[String(x.month)] = String(x.name);
+  return out;
+}

@@ -55,3 +55,28 @@ export function runPoints(
   if (pts.length === 1) pts.push(pts[0]!);
   return pts.join(" ");
 }
+
+/**
+ * Every present reading, in order, as ONE run — the bridge across the gaps.
+ *
+ * The counterpart to brokenRuns, and it exists because the owner asked for the weight line
+ * to be continuous. Both are drawn: this one underneath, and the measured runs on top of it.
+ *
+ * THE TWO ARE DRAWN DIFFERENTLY, and that is the whole reason this is a separate function
+ * rather than a flag on the one above. A bridge is an INFERENCE — it says "these two
+ * readings are the same body, a week apart" — where a measured run is a record. Drawing them
+ * identically would make a fortnight between weigh-ins look exactly like a fortnight of
+ * daily weighing, which is the one claim this file exists to refuse. The caller renders this
+ * dashed and faint; the solid stroke stays reserved for days that were actually measured.
+ *
+ * Weight earns the bridge where calories and steps could not: a body HAS a weight on a day
+ * nobody wrote one down, so joining two readings interpolates something real. An unlogged
+ * day's intake is not a number that quietly existed, which is why bars stay broken.
+ */
+export function bridgeRun(values: (number | null)[]): [number, number][] {
+  const present: [number, number][] = [];
+  values.forEach((v, i) => {
+    if (v != null) present.push([i, v]);
+  });
+  return present;
+}

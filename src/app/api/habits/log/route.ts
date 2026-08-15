@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/client";
-import { setHabit, setHabitValue } from "@/lib/engine";
+import { setHabit, setHabitValue, setHabitNote } from "@/lib/engine";
 import { todayISO, isISODate } from "@/lib/dates";
 
 export const runtime = "nodejs";
@@ -18,6 +18,18 @@ export async function POST(req: Request) {
     if (!Number.isInteger(id) || id <= 0)
       return Response.json({ error: "habit_id required" }, { status: 400 });
     const date = isISODate(b.date) ? b.date : todayISO();
+
+    // A DOCUMENT, for the non-negotiables that carry one. Checked before `value` and
+    // `done` because writing one is a complete act on its own: it ticks the day as part of
+    // the same upsert, so a caller never has to send two requests and never has to get
+    // their order right.
+    if (b.note !== undefined) {
+      const note = b.note === null ? null : String(b.note);
+      if (note != null && note.length > 20_000)
+        return Response.json({ error: "note too long" }, { status: 400 });
+      await setHabitNote(db, id, date, note);
+      return Response.json({ ok: true });
+    }
 
     if (b.value !== undefined) {
       // null / empty clears the day, exactly like unticking.

@@ -4,7 +4,9 @@ import { allWorkouts, type WorkoutKind } from "@/lib/engine";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const KINDS = new Set<WorkoutKind>(["strength", "cardio", "misc"]);
+// 'misc' is deliberately absent — the kind was retired when Calisthenics moved to Portfolio
+// as a skill. Any surviving row is inert: nothing writes it and no filter names it.
+const KINDS = new Set<WorkoutKind>(["strength", "cardio"]);
 
 /**
  * EVERY session, newest first. The whole log.

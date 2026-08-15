@@ -1042,9 +1042,32 @@ input[type="number"]::-webkit-inner-spin-button {
  * the end of the move has nothing to fade, and one that mounts at the start would be a
  * click target sitting invisibly over the calendar for half a second. Opacity carries it,
  * and pointer-events follow the opacity exactly so it is never hittable while unreadable. */
+/* THE RAIL'S SPINE LABEL, positioned against the ROW rather than against the rail.
+ *
+ * It used to be `position: absolute; inset: 0` inside the calendar window. That window is a
+ * scroll container, and an absolutely positioned child of a scroll container SCROLLS WITH
+ * THE CONTENT — so the label was laid out at the content's origin, not at the visible box.
+ * The calendar opens scrolled to centre today, roughly 440px down, which put the word
+ * "DASHBOARD" about 340px ABOVE the top of the window: measured at y=-340 against a rail
+ * sitting at y=98. Entirely out of bounds, and invisible.
+ *
+ * The row is a flex container and never scrolls, so anchoring here removes the coupling
+ * rather than compensating for it. The rail is always the leftmost strip at a known width,
+ * which is the one fact this needs. `--rail-w` is the same token the window's flex-basis
+ * takes, so the two cannot disagree about how wide the rail is. */
 .rail-label {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--rail-w);
+  /* ABOVE the windows, and it has to be stated rather than inherited from DOM order. The
+     label is a sibling of the three panels and comes BEFORE them in the markup, and every
+     panel is `position: relative` — so among positioned siblings at `z-index: auto` the
+     later one paints on top and the calendar window covered the label completely. Sticky
+     rather than a bare number: this is furniture pinned over a pane, which is what that
+     step in the scale already means, and it stays under every dialog. */
+  z-index: var(--z-sticky);
   display: flex;
   align-items: center;
   justify-content: center;

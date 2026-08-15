@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { brokenRuns, runPoints } from "@/lib/chart";
+import { brokenRuns, runPoints, bridgeRun } from "@/lib/chart";
 
 /**
  * One series over a run of days. The only chart primitive on /stats — and now in the
@@ -42,6 +42,16 @@ export type ChartSegment = {
   /** Names the slice in the legend and the tooltip. Optional — a caller that cannot name
    *  its colours simply gets no legend rather than a legend of hex codes. */
   label?: string;
+  /**
+   * The MINUTES behind this slice, where the slice is time at all.
+   *
+   * Carried beside `points` rather than derived from it, because points are a SCORE and the
+   * record is deliberately not allowed to report one — the productivity number is
+   * quarantined to the Today strip. What the hours figure's workings may state is hours, so
+   * the hours have to travel. Absent on a slice that is not time (the non-negotiables slab),
+   * which is exactly how that slab is excluded from an hours breakdown.
+   */
+  minutes?: number;
 };
 
 export type ChartPoint = {
@@ -97,12 +107,29 @@ export default function DayChart({
   height = 160,
   colour = "var(--color-accent)",
   emptyNote,
+  onDay,
 }: {
   points: ChartPoint[];
   form: ChartForm;
   unit: string;
   ceiling?: number | null;
   floor?: number | null;
+  /**
+   * Open a day's workings.
+   *
+   * OPT-IN, and only two series pass it: hours, which opens the productivity breakdown, and
+   * adherence, which opens what was and was not adhered to. Weight, calories and steps do
+   * not, because behind those days there is a single number and nothing to break down —
+   * a control that opened an empty sheet would be worse than no control.
+   *
+   * This is the same bargain the Today strip already strikes: the bar is a shape you glance
+   * at, and the arithmetic is one deliberate tap away. A drill-down you opened on purpose
+   * is an explanation; a number sitting on a chart is a score.
+   *
+   * Days with no entry never call it. There is nothing to explain about a day that holds
+   * nothing, and opening an empty sheet on one would read as a fault.
+   */
+  onDay?: (date: string) => void;
   /**
    * A horizontal reference line at this value — A FLOOR, and only ever a floor.
    *
@@ -178,6 +205,34 @@ export default function DayChart({
         )
       : [];
 
+  /**
+   * THE BRIDGE — one faint dashed polyline joining every reading across the gaps.
+   *
+   * The owner asked for the weight line to be continuous, and it now is: a fortnight of
+   * daily weighing and a fortnight with two weigh-ins both read as one line rather than as
+   * a scatter of disconnected fragments.
+   *
+   * It is drawn DASHED AND FAINT, UNDER the measured runs, and that distinction is the
+   * whole of what keeps chart.ts's one rule intact. A bridge is an inference — "these two
+   * readings are the same body, nine days apart" — and a solid stroke through those nine
+   * days would claim nine measurements. Weight is the only series that earns even the
+   * inference: a body HAS a weight on a morning nobody wrote one down, where an unlogged
+   * day's intake is not a number that quietly existed. Bars stay broken.
+   *
+   * Two points minimum. A lone reading has nothing to be joined to, and runPoints already
+   * draws it as a dot.
+   */
+  const bridge =
+    form === "line"
+      ? (() => {
+          const present = bridgeRun(points.map((p) => p.value));
+          if (present.length < 2) return null;
+          return present
+            .map(([i, v]) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`)
+            .join(" ");
+        })()
+      : null;
+
   const latest = [...points].reverse().find((p) => p.value != null);
 
   /**
@@ -217,10 +272,18 @@ export default function DayChart({
       <div
         ref={boxRef}
         className="relative border-b border-[var(--color-line-strong)]"
-        style={{ height, touchAction: "pan-y" }}
+        style={{ height, touchAction: "pan-y", cursor: onDay ? "pointer" : undefined }}
         onPointerMove={(e) => setHover(indexAt(e.clientX))}
         onPointerDown={(e) => setHover(indexAt(e.clientX))}
         onPointerLeave={() => setHover(null)}
+        onClick={(e) => {
+          if (!onDay) return;
+          const p = points[indexAt(e.clientX)];
+          // A day with no entry opens nothing — see onDay. `value` is null on those, and
+          // for the stacked form an empty day has no segments either.
+          if (!p || (p.value == null && !p.segments?.length)) return;
+          onDay(p.date);
+        }}
       >
         {/* THE GRID, behind everything: three hairlines at the quarter marks, each naming
             its value at the left edge. What turns a silhouette into a chart you can read a
@@ -253,6 +316,21 @@ export default function DayChart({
             preserveAspectRatio="none"
             aria-hidden
           >
+            {/* Under the measured runs, deliberately — the solid stroke must paint over
+                the inference wherever a real reading exists. */}
+            {bridge && (
+              <polyline
+                points={bridge}
+                fill="none"
+                stroke={colour}
+                strokeWidth="1.5"
+                strokeOpacity="0.42"
+                strokeDasharray="3 3"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            )}
             {runs.map((pts, i) => (
               <polyline
                 key={i}

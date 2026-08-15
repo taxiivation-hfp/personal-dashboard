@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { brokenRuns, runPoints } from "./chart.ts";
+import { brokenRuns, runPoints, bridgeRun } from "./chart.ts";
 
 // A straight line where the coordinate maths is irrelevant, so these tests are about the
 // RUNS and nothing else.
@@ -71,4 +71,25 @@ test("every run a series produces is drawable", () => {
       `run ${JSON.stringify(run)} is invisible`,
     );
   }
+});
+
+test("the bridge keeps every reading in order and drops the gaps", () => {
+  // The line the owner asked to be continuous. It is the SAME readings brokenRuns draws —
+  // this only removes the breaks, so the two can never disagree about what was measured.
+  assert.deepEqual(
+    bridgeRun([80, null, null, 79.4, null, 79]),
+    [
+      [0, 80],
+      [3, 79.4],
+      [5, 79],
+    ],
+  );
+});
+
+test("a bridge over nothing, and over a single reading, is not a line", () => {
+  // One point cannot be joined to anything, so there is no inference to draw. The caller
+  // still gets its dot from runPoints; this must not invent a second point to pair it with.
+  assert.deepEqual(bridgeRun([]), []);
+  assert.deepEqual(bridgeRun([null, null]), []);
+  assert.deepEqual(bridgeRun([null, 81, null]), [[1, 81]]);
 });

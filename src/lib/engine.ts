@@ -150,6 +150,40 @@ export async function setHabit(
 }
 
 /**
+ * The DOCUMENT behind a non-negotiable — outreach, today.
+ *
+ * SAVING IS LOGGING, exactly as it is for a workout or a skill session: writing the note
+ * ticks the habit in the same statement, so there is no second "did it" toggle to forget.
+ * That is the whole reason this is one upsert rather than a note-write plus a tick.
+ *
+ * CLEARING THE NOTE DOES NOT UNTICK. The two are different acts — a tick with nothing
+ * written is a day you did it and said nothing about it, which is a perfectly good tick, and
+ * deleting a sentence you no longer like must not quietly retract the day. Unticking is what
+ * setHabit is for.
+ *
+ * One row per (habit, date) by the table's own UNIQUE constraint, which is the same per-day
+ * shape the outreach metric counts in — see HabitView.note.
+ */
+export async function setHabitNote(
+  db: Client,
+  habitId: number,
+  date: string,
+  note: string | null,
+): Promise<void> {
+  const text = note == null || !note.trim() ? null : note.trim();
+  await db.execute({
+    sql: `INSERT INTO habit_entries (habit_id,date,value,note) VALUES (?,?,1,?)
+          ON CONFLICT(habit_id,date) DO UPDATE SET
+            note = excluded.note,
+            -- The tick is only ever RAISED here, never lowered: a row that already exists
+            -- was already a yes, and rewriting its note is not a statement about whether the
+            -- day happened.
+            value = MAX(habit_entries.value, 1)`,
+    args: [habitId, date, text],
+  });
+}
+
+/**
  * A non-negotiable that takes a NUMBER rather than a tick — daily weight.
  *
  * The number lives in habit_entries.value, which is already a REAL, so adherence and the
@@ -1179,4 +1213,33 @@ export async function getStreak(
     cur = addDays(cur, -1);
   }
   return { count };
+}
+
+/**
+ * Name a month, or clear its name.
+ *
+ * An empty name DELETES the row rather than storing "", so "unnamed" has exactly one
+ * representation — the same ruling setHabitValue makes about clearing a number. A month with
+ * an empty-string chapter would print "The Book of Nero: " with nothing after the colon.
+ *
+ * It feeds nothing. See the chapters table.
+ */
+export async function setChapter(
+  db: Client,
+  month: string,
+  name: string | null,
+): Promise<void> {
+  const text = name == null ? "" : name.trim();
+  if (!text) {
+    await db.execute({
+      sql: "DELETE FROM chapters WHERE month=?",
+      args: [month],
+    });
+    return;
+  }
+  await db.execute({
+    sql: `INSERT INTO chapters (month,name,updated_at) VALUES (?,?,?)
+          ON CONFLICT(month) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`,
+    args: [month, text.slice(0, 80), now()],
+  });
 }

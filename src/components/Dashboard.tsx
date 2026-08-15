@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import DayChart, { type ChartPoint } from "./DayChart";
+import DayLog from "./DayLog";
+import ProductivityLog from "./ProductivityLog";
+import AdherenceLog from "./AdherenceLog";
+import HoursTotal from "./HoursTotal";
 import StepsChart from "./StepsChart";
 import WeightEntry from "./WeightEntry";
 import CalorieLog from "./CalorieLog";
@@ -122,6 +126,34 @@ export default function Dashboard({
   today?: string;
   onClose?: () => void;
 }) {
+  /**
+   * WHICH HALF OF THE RECORD IS SHOWING.
+   *
+   * The record answers two different questions — "what do the numbers say" and "what did I
+   * write" — and they were never the same screen; the second simply had nowhere to live, so
+   * the words were scattered across /journal, /sessions and a pillar drill-down. They share
+   * one window rather than becoming two routes because they are one thing looked at two
+   * ways, and the expansion from the pillars column already animates into it.
+   *
+   * The window chips (30 days / 3 months / a year) belong to STATS alone and are hidden on
+   * the log: the log is a continuous scroll with no window to set, and a control that did
+   * nothing would be the masthead lying about what it governs.
+   */
+  const [view, setView] = useState<"stats" | "log">("stats");
+  /**
+   * Which day's workings are open, and from which chart.
+   *
+   * The same bargain the Today strip strikes: the bar is a shape you glance at, and the
+   * arithmetic is one deliberate tap away. Two charts have workings worth opening — hours,
+   * which breaks down into the calendar colours that earned it, and adherence, which breaks
+   * down into what did and did not add. Weight, calories and steps do not: behind those days
+   * is a single number, and a control that opened an empty sheet is worse than no control.
+   */
+  const [hoursDay, setHoursDay] = useState<string | null>(null);
+  /** The WINDOW's hours, broken down by category — the figure's own workings, as opposed to
+   *  one day's. Derived from the series already loaded, so it costs no request. */
+  const [hoursTotal, setHoursTotal] = useState(false);
+  const [adherenceDay, setAdherenceDay] = useState<string | null>(null);
   const [days, setDays] = useState<number>(WINDOWS[0].days);
   const [strip, setStrip] = useState<StripDay[] | null>(null);
   const [trends, setTrends] = useState<TrendDay[] | null>(null);
@@ -232,6 +264,10 @@ export default function Dashboard({
           // Taken straight off the segment, which is where the score itself decided it —
           // so the chart's legend and the strip's swatches cannot call one slab two things.
           label: s.label,
+          // Minutes WORKED, straight off the segment for the same reason. The hours
+          // figure's workings sum these; summing points instead would put the quarantined
+          // score on the record.
+          minutes: s.minutes,
         })),
       })),
     [strip],
@@ -319,7 +355,34 @@ export default function Dashboard({
         <div className="mx-auto flex max-w-[76rem] items-baseline justify-between gap-4 px-5 py-4 lg:px-8">
           <h1 className="font-serif text-body font-semibold">The record</h1>
           <div className="flex items-center gap-1.5">
-            {WINDOWS.map((w) => {
+            {/* THE TWO HALVES. Same chip idiom as the window control beside it, because it
+                is the same kind of decision — which slice of this window am I looking at —
+                and inventing a second control shape for it would make the masthead read as
+                two unrelated toolbars. Ink vs muted marks the active one, never a weight
+                change: the app has two font weights and a third is a bug. */}
+            {(["stats", "log"] as const).map((v) => {
+              const on = view === v;
+              return (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  aria-pressed={on}
+                  className="rounded-full px-3 py-1 text-micro transition-colors"
+                  style={{
+                    background: on ? "var(--color-accent-soft)" : "transparent",
+                    color: on ? "var(--color-ink)" : "var(--color-muted)",
+                  }}
+                >
+                  {v === "stats" ? "Stats" : "Log"}
+                </button>
+              );
+            })}
+            <span
+              aria-hidden
+              className="mx-1 h-4 w-px shrink-0 bg-[var(--color-line-strong)]"
+            />
+            {view === "stats" &&
+              WINDOWS.map((w) => {
               const on = days === w.days;
               return (
                 <button
@@ -337,7 +400,7 @@ export default function Dashboard({
                   {w.label}
                 </button>
               );
-            })}
+              })}
             {/* An ×, not a word. This is a window you got INTO, and the way out of a window
                 is to shut it — a button labelled "Today" would read as somewhere else to go. */}
             {onClose ? (
@@ -364,10 +427,23 @@ export default function Dashboard({
 
       <main className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[76rem] px-5 pb-28 pt-6 lg:px-8 lg:pb-12">
+          {/* THE LOG half. A reader over everything written, grouped by day — see DayLog.
+              It replaces the body rather than sitting under it: two answers to two different
+              questions, one at a time, which is what the masthead's tabs promise. The
+              masthead itself stays, so switching back is always one tap away. */}
+          {view === "log" && <DayLog date={date} />}
+
+          {view === "stats" && (
+          <>
           {/* THE FIGURES. A hairline-ruled band, not a row of cards: this app answers a
               card with a rule everywhere else, and four rounded tiles with big numbers in
               them is the one shape that would make it look like every other dashboard. */}
-          <div className="grid grid-cols-2 border-y border-[var(--color-line-strong)] lg:grid-cols-4">
+          {/* FIVE, since the sessions figure became two. The last one spans both columns below
+              lg: five items in a two-column grid leaves the fifth alone beside an empty
+              cell, which is the same hole the tasks band was just moved out of, in
+              miniature. Stated on the grid rather than passed down as a prop — it is a fact
+              about this layout, not about that figure. */}
+          <div className="grid grid-cols-2 border-y border-[var(--color-line-strong)] max-lg:[&>*:last-child]:col-span-2 lg:grid-cols-5">
             {/* EVERY ONE OF THESE ENDS ON `date`, and `date` is the day the record was
                 opened from — which is only usually today. The window moved the moment Today
                 learned to step back; the labels have to move with it or all four figures
@@ -376,17 +452,33 @@ export default function Dashboard({
             <Figure
               label={`adherence ${anchored}`}
               value={viewedPct == null ? "—" : `${viewedPct}%`}
-              fact="70 parts hours, 30 parts non-negotiables"
+              // EVEN HALVES. This said 70/30 for as long as the split was 70/30; the
+              // constants moved and the caption did not, so the record was explaining the
+              // hero figure with the wrong arithmetic.
+              fact="half the blocked hours worked, half the non-negotiables"
             />
             <Figure
               label={onToday ? "hours worked, last 7 days" : `hours worked, 7 days ${anchored}`}
               value={asTime(weekHours)}
               fact="blocked time you marked adhered"
+              onOpen={() => setHoursTotal(true)}
+            />
+            {/* TWO FIGURES, not one with a split caption. They were summed under
+                "strength, cardio and misc together" — a caption naming a kind that no longer
+                exists, over a number that hid the split actually being read. Physical and
+                skills are different things done for different reasons; each gets its own
+                block, and each block IS the way into its own backlog. */}
+            <Figure
+              label={onToday ? "physical, past fortnight" : `physical, fortnight ${anchored}`}
+              value={facts ? String(facts.workoutSessions) : "—"}
+              fact="strength and cardio sessions"
+              href="/sessions"
             />
             <Figure
-              label={onToday ? "sessions, past fortnight" : `sessions, fortnight ${anchored}`}
-              value={facts ? String(facts.workoutSessions) : "—"}
-              fact="strength, cardio and misc together"
+              label={onToday ? "skills, past fortnight" : `skills, fortnight ${anchored}`}
+              value={facts ? String(facts.skillSessions) : "—"}
+              fact="sessions across every skill"
+              href="/sessions?kind=skill"
             />
             <Figure
               label={onToday ? "days logged in a row" : `days in a row ${anchored}`}
@@ -634,6 +726,7 @@ export default function Dashboard({
                   unit="%"
                   ceiling={100}
                   emptyNote="Nothing marked in this window yet."
+                  onDay={setAdherenceDay}
                 />
               </Panel>
 
@@ -647,6 +740,7 @@ export default function Dashboard({
                   form="stacked"
                   unit=""
                   emptyNote="No scheduled hours marked in this window."
+                  onDay={setHoursDay}
                 />
               </Panel>
 
@@ -719,6 +813,38 @@ export default function Dashboard({
             </div>
           )}
 
+          {/* The two chart drill-downs. Mounted only while open, and keyed by date so
+              tapping a second day re-reads rather than showing the first day's workings
+              under a new heading. ProductivityLog is the SAME sheet the Today strip opens —
+              one breakdown, two ways in, so the record can never explain an hour differently
+              from the screen it was marked on. */}
+          {hoursDay && (
+            <ProductivityLog
+              key={hoursDay}
+              date={hoursDay}
+              onClose={() => setHoursDay(null)}
+            />
+          )}
+          {adherenceDay && (
+            <AdherenceLog
+              key={adherenceDay}
+              date={adherenceDay}
+              onClose={() => setAdherenceDay(null)}
+            />
+          )}
+          {/* The FIGURE's workings, as opposed to a day's: the same seven days the figure
+              above counts, split by where the hours went. Fed the series the chart already
+              has, so the sheet and the bars cannot disagree. */}
+          {hoursTotal && (
+            <HoursTotal
+              points={hours.slice(-7)}
+              label={
+                onToday ? "the last 7 days" : `the 7 days ${anchored}`
+              }
+              onClose={() => setHoursTotal(false)}
+            />
+          )}
+
           {/* The food log, from the Calories card. Mounted only while open, and its
               writes re-run the two time series so the chart it sits over stays true. */}
           {calOpen && (
@@ -738,6 +864,8 @@ export default function Dashboard({
             There is deliberately no average here, and no comparison with the
             window before this one — those are judgements, and this is a record.
           </p>
+          </>
+          )}
         </div>
       </main>
     </div>
@@ -756,19 +884,71 @@ function Figure({
   label,
   value,
   fact,
+  onOpen,
+  href,
 }: {
   label: string;
   value: string;
-  fact: string;
+  /** The line under the figure. A node rather than a string, so a figure whose derivation
+   *  has more than one destination can make each of them its own way through. */
+  fact: React.ReactNode;
+  /**
+   * Open this figure's workings.
+   *
+   * OPT-IN, and only where there is a derivation worth showing. The figure itself becomes
+   * the control — the same idiom the Weight row uses, where the name opens the trend — so
+   * no new furniture appears on a band that is deliberately four numbers and three rules.
+   */
+  onOpen?: () => void;
+  /**
+   * Where this figure LEADS, when its workings are a page rather than a sheet.
+   *
+   * Separate from `onOpen` because the element has to differ: a figure that navigates is an
+   * anchor — middle-clickable, openable in a new tab, and announced as a link — where one
+   * that opens a dialog is a button. Rendering a link as a button is the commonest way a
+   * navigation stops behaving like one.
+   */
+  href?: string;
 }) {
-  return (
-    <div className="border-r border-[var(--color-line)] px-4 py-4 last:border-r-0">
+  const body = (
+    <>
       <p className="text-micro text-[var(--color-muted)]">{label}</p>
-      <p className="mt-1 font-serif text-heading tabular-nums">{value}</p>
+      <p
+        // The affordance answers to EITHER way through — a sheet or a page. Keyed off
+        // `onOpen` alone, the two figures that navigate looked inert while behaving as
+        // links, which is the worst pairing of the two mistakes.
+        className={`mt-1 font-serif text-heading tabular-nums ${onOpen || href ? "underline decoration-[var(--color-line-strong)] decoration-1 underline-offset-4 transition-colors group-hover:decoration-[var(--color-accent)]" : ""}`}
+      >
+        {value}
+      </p>
       <p className="mt-1 text-micro leading-snug text-[var(--color-muted)]">
         {fact}
       </p>
-    </div>
+    </>
+  );
+  /**
+   * THE WHOLE BLOCK IS THE TARGET, by the owner's ruling — not the number, not a word in the
+   * caption. A figure is one object; making a fragment of it clickable asks the reader to
+   * find the hit area inside something they can already see the boundary of. `block h-full`
+   * so every cell in the band is the same height and the hairlines stay continuous whichever
+   * cells happen to be interactive.
+   */
+  const box =
+    "block h-full w-full border-r border-[var(--color-line)] px-4 py-4 text-left last:border-r-0 transition-colors";
+  const live = `${box} group hover:bg-[var(--color-panel)]`;
+
+  if (href)
+    return (
+      <a href={href} className={live}>
+        {body}
+      </a>
+    );
+  return onOpen ? (
+    <button onClick={onOpen} aria-haspopup="dialog" className={live}>
+      {body}
+    </button>
+  ) : (
+    <div className={box}>{body}</div>
   );
 }
 

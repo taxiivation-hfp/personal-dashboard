@@ -49,6 +49,21 @@ const dayLabel = (iso: string) =>
 export default function JournalArchive({ initial }: { initial: JournalPage[] }) {
   const [pages, setPages] = useState<JournalPage[]>(initial);
   const [reading, setReading] = useState<number | null>(null);
+  /**
+   * Month -> chapter name, for the dividers.
+   *
+   * The archive already divides itself by month, which is exactly the unit a chapter names —
+   * so the name the masthead shows for the month you are in shows here for every month you
+   * have named. READ-ONLY: the chapter is edited where it is lived in, on Today, not in the
+   * archive of what has already been written.
+   */
+  const [chapters, setChapters] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch("/api/chapter")
+      .then((r) => r.json())
+      .then((d) => !d.error && setChapters(d.chapters ?? {}))
+      .catch(() => {});
+  }, []);
 
   /** Re-read after the reader writes or deletes. The list is metadata only — previews at
    *  140 characters — so re-reading all of it is cheaper than reconciling one row. */
@@ -113,8 +128,18 @@ export default function JournalArchive({ initial }: { initial: JournalPage[] }) 
               // smaller-pane-of-the-same-glass the chart cards established.
               <section key={ym} className="record-card">
                 <div className="section-head">
-                  <h2 className="text-small font-semibold">
+                  {/* ALONGSIDE the month, not instead of it — the owner's ruling. A chapter
+                      called "The Thesis Month" is a name for a stretch of life; "August
+                      2026" is where it sits in a record you are scanning by date. Losing
+                      the second to gain the first would make the archive harder to navigate
+                      in exchange for atmosphere. */}
+                  <h2 className="min-w-0 text-small font-semibold">
                     {monthHeading(ym)}
+                    {chapters[ym] && (
+                      <span className="ml-2 font-serif font-normal text-[var(--color-muted)]">
+                        {chapters[ym]}
+                      </span>
+                    )}
                   </h2>
                   <span className="text-micro tabular-nums text-[var(--color-muted)]">
                     {mine.length} page{mine.length === 1 ? "" : "s"}

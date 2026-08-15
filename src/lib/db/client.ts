@@ -81,6 +81,12 @@ async function ensure(c: Client): Promise<Client> {
   if (!(await has("habits", "unit"))) {
     await c.execute("ALTER TABLE habits ADD COLUMN unit TEXT");
   }
+  // The document behind a non-negotiable — outreach, today. A nullable ADD COLUMN cannot
+  // lose a row, so like worked_fraction below it needs no migrate.mjs block and no backup:
+  // every tick already made stays a tick with nothing written.
+  if (!(await has("habit_entries", "note"))) {
+    await c.execute("ALTER TABLE habit_entries ADD COLUMN note TEXT");
+  }
   // How much of a drifted block was worked. Nullable with no default, so every drift
   // already on record stays "nobody was asked" rather than being back-filled with a zero
   // the owner never typed. A nullable ADD COLUMN cannot lose a row, which is why this
@@ -141,6 +147,16 @@ async function ensure(c: Client): Promise<Client> {
       "write",
     );
   }
+
+  // chapters arrived after the last migration latch, so ensure() creates it here as well
+  // as in schema.sql — a database that never runs db:migrate still gets it, which is every
+  // deployed one (the schema is applied on boot, and CREATE TABLE IF NOT EXISTS is a no-op
+  // on an existing database but not on a new table).
+  await c.execute(`CREATE TABLE IF NOT EXISTS chapters (
+    month      TEXT PRIMARY KEY NOT NULL CHECK (month GLOB '????-??'),
+    name       TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )`);
 
   // day_titles arrived after the last migration latch, so ensure() creates it here as
   // well as in schema.sql — a dev DB that never runs db:migrate still gets it.

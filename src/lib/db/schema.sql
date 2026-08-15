@@ -108,6 +108,16 @@ CREATE TABLE IF NOT EXISTS habit_entries (
   habit_id   INTEGER NOT NULL REFERENCES habits(id),
   date       TEXT NOT NULL CHECK (date GLOB '????-??-??'),
   value      REAL NOT NULL DEFAULT 1,
+  -- What was written, for the non-negotiables that carry a document — outreach, today.
+  --
+  -- ONE PER DAY, which is not a limitation but the shape of the thing: this table is
+  -- UNIQUE (habit_id, date) and the outreach metric is `perDayCapped: true`, so a second
+  -- message on a Tuesday is the same Tuesday however many you sent. Consistency in reaching
+  -- the floor is what is being counted; volume past it is deliberately not.
+  --
+  -- Nullable with no default, so every tick ever made stays a tick with nothing written
+  -- rather than being back-filled with an empty document nobody typed.
+  note       TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   UNIQUE (habit_id, date)
 );
@@ -135,11 +145,23 @@ CREATE TABLE IF NOT EXISTS xp_log (
   UNIQUE (source_type, source_id, reason, date)
 );
 
-CREATE TABLE IF NOT EXISTS coach_messages (
-  id          INTEGER PRIMARY KEY,
-  role        TEXT NOT NULL CHECK (role IN ('user','assistant')),
-  content     TEXT NOT NULL,
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+-- THE MONTH'S CHAPTER — the editable half of "The Book of Nero: ...".
+--
+-- One row per month, keyed 'YYYY-MM'. A month rather than a day because that is the unit
+-- the journal already divides itself into, and a chapter that changed mid-month would be a
+-- chapter of nothing.
+--
+-- It is a NAME, not a number: the owner may write "Chapter 8", "August", or "The Thesis
+-- Month", and none of those is derivable from the date. Deriving the number instead would
+-- have meant the app choosing what the eighth month of a life is called.
+--
+-- IT FEEDS NOTHING — not adherence, not the rings, not the streak. Same isolation the day's
+-- title has, and for the same reason: the moment naming a month becomes something you can
+-- succeed or fail at, it stops being a name.
+CREATE TABLE IF NOT EXISTS chapters (
+  month      TEXT PRIMARY KEY NOT NULL CHECK (month GLOB '????-??'),
+  name       TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
 CREATE TABLE IF NOT EXISTS app_meta (

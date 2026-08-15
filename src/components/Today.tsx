@@ -19,11 +19,12 @@ import StepsRefresh from "./StepsRefresh";
 import ProductivityLog from "./ProductivityLog";
 import Dashboard from "./Dashboard";
 import JournalPanel from "./JournalPanel";
-import CoachNote from "./CoachNote";
 import CalendarColumn from "./CalendarColumn";
 import PillarSections from "./PillarSections";
 import Ring, { toneColor } from "./PillarRing";
-import { PhoneTabBar, PhoneSwipe, type PhoneTab } from "./PhoneTabs";
+import { PhoneSwipe, type PhoneTab } from "./PhoneTabs";
+import NoteLog from "./NoteLog";
+import ChapterName from "./ChapterName";
 import type { Workout } from "./WorkoutLog";
 import { addDays, daysBetween, prettyDate, todayISO } from "@/lib/dates";
 import { projectedColour, SLAB_GYM, SLAB_NEUTRAL } from "@/lib/eventColor";
@@ -249,6 +250,23 @@ export default function Today({
   const [titleDraft, setTitleDraft] = useState("");
   // Raised by the Journal row in the checklist — the journal is written, not ticked.
   const [journalPrompt, setJournalPrompt] = useState(false);
+  /**
+   * Which non-negotiable's document is open — outreach, today.
+   *
+   * The habit id rather than a boolean, so the row that opened it is the row that gets
+   * written: the checklist is a list and a flag would have to be told which item it meant.
+   */
+  const [noteHabit, setNoteHabit] = useState<number | null>(null);
+  /** Month -> chapter name. Fetched once; the masthead writes back into it on save so the
+   *  title updates without a reload. Empty until it answers, which reads as "unnamed" —
+   *  correct, and the same thing an unnamed month reads as anyway. */
+  const [chapters, setChapters] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch("/api/chapter")
+      .then((r) => r.json())
+      .then((d) => !d.error && setChapters(d.chapters ?? {}))
+      .catch(() => {});
+  }, []);
   /** The weight trend dialog, raised from the Weight row's name. */
   const [weightOpen, setWeightOpen] = useState(false);
   /** The step trend dialog, raised from the Steps row's count. */
@@ -539,6 +557,17 @@ export default function Today({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ habit_id: id, date: data.date, done }),
+    });
+    refresh();
+  }
+
+  /** The document behind a non-negotiable. Writing it ticks the day server-side, so the
+   *  refresh below picks up both the note and the tick in one read. */
+  async function saveHabitNote(id: number, note: string | null) {
+    await fetch("/api/habits/log", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ habit_id: id, date: data.date, note }),
     });
     refresh();
   }
@@ -946,7 +975,10 @@ export default function Today({
               ) : (
                 // Dated for the same reason as the numeric row above — these hold no
                 // uncontrolled state, but one list must not be keyed two ways.
-                <li key={`${data.date}-${h.id}`} className={CHECK_ROW}>
+                <li
+                  key={`${data.date}-${h.id}`}
+                  className={`${CHECK_ROW} flex items-center gap-2`}
+                >
                   <button
                     onClick={() =>
                       // The journal is not a thing you tick, it is a thing you write. Its
@@ -959,7 +991,7 @@ export default function Today({
                     aria-pressed={
                       h.system_key === "journal" ? undefined : h.done
                     }
-                    className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+                    className="-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
                   >
                     <HabitBox done={h.done} tone={habitTone(h.pillar)} />
                     <span
@@ -968,6 +1000,24 @@ export default function Today({
                       {h.name}
                     </span>
                   </button>
+                  {/* OUTREACH CARRIES A DOCUMENT, and it sits BESIDE the tick rather than
+                      replacing it — the owner asked for a logger "as well". The row still
+                      ticks in one tap on a day you did it and have nothing to say; this is
+                      the way in when you do. Same shape as the Weight row, where the field
+                      logs and the name opens the trend.
+
+                      The Journal row deliberately does NOT get one of these: a journal page
+                      IS the document, and a note about it would be a second diary. */}
+                  {h.system_key === "outreach" && (
+                    <button
+                      type="button"
+                      onClick={() => setNoteHabit(h.id)}
+                      aria-haspopup="dialog"
+                      className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                    >
+                      {h.note ? "note" : "log"}
+                    </button>
+                  )}
                 </li>
               ),
             )}
@@ -1072,65 +1122,83 @@ export default function Today({
             )}
           </ul>
 
-          {/* TASKS — one-off things, and the one list here that is NOT scored.
-
-              Below the checklist and under its own rule, because it is a different kind of
-              thing: the list above is the standing daily minimum and carries the day's 30
-              points; these are single decisions that carry themselves forward until done.
-              Mixing them would have meant a backlog you never cleared quietly lowering what
-              every non-negotiable was worth — see src/lib/tasks.ts.
-
-              The label says "not scored" out loud rather than leaving it to be discovered.
-              A list that looks like the scored one and isn't is worse than no list. */}
-          {data.tasks.length > 0 && (
-            <div className="mt-5 border-t border-[var(--color-line-strong)] pt-3">
-              <div className="mb-1 flex items-baseline justify-between gap-3">
-                <span className="text-micro text-[var(--color-muted)]">
-                  tasks · carry over, not scored
-                </span>
-                <Link
-                  href="/habits"
-                  className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                >
-                  add
-                </Link>
-              </div>
-              <ul>
-                {data.tasks.map((t) => (
-                  <li key={t.id} className={CHECK_ROW}>
-                    <button
-                      onClick={() => toggleTask(t.id, !t.done)}
-                      aria-pressed={t.done}
-                      className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
-                    >
-                      {/* The checklist's own box, in ink rather than a pillar hue — a task
-                          belongs to no pillar, and borrowing one would file it under a
-                          category it does not feed. */}
-                      <span className="mt-0.5">
-                        <HabitBox done={t.done} tone="var(--color-ink)" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={`block font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
-                        >
-                          {t.title}
-                        </span>
-                        {/* How long it has waited, stated plainly. No red, no "overdue",
-                            no escalating weight — the honest-logging rule covers this list
-                            too, and a list that starts scolding is one you stop writing to. */}
-                        {!t.done && t.carried > 0 && (
-                          <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
-                            carried {t.carried} day{t.carried === 1 ? "" : "s"}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
+        {/* TASKS — one-off things, and the one list here that is NOT scored.
+
+            A FULL-WIDTH BAND under both columns, not a tail on the checklist. It used to
+            live inside the right-hand column, which meant a day with three tasks drew them
+            in a 300px gutter while the whole area beneath the 176px ring — half the width
+            of the pane — stayed empty. The row read as unfinished, and the more tasks there
+            were the worse the hole looked.
+
+            `basis-full` in the wrapping flex row is what gives it its own line: the ring and
+            the checklist settle side by side, and this takes the width they sit on.
+
+            Still below the checklist and under its own rule, because it is a different kind
+            of thing: the list above is the standing daily minimum and carries half the day's
+            points; these are single decisions that carry themselves forward until done.
+            Mixing them would have meant a backlog you never cleared quietly lowering what
+            every non-negotiable was worth — see src/lib/tasks.ts.
+
+            The label says "not scored" out loud rather than leaving it to be discovered.
+            A list that looks like the scored one and isn't is worse than no list. */}
+        {data.tasks.length > 0 && (
+          <div className="basis-full border-t border-[var(--color-line-strong)] pt-3">
+            <div className="mb-1 flex items-baseline justify-between gap-3">
+              <span className="text-micro text-[var(--color-muted)]">
+                tasks · carry over, not scored
+              </span>
+              <Link
+                href="/habits"
+                className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+              >
+                add
+              </Link>
+            </div>
+            {/* Two columns once the band is wide enough, one when it is not — the same
+                auto-fit rule the checklist above it uses, so the two lists wrap on the same
+                terms rather than on two independent guesses. 14rem because a task title is
+                a sentence where a non-negotiable is a couple of words. */}
+            <ul
+              className="grid gap-x-9"
+              style={{
+                gridTemplateColumns: "repeat(auto-fit, minmax(14rem, 1fr))",
+              }}
+            >
+              {data.tasks.map((t) => (
+                <li key={t.id} className={CHECK_ROW}>
+                  <button
+                    onClick={() => toggleTask(t.id, !t.done)}
+                    aria-pressed={t.done}
+                    className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+                  >
+                    {/* The checklist's own box, in ink rather than a pillar hue — a task
+                        belongs to no pillar, and borrowing one would file it under a
+                        category it does not feed. */}
+                    <span className="mt-0.5">
+                      <HabitBox done={t.done} tone="var(--color-ink)" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
+                      >
+                        {t.title}
+                      </span>
+                      {/* How long it has waited, stated plainly. No red, no "overdue",
+                          no escalating weight — the honest-logging rule covers this list
+                          too, and a list that starts scolding is one you stop writing to. */}
+                      {!t.done && t.carried > 0 && (
+                        <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
+                          carried {t.carried} day{t.carried === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       {/* THE WEEK — two measurements, two rows, and deliberately no shared axis.
@@ -1377,9 +1445,6 @@ export default function Today({
         )}
       </section>
 
-
-      <CoachNote date={data.date} />
-
       <section>
         <div className="section-head">
           <h2 className="text-small font-semibold">
@@ -1426,6 +1491,28 @@ export default function Today({
         prompt={journalPrompt}
         onPromptHandled={() => setJournalPrompt(false)}
       />
+
+      {/* The document behind a non-negotiable, raised from its row. Mounted only while
+          open, and keyed by habit so opening a second one cannot show the first one's text
+          in a box that now claims to be about something else. */}
+      {noteHabit != null &&
+        (() => {
+          const h = data.habits.find((x) => x.id === noteHabit);
+          if (!h) return null;
+          return (
+            <NoteLog
+              key={`${data.date}-${h.id}`}
+              name={h.name}
+              date={data.date}
+              note={h.note}
+              hue={habitTone(h.pillar)}
+              onSave={async (note) => {
+                await saveHabitNote(h.id, note);
+              }}
+              onClose={() => setNoteHabit(null)}
+            />
+          );
+        })()}
 
       {/* The weight trend, raised from the Weight row's name. Mounted only while open so
           its trends fetch never runs behind a closed checklist. */}
@@ -1554,8 +1641,17 @@ export default function Today({
                 text-heading rather than text-hero — 52px is the adherence numeral and
                 nothing else, and a masthead outsizing the hero would invert the
                 hierarchy PRODUCT.md fixes. */}
-            <h1 className="text-center font-serif text-heading">
-              The Book of Nero
+            {/* THE BOOK, THEN THE CHAPTER. The fixed half names the app and the editable
+                half names the month you are in — see ChapterName. `flex-wrap` because a
+                long chapter name on a phone must wrap under the title rather than shrink
+                the masthead's one heading below its type step. */}
+            <h1 className="flex flex-wrap items-baseline justify-center gap-x-2 text-center font-serif text-heading">
+              <span>The Book of Nero:</span>
+              <ChapterName
+                month={data.date.slice(0, 7)}
+                name={chapters[data.date.slice(0, 7)] ?? null}
+                onSaved={setChapters}
+              />
             </h1>
             {/* The date lives on the middle window now, above the ring, where it belongs
                 to the day rather than to the app. */}
@@ -1588,11 +1684,31 @@ export default function Today({
             // Order is calendar → today → pillars in both worlds — one set of order
             // classes, no lg: fork. Height is desktop's concern only: the phone column
             // is as tall as its content, and the page scrolls it.
-            className="panel-row flex flex-col gap-3 lg:h-full lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-4"
+            className="panel-row relative flex flex-col gap-3 lg:h-full lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-4"
             data-record={recordGeom ? "" : undefined}
             // Beat one, both directions: intent and geometry disagree, so contents leave.
             data-exiting={recordOpen !== recordGeom ? "" : undefined}
           >
+            {/* THE RAIL'S LABEL, and the way back out.
+                A CHILD OF THE ROW, not of the calendar window it sits over. That window is a
+                scroll container and it opens scrolled to centre today; an absolutely
+                positioned child of a scroll container scrolls with the content, which put
+                this word hundreds of pixels above the visible rail and off the screen. The
+                row never scrolls, so anchoring here fixes it at the source instead of
+                compensating for a scroll offset that changes as you read the calendar.
+
+                Desktop only: the phone shows one pane at a time, so there is nothing there
+                for a rail to be the remains of — the record's own × closes it instead. */}
+            <button
+              type="button"
+              onClick={() => setRecordOpen(false)}
+              aria-label="Back to the three windows"
+              aria-expanded={recordOpen}
+              className="rail-label hidden text-micro font-semibold text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] lg:flex"
+            >
+              <span>DASHBOARD</span>
+            </button>
+
             <div
               data-panel="today"
               data-open={tab === "today" ? "" : undefined}
@@ -1636,18 +1752,6 @@ export default function Today({
                 {pane("calendar", <CalendarColumn date={data.date} />)}
               </div>
 
-              {/* THE RAIL. What both left-hand windows became, and the way back out.
-                  Desktop only: the phone shows one pane at a time, so there is nothing there
-                  for a rail to be the remains of — the record's own × closes it instead. */}
-              <button
-                type="button"
-                onClick={() => setRecordOpen(false)}
-                aria-label="Back to the three windows"
-                aria-expanded={recordOpen}
-                className="rail-label hidden text-micro font-semibold text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] lg:flex"
-              >
-                <span>DASHBOARD</span>
-              </button>
             </div>
 
             <div
@@ -1695,8 +1799,6 @@ export default function Today({
           </div>
         </div>
       </div>
-
-      <PhoneTabBar tab={tab} onTab={switchTab} />
 
       {/* The record used to be mounted HERE, as a fixed overlay covering the page. On
           desktop it now lives inside the pillar window itself — see the panel row above.
