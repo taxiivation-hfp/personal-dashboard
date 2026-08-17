@@ -233,6 +233,41 @@ export async function openDayTasks(db: Client, today: string): Promise<DayTaskVi
   });
 }
 
+/**
+ * EVERY task, done and not, for the record's board.
+ *
+ * `openDayTasks` deliberately returns only what is outstanding, because the planning screen
+ * is about what is left. The record asks the opposite question as well — what got finished
+ * and when — so it needs both halves, and it needs the two DATES that bracket a task:
+ * `due` is the day it was first for and is never rewritten, `done_on` is the day it was
+ * ticked. Together they are how long a thing waited, which is the only fact the record has
+ * to add about a task.
+ *
+ * Done first, newest completion first; then the outstanding ones, soonest due first. The
+ * caller splits them — sorting once here means the two lists cannot disagree about order.
+ */
+export type RecordTask = {
+  id: number;
+  title: string;
+  /** The day it was FIRST for. An origin, not a cursor — never rewritten. */
+  due: string;
+  /** The day it was ticked, or null. */
+  doneOn: string | null;
+};
+
+export async function allDayTasks(db: Client): Promise<RecordTask[]> {
+  const r = await db.execute(
+    `SELECT id, title, due, done_on FROM day_tasks
+      ORDER BY (done_on IS NULL), done_on DESC, due, id`,
+  );
+  return r.rows.map((x) => ({
+    id: num(x.id),
+    title: String(x.title),
+    due: String(x.due),
+    doneOn: x.done_on == null ? null : String(x.done_on),
+  }));
+}
+
 /** One past day of the calorie log, for the dialog's sidebar. */
 export type CalorieDay = { date: string; total: number; entries: CalorieEntry[] };
 
@@ -584,20 +619,10 @@ export async function getDayView(
   const habits = await habitsForDate(db, date);
   const pillars = await getPillars(db);
 
-  // Non-negotiables join the rate, weighted equally with blocks — one item is one item.
-  const cfg = await getAdherenceConfig(db);
-  const adherence = adherenceFor(
-    blocks,
-    habitTallyFor(date, habits.length, habits.filter((h) => h.done).length),
-  );
-
-  const journalRes = await db.execute({
-    sql: "SELECT id, kind, substr(COALESCE(body,''),1,140) AS preview FROM journal_entries WHERE date=? ORDER BY id",
-    args: [date],
-  });
+  // Read BEFORE the adherence maths, because both now feed it: the two floors are two
+  // more items of the habit share, earned fractionally. The same values are returned on
+  // the DayView below — one read, two consumers, no chance of disagreeing.
   const cal = await caloriesForDate(db, date);
-  const titles = await dayTitlesBetween(db, date, date);
-  const { count } = await getStreak(db, date);
   // The phone's last push for this day, and WHEN it landed. null when it never pushed —
   // the row prints "—", never a zero the phone didn't say. `updated_at` comes back on the
   // same row rather than from a second read: the age of a figure is part of the figure.
@@ -605,6 +630,25 @@ export async function getDayView(
     sql: "SELECT steps, updated_at FROM health_logs WHERE date=?",
     args: [date],
   });
+  const steps =
+    health.rows.length && health.rows[0]!.steps != null
+      ? num(health.rows[0]!.steps)
+      : null;
+
+  // Non-negotiables join the rate, weighted equally with blocks — one item is one item.
+  const cfg = await getAdherenceConfig(db);
+  const adherence = adherenceFor(
+    blocks,
+    habitTallyFor(date, habits.length, habits.filter((h) => h.done).length),
+    { steps, calories: cal.total },
+  );
+
+  const journalRes = await db.execute({
+    sql: "SELECT id, kind, substr(COALESCE(body,''),1,140) AS preview FROM journal_entries WHERE date=? ORDER BY id",
+    args: [date],
+  });
+  const titles = await dayTitlesBetween(db, date, date);
+  const { count } = await getStreak(db, date);
 
   return {
     date,
@@ -618,10 +662,7 @@ export async function getDayView(
       kind: String(j.kind ?? "drawing"),
       preview: j.kind === "text" ? String(j.preview ?? "") : null,
     })),
-    steps:
-      health.rows.length && health.rows[0]!.steps != null
-        ? num(health.rows[0]!.steps)
-        : null,
+    steps,
     // Tied to the COUNT, not to the row: a health_logs row written by a sleep-only push
     // has an updated_at but no steps, and dating a step count that does not exist would
     // be the one thing an honest staleness label must not do.
@@ -633,10 +674,7 @@ export async function getDayView(
     // they stop being, and an unchanged count would start reading "just now". The fix at
     // that point is a `steps_updated_at` column written only when a steps value is
     // present; it is a migration, so it waits for a reason to exist.
-    stepsUpdatedAt:
-      health.rows.length && health.rows[0]!.steps != null
-        ? str(health.rows[0]!.updated_at)
-        : null,
+    stepsUpdatedAt: steps != null ? str(health.rows[0]!.updated_at) : null,
     calories: cal.total,
     calorieEntries: cal.entries,
     title: titles.get(date) ?? null,

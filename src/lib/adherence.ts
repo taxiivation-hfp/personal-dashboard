@@ -1,9 +1,14 @@
 import type { CalEvent } from "./google";
-// Explicit .ts extension so `node --test` can resolve this module. The type-only import
-// above is erased, so adherence.ts has exactly one runtime dependency and stays testable
-// with zero setup.
+// Explicit .ts extensions so `node --test` can resolve these modules. The type-only import
+// above is erased, so every runtime dependency here is itself testable with zero setup:
+// dates and worked are import-free, rings is import-free, and productivity imports only
+// worked. The two floor constants are imported from their HOMES rather than restated —
+// the checklist row, the chart's floor line and this figure must never disagree about
+// where a line sits, and a copied number is how they would start to.
 import { APP_TZ } from "./dates.ts";
 import { workedFraction, type BlockState } from "./worked.ts";
+import { STEPS_FLOOR } from "./rings.ts";
+import { CALORIE_FLOOR } from "./productivity.ts";
 
 /**
  * Adherence maths.
@@ -91,13 +96,60 @@ export type Adherence = {
   /** Marked nothing yet, and their time has passed. The call to action. */
   unmarked: number;
   due: number;
-  /** Non-negotiables ticked, and how many apply today. */
+  /**
+   * Non-negotiables ticked, and how many apply today. TICKS ONLY: the step and calorie
+   * floors enter `pct` through `floorCredit` but are not ticks, so they are not counted
+   * here — the caption "3 of 5 ticked" must stay a true sentence.
+   */
   habitsDone: number;
   habitsScheduled: number;
 };
 
 /** The day's non-negotiable tally. `scheduled` is how many applied that weekday. */
 export type HabitTally = { scheduled: number; done: number };
+
+/**
+ * The day's two FLOOR readings, raw — the caller passes what was measured and this module
+ * decides what it earns. Null is "nobody measured": a phone that never pushed, a day with
+ * no food logged. Both earn nothing, exactly as an unticked habit earns nothing, and the
+ * distinction from a genuine 0 is kept because the screens print them differently.
+ */
+export type FloorReadings = {
+  steps: number | null;
+  calories: number | null;
+};
+
+/**
+ * What a floor reading has EARNED of its one share: 0..1, the fraction of the floor
+ * reached, capped there. 3,500 steps is half a share; 14,000 is exactly one — the cap is
+ * the same statement the rings make, that what you see past the line is true but not worth
+ * more.
+ *
+ * Defensive on the same grounds as `workedFraction`, which is this function's pattern: the
+ * value arrives from a REAL column and a running total, so null, NaN and negatives must all
+ * die here. Above 1 a floor could outearn its share; below 0, logging could LOWER the
+ * figure — the one thing the climbing number must never do.
+ *
+ * Exported for the drill-down, which prints the fraction it explains and must never
+ * re-derive it.
+ */
+export function floorCredit(
+  value: number | null | undefined,
+  floor: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || floor <= 0)
+    return 0;
+  return Math.min(1, Math.max(0, value / floor));
+}
+
+/**
+ * How many floor items join the non-negotiable denominator EVERY day — Steps and
+ * Calories, the owner's ruling. Always two, never "two when the phone pushed": a
+ * denominator that wobbled with a battery would change what every other item is worth
+ * for reasons nothing you did caused. A day with no reading simply has not earned that
+ * share, which is the same statement the whole figure makes.
+ */
+const FLOOR_ITEMS = 2;
 
 /**
  * THE TWO HALVES, and they are halves on purpose.
@@ -188,7 +240,7 @@ export function buildBlocks(
 }
 
 /**
- * The day's figure: 70 parts blocked time, 30 parts non-negotiables, climbing from zero.
+ * The day's figure: half blocked time, half non-negotiables, climbing from zero.
  *
  * BLOCKED TIME IS WEIGHTED BY THE HOUR, not by the item. A three-hour block is worth three
  * times a one-hour block, which is a deliberate reversal of the old one-item-one-item rule
@@ -196,9 +248,18 @@ export function buildBlocks(
  * as planned is simply more of the day than a fifteen-minute errand. Every hour of the
  * day's blocked total is worth BLOCK_SHARE/totalHours.
  *
- * NON-NEGOTIABLES SPLIT HABIT_SHARE EVENLY — five of them and each is worth ten. They have
- * no duration, so there is nothing to weight them by, and a checklist where some items
- * quietly matter more than others is a checklist you start gaming.
+ * NON-NEGOTIABLES SPLIT HABIT_SHARE EVENLY, and THE TWO FLOORS ARE TWO MORE OF THEM.
+ * Habits have no duration, so there is nothing to weight them by, and a checklist where
+ * some items quietly matter more than others is a checklist you start gaming. Steps and
+ * Calories join the same even split — five habits make seven items — but earn their share
+ * FRACTIONALLY, by `floorCredit`: half the step floor is half a share. They are the only
+ * fractional items because they are the only ones that ARE quantities; a tick has no
+ * halves. The productivity score keeps its own binary calorie rule — two measures, two
+ * questions, deliberately not one arithmetic.
+ *
+ * `floors` is REQUIRED, not defaulted. A caller that forgot it would silently compute a
+ * different denominator for the same day, and two screens disagreeing about one figure is
+ * the exact failure worked.ts exists to prevent.
  *
  * THE DENOMINATOR IS THE WHOLE DAY, not the part of it that has elapsed. That is what makes
  * the figure climb: at 8am nothing is worked yet so it reads 0, and it rises as the day is
@@ -206,7 +267,8 @@ export function buildBlocks(
  */
 export function adherenceFor(
   blocks: Block[],
-  habits?: HabitTally | null,
+  habits: HabitTally | null | undefined,
+  floors: FloorReadings,
 ): Adherence {
   const counted = blocks.filter((b) => b.state !== "dismissed");
   // An unknown duration cannot be weighed, so it is left out of both sides rather than
@@ -240,9 +302,17 @@ export function adherenceFor(
     ? Math.max(0, Math.min(habits.done, habitsScheduled))
     : 0;
 
+  // The floors' earned fractions, 0..1 each — clamped in floorCredit, so nothing here can
+  // exceed its item or fall below nothing. The denominator holds both floors whatever was
+  // measured; see FLOOR_ITEMS.
+  const floorEarned =
+    floorCredit(floors.steps, STEPS_FLOOR) +
+    floorCredit(floors.calories, CALORIE_FLOOR);
+  const habitItems = habitsScheduled + FLOOR_ITEMS;
+
   const blockPart = totalHours > 0 ? (workedHours / totalHours) * BLOCK_SHARE : 0;
   const habitPart =
-    habitsScheduled > 0 ? (habitsDone / habitsScheduled) * HABIT_SHARE : 0;
+    habitItems > 0 ? ((habitsDone + floorEarned) / habitItems) * HABIT_SHARE : 0;
 
   return {
     pct: Math.round(blockPart + habitPart),

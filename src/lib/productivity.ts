@@ -57,9 +57,12 @@ export const POINTS_PER_SESSION = 100;
  * one non-negotiable's worth, because that is what it is — a daily thing you either did or
  * did not do.
  *
- * It does NOT reach adherence. Adherence is blocked hours and the non-negotiables list, and
- * calories are on neither; a floor that moved the hero figure would be a target by another
- * name. This is the productivity score, which is allowed to count hours and effort.
+ * Adherence reads this constant too — the floor is one more item of its habit share,
+ * earned FRACTIONALLY there (`floorCredit` in adherence.ts), by the owner's ruling. The
+ * two measures deliberately keep different rules for the same line: adherence pays for
+ * the part of the floor you reached, this score stays binary — a non-negotiable's worth
+ * at the floor and nothing under it, because a points total you can half-hit is a target
+ * by another name. One constant, two questions asked of it.
  */
 export const CALORIE_FLOOR = 2500;
 export const MINUTES_PER_HOUR = 60;

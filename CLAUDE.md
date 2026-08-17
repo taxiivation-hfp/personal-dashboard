@@ -95,9 +95,34 @@ ratio of done-to-due:
 | Share | Earned by |
 |---|---|
 | **50** | blocked hours worked ÷ blocked hours in the day |
-| **50** | non-negotiables ticked ÷ non-negotiables scheduled, split evenly |
+| **50** | non-negotiables ticked ÷ (non-negotiables scheduled + THE TWO FLOORS), split evenly |
 
-So one hour of an eight-hour day is `1/8 × 50`, and one of five non-negotiables is 10.
+So one hour of an eight-hour day is `1/8 × 50`, and with five habits scheduled a
+non-negotiable is one of SEVEN items — 50/7 each.
+
+**STEPS AND CALORIES ARE TWO MORE ITEMS OF THE HABIT SHARE, EARNED FRACTIONALLY** — the
+owner's ruling, 2026-08-17; they used to feed adherence nothing at all. Each pays
+`clamp(value / floor, 0, 1)` of one item's share — `floorCredit` in adherence.ts, the
+`workedFraction` pattern: clamped, test-pinned, imported by the drill-down rather than
+restated. Half the step floor is half a share. They are the only fractional items because
+they are the only ones that ARE quantities; a tick has no halves. The cap is the ring rule
+again — 14,000 steps earns exactly what 7,000 does.
+
+- **Both floors sit in the denominator EVERY day.** Null earns nothing but leaves nothing:
+  a denominator that wobbled with a phone battery would change what every other item is
+  worth for reasons nothing you did caused. A day the phone never pushed simply has an
+  unearned share, like an unticked habit.
+- **The figure still only climbs** — both readings are running totals that never fall
+  within a day, and the clamp forbids a negative credit.
+- The floor constants stay in their homes — `STEPS_FLOOR` in rings.ts, `CALORIE_FLOOR` in
+  productivity.ts — and adherence.ts imports them. No copied numbers.
+- **KNOWN AND ACCEPTED: every past day re-read lower when this landed** (denominator +2,
+  mostly unearned back then) — the same silent history rewrite as retuning
+  `CALENDAR_RATES`.
+- `habitsDone`/`habitsScheduled` remain the TICK tally. "3 of 5 ticked" must stay a true
+  sentence, so the floors are not in it; they reach `pct` and nothing else.
+- The productivity score keeps its own BINARY calorie rule. Two measures, two questions,
+  deliberately not one arithmetic.
 
 **EVEN HALVES, replacing 70/30 — the owner's ruling.** The old split made the figure mostly
 a story about the calendar: a day with nothing scheduled could barely climb however much of
@@ -117,7 +142,7 @@ looks at cannot do its job.
 Consequences worth knowing, all of them intended:
 
 - **There is no habit cutoff any more.** `app_meta['habit_cutoff']` and `habitsDueOn` are
-  gone. An unticked non-negotiable is simply 6 points not yet earned; nothing has to
+  gone. An unticked non-negotiable is simply its share not yet earned; nothing has to
   become "due" for the figure to be honest, because nothing is ever held against you.
 - **Drift is not punished, it just does not add — for the part you drifted.** A drifted block
   carrying a worked fraction adds that fraction of itself, so an afternoon half-lived reads
@@ -156,12 +181,14 @@ shared field. Saving IS logging; there is no second "did it" toggle to forget. T
 deliberately unstructured: a workout log is numbers scribbled between sets, and any form
 imposed here is a form to fight on a bad day.
 
-**Calories have a FLOOR at 2500**, worth one non-negotiable in the productivity score and
-nothing at all in adherence. A floor to reach, never a ceiling to stay under: this is someone
-training, for whom under-eating is the failure and there is no upper bound worth drawing. Its
-box is DASHED until met — "not yet" rather than "failed", since most of a day is legitimately
-spent below the line — and below the floor scores nothing, because partial credit would make
-it a target you can half-hit.
+**Calories have a FLOOR at 2500**, worth one non-negotiable in the productivity score and —
+since 2026-08-17 — one fractional item of adherence's habit share (see the adherence
+section). A floor to reach, never a ceiling to stay under: this is someone training, for
+whom under-eating is the failure and there is no upper bound worth drawing. Its box is
+DASHED until met — "not yet" rather than "failed", since most of a day is legitimately
+spent below the line. In the PRODUCTIVITY score, below the floor still scores nothing —
+a points total you can half-hit is a target by another name; adherence pays the reached
+fraction of the floor for the same reason it pays the worked fraction of a block.
 
 **A non-negotiable may carry a DOCUMENT** — outreach, today. `habit_entries.note`, one per
 day by that table's own UNIQUE constraint, which is the shape the metric already counts in:
@@ -200,8 +227,8 @@ task, a phone opened at 2am rolling the day early. Reading a task twice cannot m
 - A done task belongs to **the day it was done**, which is what keeps a past day's record
   true when you read it back. An outstanding task sits on **today** and on no earlier day —
   the record of a past day must not grow new rows because you did not do something since.
-- **It feeds NOTHING** — not adherence, not the rings, not the streak, not the coach. The 30
-  point share is "non-negotiables ticked ÷ non-negotiables SCHEDULED, split evenly": a fixed
+- **It feeds NOTHING** — not adherence, not the rings, not the streak, not the coach. The
+  habit share splits over non-negotiables SCHEDULED plus the two floors: a fixed
   denominator known each morning. A carrying backlog joining it would make every other item
   worth less for reasons nothing you did today caused — which is exactly the "item you are
   designed to fail" that keeps the gym off the checklist. The list says `not scored` on
@@ -515,11 +542,34 @@ journal pages on `/journal`, workouts on `/sessions`, skill sessions in a pillar
 drift reasons nowhere at all. `src/lib/dayLog.ts` (pure, tested) merges them by day and
 `/api/log` pages them.
 
+- **A FILE-EXPLORER GRID, since 2026-08-17** — the owner's ruling, replacing the two-shape
+  scroll (journalled-day card / chip row) that spent a screen of height per day. FULL WIDTH
+  of the record, never a reading column: a grid is not prose. Every day is a TILE under
+  month dividers wearing the archive's chapter names. On a day with a page the page IS the
+  tile — the archive's ruled miniature, always at the tile's full width. A page-less day is
+  CARD STOCK, deliberately never a blank sheet: a sheet-shaped tile on a day with no page
+  would claim a page exists. The date under a tile is its filename — which is how the
+  journal's "a page must never be identified by 3px type" rule is answered here: a tile
+  chooses a DAY, not a page, and the date is what names a day.
+- **ATTACHMENTS ARE TABS, NOT DOTS** — each carries its own TITLE on its kind's colour
+  (the pillar hues, chip-test certified for white text); DRIFT stays unfilled, ink on a
+  hairline over panel, because this app does not colour a plan not happening. On a
+  journalled tile they sit FOLDED into the card's right edge as closed binder stubs, and a
+  pointer unfolds them OVER the neighbouring cards — sanctioned overlap, the owner's
+  ruling. The unfold is not animated (width is layout; this app animates transform and
+  opacity only); the title fades in. On card stock they run the tile's width, capped at
+  four then `+n`.
+- **ONE TAP OPENS THE DAY** as the journal-reader SPREAD — the workout dialog's two-pane
+  document: the page at reading size in the main pane (typed pages grow past A4; drawings
+  shown whole, never cropped — a thumbnail may cover, a reader may not), and "That day's
+  logs" beside it, each under its tab with its body unfolded. A page-less day's logs take
+  the whole dialog. Read-only; the link into the journal is the only way out to an editor.
 - **PAGED BY DAY, never by row.** A row limit would cut a Tuesday in half and the next page
   would open mid-session.
-- **A day with nothing written never appears.** An empty fortnight costs one thin page rather
-  than fourteen cards saying you wrote nothing — the same ruling that makes a blank day draw
-  nothing on the charts. Only an EMPTY page ends the scroll; a short page is not the end.
+- **A day with nothing written never appears.** An empty fortnight costs one thin month
+  rather than fourteen tiles saying you wrote nothing — the same ruling that makes a blank
+  day draw nothing on the charts. Only an EMPTY page ends the scroll; a short page is not
+  the end.
 - **IT OWNS NOTHING.** A reader, with no editing: a journal page opens in the journal, where a
   page can actually be rewritten. Two places that can change one row eventually disagree.
 - Entry order within a day is fixed in one place: journal, gym, skill, outreach, drift. The
@@ -894,6 +944,11 @@ Known and accepted: this is the one metric where a big day can carry several qui
 That is a real change of meaning, which is why the daily floor stays drawn on the checklist
 row and on the chart — those still ask about consistency. `weight: 0`, so it draws as a
 thin outer lap and a phone sensor can never move the Physical mean.
+
+Steps also earn a fractional item of ADHERENCE's habit share — `floorCredit(steps,
+STEPS_FLOOR)`, see the adherence section. The phone stays the only writer; adherence is
+one more reader of the same row, and a day it never pushed reaches the maths as null,
+never as a zero nobody measured.
 
 - **The count is READ-ONLY everywhere.** The phone is the instrument, and a hand-typed step
   count is a number nobody measured. The step dialog therefore has no entry control — the

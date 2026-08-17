@@ -96,15 +96,27 @@ export async function GET(req: Request) {
     // StatsLink). getDayView still reads the viewed day's own title, which is where the one
     // title this app still shows comes from.
 
-    // Calories per day, for the productivity floor. One ranged query rather than one per
-    // day. SUM is an aggregate, so libSQL hands it back as a BigInt — Number() at the
-    // boundary, as everywhere else.
+    // Calories per day — for the productivity floor AND, since the floors joined the
+    // habit share, for adherence. One ranged query rather than one per day. SUM is an
+    // aggregate, so libSQL hands it back as a BigInt — Number() at the boundary, as
+    // everywhere else.
     const calRows = await db.execute({
       sql: "SELECT date, SUM(kcal) AS total FROM calorie_entries WHERE date BETWEEN ? AND ? GROUP BY date",
       args: [start, end],
     });
     const calByDate = new Map<string, number>();
     for (const r of calRows.rows) calByDate.set(String(r.date), Number(r.total));
+
+    // Steps per day, for the same floor share. `steps IS NOT NULL` because a sleep-only
+    // push writes a row with no count, and a day the phone never measured must reach
+    // adherenceFor as null — nobody was asked — rather than as a zero nobody said.
+    const stepRows = await db.execute({
+      sql: "SELECT date, steps FROM health_logs WHERE date BETWEEN ? AND ? AND steps IS NOT NULL",
+      args: [start, end],
+    });
+    const stepsByDate = new Map<string, number>();
+    for (const r of stepRows.rows)
+      stepsByDate.set(String(r.date), Number(r.steps));
 
     // GYM SESSIONS PER DAY, for the productivity score. Read here again after being taken
     // out: training is priced per LOGGED SESSION now rather than per scheduled hour, so the
@@ -169,7 +181,13 @@ export async function GET(req: Request) {
         date: d,
         isToday: d === today,
         isFuture: d > today,
-        ...adherenceFor(blocks, tally),
+        // The floors read here are UNGATED by calendar connectivity, unlike the
+        // productivity score below: food logged is food logged whatever Google is doing,
+        // and adherence must not lose two shares to someone else's outage.
+        ...adherenceFor(blocks, tally, {
+          steps: stepsByDate.get(d) ?? null,
+          calories: calByDate.get(d) ?? null,
+        }),
         productivity,
         // A compact summary so the calendar column can show what the day actually
         // held, not just a percentage — enough to read the pattern at a glance.

@@ -424,10 +424,12 @@ test("the floor joins the non-negotiables slab rather than growing a second grey
   );
 });
 
-// The floor is a productivity rule and must stay one. Adherence is blocked hours plus the
-// non-negotiables list; calories are on neither, and a floor that moved the hero figure
-// would be a target by another name.
-test("the floor never reaches adherence — it has no path to it", () => {
+// The CONSTANT now also feeds adherence's habit share — fractionally, via floorCredit in
+// adherence.ts, the owner's ruling — but that is adherence reading the same line for
+// itself, never this score leaking into that figure. What must stay true here is the
+// quarantine: the floor's POINTS exist only in this score, and scoreDay hands adherence
+// nothing to read.
+test("the floor's points stay in this score — nothing here reaches adherence", () => {
   const withFloor = day({ blocks: [red(60)], habitsDone: 1, calories: 3000 });
   const without = day({ blocks: [red(60)], habitsDone: 1 });
   assert.equal(withFloor.points - without.points, POINTS_PER_HABIT);

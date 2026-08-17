@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Block } from "@/lib/adherence";
+import { floorCredit, type Block } from "@/lib/adherence";
+import { STEPS_FLOOR } from "@/lib/rings";
+import { CALORIE_FLOOR } from "@/lib/productivity";
 import type { HabitView } from "@/lib/queries";
 
 /**
@@ -32,6 +34,8 @@ type Payload = {
   date: string;
   blocks: Block[];
   habits: HabitView[];
+  steps: number | null;
+  calories: number | null;
   adherence: { pct: number | null } | null;
 };
 
@@ -126,6 +130,46 @@ export default function AdherenceLog({
   const ticked = habits.filter((h) => h.done);
   const unticked = habits.filter((h) => !h.done);
 
+  /**
+   * THE TWO FLOORS — two more items of the habit share, earned fractionally. The credit
+   * comes from `floorCredit`, the same function the figure was computed with; a sheet that
+   * re-derived the fraction would eventually explain a different number than the one over
+   * its own head.
+   *
+   * A partial floor appears in BOTH columns, exactly as a partial drift does: the share
+   * that counted on the left, the remainder on the right. Steps never pushed prints
+   * `—/7,000` — nobody measured, and this sheet does not invent a zero the phone didn't
+   * say. Calories coalesce to 0 instead, the running-total precedent the calorie row set.
+   */
+  const floors = [
+    {
+      name: "Steps",
+      shown:
+        data?.steps == null ? "—" : (data?.steps ?? 0).toLocaleString(),
+      floor: STEPS_FLOOR,
+      credit: floorCredit(data?.steps ?? null, STEPS_FLOOR),
+    },
+    {
+      name: "Calories",
+      shown: (data?.calories ?? 0).toLocaleString(),
+      floor: CALORIE_FLOOR,
+      credit: floorCredit(data?.calories ?? null, CALORIE_FLOOR),
+    },
+  ].map((f) => ({
+    ...f,
+    note: `${f.shown}/${f.floor.toLocaleString()}`,
+    /**
+     * The PRINTED percentage, pinned to 1..99 for a partial. A credit of 0.996 rounds to
+     * 100, and "100% of its share" over the partial row — with "the other 0%" opposite —
+     * is the sheet naming a remainder that rounds to nothing. The credit itself is never
+     * rounded; only what is said about it is.
+     */
+    pct: Math.min(99, Math.max(1, Math.round(f.credit * 100))),
+  }));
+  const floorsMet = floors.filter((f) => f.credit >= 1);
+  const floorsPartial = floors.filter((f) => f.credit > 0 && f.credit < 1);
+  const floorsNone = floors.filter((f) => f.credit === 0);
+
   const pct = data?.adherence?.pct ?? null;
 
   return (
@@ -192,7 +236,30 @@ export default function AdherenceLog({
               {ticked.map((h) => (
                 <Row key={`h${h.id}`} title={h.name} tone="var(--color-adhered)" />
               ))}
-              {adhered.length + partial.length + ticked.length === 0 && (
+              {floorsMet.map((f) => (
+                <Row
+                  key={f.name}
+                  title={f.name}
+                  note={f.note}
+                  tone="var(--color-adhered)"
+                />
+              ))}
+              {floorsPartial.map((f) => (
+                <Row
+                  key={f.name}
+                  title={f.name}
+                  // The share that COUNTED, the partial-drift idiom: a floor half
+                  // reached put half its share into the figure.
+                  note={`${f.note} · ${f.pct}% of its share`}
+                  tone="var(--color-adhered)"
+                />
+              ))}
+              {adhered.length +
+                partial.length +
+                ticked.length +
+                floorsMet.length +
+                floorsPartial.length ===
+                0 && (
                 <li className="py-2 text-small text-[var(--color-muted)]">
                   Nothing marked on this day.
                 </li>
@@ -230,7 +297,22 @@ export default function AdherenceLog({
               {unticked.map((h) => (
                 <Row key={`u${h.id}`} title={h.name} />
               ))}
-              {missed.length + partial.length + unticked.length === 0 && (
+              {floorsPartial.map((f) => (
+                <Row
+                  key={`rest${f.name}`}
+                  title={f.name}
+                  note={`the other ${100 - f.pct}%`}
+                />
+              ))}
+              {floorsNone.map((f) => (
+                <Row key={`n${f.name}`} title={f.name} note={f.note} />
+              ))}
+              {missed.length +
+                partial.length +
+                unticked.length +
+                floorsPartial.length +
+                floorsNone.length ===
+                0 && (
                 <li className="py-2 text-small text-[var(--color-muted)]">
                   Everything on this day was accounted for.
                 </li>
@@ -242,8 +324,10 @@ export default function AdherenceLog({
 
       <p className="mt-5 border-t border-[var(--color-line)] pt-3 text-micro leading-relaxed text-[var(--color-muted)]">
         Adherence is an even split: half the blocked hours you worked, half the
-        non-negotiables you ticked. It only ever climbs — nothing on the right
-        was taken off anything, it simply hasn&apos;t been added.
+        non-negotiables — where the step and calorie floors count as two more
+        items, each earned in proportion to how much of its floor was reached.
+        It only ever climbs — nothing on the right was taken off anything, it
+        simply hasn&apos;t been added.
       </p>
     </dialog>
   );
