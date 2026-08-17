@@ -3,6 +3,13 @@
 2026-08-17. Approved by the owner in conversation; review gates waived ("start building
 and don't stop"). Two independent halves.
 
+**Revised in live review, same day** — part B as written here is superseded on three
+points by the owner's feedback against the running app: the grid is FULL WIDTH (no
+reading-column cap); attachments are titled TABS in the owner's pillar colours, folded
+into a journalled tile's edge and unfolding on hover over a solid panel (not a dot rail);
+and a tap opens the journal-reader SPREAD (page at reading size, the day's logs beside
+it), not a thumbnail overlay. CLAUDE.md's written-log section is the authority.
+
 ## A. Adherence: Steps and Calories as fractional non-negotiable shares
 
 Today, Steps and Calories contribute **nothing** to adherence — they are checklist rows
