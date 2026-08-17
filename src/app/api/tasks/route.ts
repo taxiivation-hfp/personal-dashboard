@@ -5,7 +5,7 @@ import {
   setDayTaskDone,
   updateDayTask,
 } from "@/lib/engine";
-import { openDayTasks } from "@/lib/queries";
+import { allDayTasks, openDayTasks } from "@/lib/queries";
 import { isISODate, todayISO } from "@/lib/dates";
 
 export const runtime = "nodejs";
@@ -36,8 +36,14 @@ async function openList() {
   return { tasks: await openDayTasks(db, todayISO()) };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    // `?all=1` adds the FINISHED tasks — the record's board needs both halves, where the
+    // planning screen deliberately wants only what is left. A parameter rather than a second
+    // route: it is the same collection, asked for with a wider lens.
+    if (new URL(req.url).searchParams.get("all") === "1") {
+      return Response.json({ tasks: await allDayTasks(await getDb()) });
+    }
     return Response.json(await openList());
   } catch (e) {
     return Response.json(

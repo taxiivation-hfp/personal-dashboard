@@ -20,6 +20,7 @@ import Ring, {
 } from "./PillarRing";
 import WorkoutLog, { type Workout } from "./WorkoutLog";
 import SkillLog, { type SkillSession } from "./SkillLog";
+import StepsLog from "./StepsLog";
 import StatsLink from "./StatsLink";
 import { addDays } from "@/lib/dates";
 import { sessionTitle } from "@/lib/sessions";
@@ -310,6 +311,10 @@ export default function PillarSections({
     id: number;
     session: SkillSession | null;
   } | null>(null);
+  /** The steps trend, raised from the Steps metric row. A DIALOG rather than the inline
+   *  drill-down the session rows use: behind steps is a series, and a chart does not belong
+   *  in a 250px column squeezed under its own label. */
+  const [stepsOpen, setStepsOpen] = useState(false);
 
   /**
    * The FLIP, and everything it needs to survive one commit.
@@ -928,6 +933,15 @@ export default function PillarSections({
                       // there is no document behind them to show.
                       const drills = Boolean(kind) || m.key === "social_events";
                       const drilled = drills && openMetric === m.key;
+                      /**
+                       * STEPS OPENS ITS CHART, by the owner's ruling — and it is the one
+                       * metric here whose fortnight is a SERIES rather than a list of
+                       * things that happened. A list of fourteen numbers would answer
+                       * "how many" and not "what has the week looked like", which is the
+                       * only question worth asking of a step count. So it raises the same
+                       * StepsLog dialog the checklist row does: one chart, two ways in.
+                       */
+                      const opensChart = m.key === "steps";
                       // The fortnight behind the count, resolved here so the list below is
                       // pure rendering. null = still loading / unreachable.
                       //
@@ -1004,7 +1018,18 @@ export default function PillarSections({
                               tapping "Strength" lists the sessions, "Events" the calendar
                               entries. A button only where there is something to open;
                               elsewhere it stays a plain span rather than a dead control. */}
-                          {drills ? (
+                          {opensChart ? (
+                            /* No ▸ — that mark means "this opens BELOW", and this opens a
+                               dialog. A control that promises the wrong gesture is worse
+                               than one that promises none. */
+                            <button
+                              onClick={() => setStepsOpen(true)}
+                              aria-haspopup="dialog"
+                              className="min-w-0 flex-1 truncate text-left text-small underline decoration-transparent decoration-1 underline-offset-4 transition-colors hover:decoration-[var(--color-line-strong)]"
+                            >
+                              {m.label}
+                            </button>
+                          ) : drills ? (
                             <button
                               onClick={() => {
                                 if (kind) wantGymLog();
@@ -1479,6 +1504,12 @@ export default function PillarSections({
           }}
           onClose={() => setOpenLog(null)}
         />
+      )}
+
+      {/* The steps trend, raised from the Steps metric row. Mounted only while open, so its
+          series fetch never runs behind a closed pillar. */}
+      {stepsOpen && (
+        <StepsLog date={date} onClose={() => setStepsOpen(false)} />
       )}
 
       {/* The skill log, same contract as the workout one above it. Keyed by session id for

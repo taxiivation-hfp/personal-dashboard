@@ -21,7 +21,7 @@ import {
   CALORIE_FLOOR,
   type ProductivitySegment,
 } from "@/lib/productivity";
-import type { GoalView, SkillSlice } from "@/lib/queries";
+import type { GoalView, RecordTask, SkillSlice } from "@/lib/queries";
 import {
   pillarCaption,
   type PillarFactInput,
@@ -103,6 +103,14 @@ type TrendDay = {
   steps: number | null;
 };
 
+/** "2026-08-02" -> "2 Aug". Noon, never midnight: a bare ISO date parses as UTC and lands
+ *  on the day before anywhere west of Greenwich. */
+const shortDate = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+  });
+
 /** 640 -> "10h 40m". Time is shown as time — an abstract number would invite reading it as
  *  a score, which is the one thing these figures are not. */
 function asTime(minutes: number): string {
@@ -166,6 +174,15 @@ export default function Dashboard({
   const [colors, setColors] = useState<Partial<Record<PillarKey, string | null>>>({});
   const [streak, setStreak] = useState<number | null>(null);
   const [goals, setGoals] = useState<GoalView[] | null>(null);
+  /**
+   * EVERY task, done and open — the board's other half.
+   *
+   * Goals and tasks are deliberately different objects (a goal has subgoals and a
+   * percentage; a task is one line that either happened or has not yet), which is why they
+   * sit in two columns rather than one merged list. But they answer the same two questions
+   * the board asks, so both belong under both headings.
+   */
+  const [tasks, setTasks] = useState<RecordTask[] | null>(null);
 
   // The fortnight is fixed — it is what the rings mean — so it loads once and does not
   // move when the window control does. Only the two time series below answer to that.
@@ -185,6 +202,12 @@ export default function Dashboard({
     fetch("/api/goals")
       .then((r) => r.json())
       .then((d) => alive && !d.error && setGoals(d.goals ?? []))
+      .catch(() => {});
+    // `all=1` — the record wants the finished ones too, where the planning screen wants
+    // only what is left.
+    fetch("/api/tasks?all=1")
+      .then((r) => r.json())
+      .then((d) => alive && !d.error && setTasks(d.tasks ?? []))
       .catch(() => {});
     fetch(`/api/today?date=${date}`)
       .then((r) => r.json())
@@ -293,16 +316,35 @@ export default function Dashboard({
   const week = (strip ?? []).slice(-7);
   const weekHours = week.reduce((s, d) => s + (d.productivity?.minutes ?? 0), 0);
   /**
-   * The percentage on the day this window ENDS on — which is `date`, and `date` is only
-   * usually today.
+   * THE SEVEN-DAY MEAN, by the owner's ruling — not the figure for the day this window ends
+   * on, which is what it used to be.
    *
-   * It used to look for the row flagged `isToday`, which is server truth about the real
-   * today. Open the record from a day you have stepped back to and that row is simply not
-   * in the window, so the figure read "—" under a label promising a number. Taking the
-   * last row instead asks the question the window can actually answer, and the label below
-   * says which day it is about.
+   * The reasoning is that a single day is a poor thing to open a RECORD with. Today's number
+   * is already the hero on the Today screen at 176px; repeating it here spent the record's
+   * first figure restating what the previous screen just said, and it swung wildly — a
+   * Sunday with one blocked hour reads nothing like the week around it.
+   *
+   * NOTE THIS BENDS A DOCUMENTED RULE. "No average, no delta, no smoothing" governs the
+   * CHARTS below, and it still does: nothing here draws a mean line over a series, which is
+   * the thing that rule exists to prevent — a line you can be found wanting against, day by
+   * day. One stated figure over a named window is a different object, and it is the owner's
+   * call. Do not read it as licence to average anything else.
+   *
+   * Days with NO figure are excluded rather than counted as zero. `pct` is null when a day
+   * had nothing scheduled and nothing to tick — there was no denominator, so there is no
+   * percentage, and folding that in as a 0 would report a quiet week as a failed one. A
+   * window with no answerable day at all reads "—", not 0.
    */
-  const viewedPct = (strip ?? []).at(-1)?.pct ?? null;
+  const viewedPct = (() => {
+    const scored = week.map((d) => d.pct).filter((p): p is number => p != null);
+    if (!scored.length) return null;
+    return Math.round(scored.reduce((a, b) => a + b, 0) / scored.length);
+  })();
+
+  /** The board's task halves. Split here so the two lists cannot disagree about which is
+   *  which, and so an absent fetch reads as an empty column rather than as a crash. */
+  const openTasks = (tasks ?? []).filter((t) => t.doneOn == null);
+  const doneTasks = (tasks ?? []).filter((t) => t.doneOn != null);
 
   /** Is this record about the present? Every window here ends on `date`. */
   const onToday = today == null || date === today;
@@ -450,7 +492,7 @@ export default function Dashboard({
                 are about a fortnight ago while claiming to be about now. `anchored` is one
                 suffix so they cannot drift apart. */}
             <Figure
-              label={`adherence ${anchored}`}
+              label={onToday ? "adherence, last 7 days" : `adherence, 7 days ${anchored}`}
               value={viewedPct == null ? "—" : `${viewedPct}%`}
               // EVEN HALVES. This said 70/30 for as long as the split was 70/30; the
               // constants moved and the caption did not, so the record was explaining the
@@ -598,9 +640,17 @@ export default function Dashboard({
               <div className="section-head">
                 <h2 className="text-small font-semibold">In flight</h2>
                 <span className="text-micro text-[var(--color-muted)]">
-                  and the next step in each
+                  goals and the tasks still open
                 </span>
               </div>
+              {/* TWO COLUMNS, goals left and tasks right — the owner's ruling, and the two
+                  are genuinely different objects rather than one list split for looks. A
+                  goal carries subgoals and a percentage and a next step; a task is one line
+                  that either happened or has not yet. Merging them would have meant
+                  inventing a progress figure for something that has none. */}
+              <div className="mt-3 grid gap-x-8 gap-y-8 xl:grid-cols-2">
+              <div>
+              <p className="mb-1 text-micro text-[var(--color-muted)]">Goals</p>
               {active.length === 0 ? (
                 <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
                   No goals in flight.{" "}
@@ -616,17 +666,27 @@ export default function Dashboard({
                 <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
                   {active.map(({ g, next }) => (
                     <li key={g.id} className="py-3">
-                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
-                          {PILLAR_NAME[g.pillar]}
-                        </span>
+                      {/* STACKED, not one line. This was pillar / title / % / bar across a
+                          single row, which worked while the board was full width — at half
+                          width the 80px pillar column and the 96px bar left a two-word title
+                          wrapping mid-phrase with a hole beside it. The title now owns its
+                          own line and the meta sits under it, which is also the reading
+                          order: what the goal is, then how far along. */}
+                      <div className="flex items-baseline gap-x-3">
                         <span className="min-w-0 flex-1 font-serif text-body">
                           {g.title}
                         </span>
                         <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
                           {Math.round(g.progress * 100)}%
                         </span>
-                        <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3">
+                        <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
+                          {PILLAR_NAME[g.pillar]}
+                        </span>
+                        {/* The bar takes what is left rather than a fixed 96px, so it is the
+                            same length on every row whatever the column measures. */}
+                        <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--color-line)]">
                           {g.progress > 0 && (
                             <span
                               className="motion-data block h-full w-full origin-left rounded-full bg-[var(--color-accent)]"
@@ -635,10 +695,9 @@ export default function Dashboard({
                           )}
                         </span>
                       </div>
-                      {/* The next step, indented to the title. Named plainly — "next" is the
-                          word that turns a percentage into something you can act on this
-                          afternoon. */}
-                      <p className="mt-1 pl-[5.75rem] text-micro text-[var(--color-muted)]">
+                      {/* The next step. Named plainly — "next" is the word that turns a
+                          percentage into something you can act on this afternoon. */}
+                      <p className="mt-1.5 text-micro text-[var(--color-muted)]">
                         {next ? (
                           <>
                             next · <span className="text-[var(--color-ink)]">{next.title}</span>
@@ -653,6 +712,37 @@ export default function Dashboard({
                   ))}
                 </ul>
               )}
+              </div>
+
+              <div>
+                <p className="mb-1 text-micro text-[var(--color-muted)]">Tasks</p>
+                {openTasks.length === 0 ? (
+                  <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
+                    Nothing outstanding. Tasks are added for a day and carry
+                    forward until ticked.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                    {openTasks.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
+                      >
+                        <span className="min-w-0 flex-1 font-serif text-body">
+                          {t.title}
+                        </span>
+                        {/* HOW LONG IT HAS WAITED, as a date rather than a count of days.
+                            "started 2 Aug" is a fact; "12 days late" is a verdict, and the
+                            honest-logging rule covers this list too. */}
+                        <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                          started {shortDate(t.due)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              </div>
             </section>
 
             {/* WHAT HAS BEEN ACHIEVED.
@@ -669,9 +759,12 @@ export default function Dashboard({
               <div className="section-head">
                 <h2 className="text-small font-semibold">Achieved</h2>
                 <span className="text-micro text-[var(--color-muted)]">
-                  goals you have marked done
+                  goals you marked done, and every task finished
                 </span>
               </div>
+              <div className="mt-3 grid gap-x-8 gap-y-8 xl:grid-cols-2">
+              <div>
+              <p className="mb-1 text-micro text-[var(--color-muted)]">Goals</p>
               {done.length === 0 ? (
                 <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
                   Nothing marked done yet. A goal moves here when you say it is
@@ -704,6 +797,42 @@ export default function Dashboard({
                   ))}
                 </ul>
               )}
+              </div>
+
+              <div>
+                <p className="mb-1 text-micro text-[var(--color-muted)]">Tasks</p>
+                {doneTasks.length === 0 ? (
+                  <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
+                    No tasks ticked yet. A finished task stays here rather than
+                    disappearing — the same reason a finished goal does.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                    {doneTasks.map((t) => (
+                      <li key={t.id} className="py-2.5">
+                        <p className="font-serif text-body">{t.title}</p>
+                        {/* BOTH DATES, by the owner's ruling: when it was first for, and
+                            when it was ticked. `due` is an origin and is never rewritten, so
+                            the pair is a true span — the gap between them is how long the
+                            thing waited, stated without being scored. A task started and
+                            finished on one day says so by printing one date rather than the
+                            same date twice. */}
+                        <p className="mt-0.5 text-micro tabular-nums text-[var(--color-muted)]">
+                          {t.doneOn === t.due ? (
+                            <>same day · {shortDate(t.due)}</>
+                          ) : (
+                            <>
+                              started {shortDate(t.due)} · done{" "}
+                              {shortDate(t.doneOn!)}
+                            </>
+                          )}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              </div>
             </section>
 
             </div>

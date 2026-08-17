@@ -1,0 +1,994 @@
+
+> personal-dashboard@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.9 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://118.138.126.60:3000
+- Environments: .env.local
+✓ Ready in 1208ms
+
+ GET /api/up 200 in 734ms (next.js: 152ms, proxy.ts: 521ms, application-code: 61ms)
+ GET /stats 200 in 899ms (next.js: 230ms, proxy.ts: 79ms, application-code: 590ms)
+ GET /api/goals 200 in 458ms (next.js: 304ms, proxy.ts: 89ms, application-code: 65ms)
+ GET /api/tasks?all=1 200 in 533ms (next.js: 432ms, proxy.ts: 87ms, application-code: 14ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 837ms (next.js: 715ms, proxy.ts: 109ms, application-code: 13ms)
+ GET /api/today?date=2026-08-17 200 in 1702ms (next.js: 516ms, proxy.ts: 84ms, application-code: 1102ms)
+ GET /api/rings?date=2026-08-17 200 in 1754ms (next.js: 594ms, proxy.ts: 82ms, application-code: 1078ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 1878ms (next.js: 640ms, proxy.ts: 109ms, application-code: 1128ms)
+ GET /api/today?date=2026-08-17 200 in 36ms (next.js: 8ms, proxy.ts: 16ms, application-code: 13ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 50ms (next.js: 25ms, proxy.ts: 15ms, application-code: 10ms)
+ GET /api/today?date=2026-08-17 200 in 43ms (next.js: 7ms, proxy.ts: 19ms, application-code: 17ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 55ms (next.js: 25ms, proxy.ts: 18ms, application-code: 13ms)
+ GET /api/log?before=2026-08-17 200 in 82ms (next.js: 58ms, proxy.ts: 10ms, application-code: 14ms)
+ GET /api/log?before=2026-08-17 200 in 22ms (next.js: 4ms, proxy.ts: 11ms, application-code: 7ms)
+ GET /api/journal/4/image 200 in 1128ms (next.js: 1075ms, proxy.ts: 24ms, application-code: 28ms)
+ GET /api/journal/5/image 200 in 1127ms (next.js: 1073ms, proxy.ts: 25ms, application-code: 28ms)
+ GET /api/journal/1/image 200 in 1128ms (next.js: 1072ms, proxy.ts: 25ms, application-code: 30ms)
+ GET /api/journal/2/image 200 in 1127ms (next.js: 1071ms, proxy.ts: 25ms, application-code: 30ms)
+○ Compiling / ...
+ GET / 200 in 5.3s (next.js: 3.3s, proxy.ts: 25ms, application-code: 1967ms)
+ GET /api/chapter 200 in 647ms (next.js: 558ms, proxy.ts: 81ms, application-code: 9ms)
+ GET /api/adherence?days=9&center=2026-08-17 200 in 711ms (next.js: 39ms, proxy.ts: 35ms, application-code: 637ms)
+ GET /api/adherence?days=7&to=2026-08-17 200 in 699ms (next.js: 48ms, proxy.ts: 74ms, application-code: 577ms)
+ GET /api/rings?date=2026-08-17 200 in 727ms (next.js: 54ms, proxy.ts: 95ms, application-code: 578ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 799ms (next.js: 53ms, proxy.ts: 59ms, application-code: 687ms)
+ GET /api/health/steps?date=2026-08-17 200 in 1813ms (next.js: 1771ms, proxy.ts: 19ms, application-code: 22ms)
+ GET /api/health/steps?date=2026-08-17 200 in 122ms (next.js: 54ms, proxy.ts: 38ms, application-code: 30ms)
+ GET /api/health/steps?date=2026-08-17 200 in 34ms (next.js: 7ms, proxy.ts: 15ms, application-code: 13ms)
+ GET /api/health/steps?date=2026-08-17 200 in 43ms (next.js: 14ms, proxy.ts: 20ms, application-code: 10ms)
+ GET /api/tasks?all=1 200 in 294ms (next.js: 117ms, proxy.ts: 142ms, application-code: 36ms)
+ GET /api/goals 200 in 416ms (next.js: 160ms, proxy.ts: 144ms, application-code: 112ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 541ms (next.js: 394ms, proxy.ts: 128ms, application-code: 19ms)
+ GET /api/tasks?all=1 200 in 88ms (next.js: 15ms, proxy.ts: 59ms, application-code: 13ms)
+ GET /api/goals 200 in 102ms (next.js: 35ms, proxy.ts: 49ms, application-code: 18ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 122ms (next.js: 56ms, proxy.ts: 46ms, application-code: 20ms)
+ GET /api/today?date=2026-08-17 200 in 1130ms (next.js: 300ms, proxy.ts: 130ms, application-code: 700ms)
+ GET /api/rings?date=2026-08-17 200 in 1234ms (next.js: 76ms, proxy.ts: 141ms, application-code: 1016ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 1490ms (next.js: 343ms, proxy.ts: 126ms, application-code: 1021ms)
+ GET /api/rings?date=2026-08-17 200 in 161ms (next.js: 60ms, proxy.ts: 88ms, application-code: 12ms)
+ GET /api/today?date=2026-08-17 200 in 476ms (next.js: 98ms, proxy.ts: 365ms, application-code: 13ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 153ms (next.js: 5ms, proxy.ts: 107ms, application-code: 41ms)
+ GET /api/today?date=2026-08-17 200 in 37ms (next.js: 7ms, proxy.ts: 16ms, application-code: 13ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 47ms (next.js: 22ms, proxy.ts: 16ms, application-code: 9ms)
+ GET /api/today?date=2026-08-17 200 in 41ms (next.js: 8ms, proxy.ts: 19ms, application-code: 14ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 53ms (next.js: 25ms, proxy.ts: 18ms, application-code: 10ms)
+ GET /api/health/steps?date=2026-08-17 200 in 50ms (next.js: 13ms, proxy.ts: 21ms, application-code: 16ms)
+ GET /api/health/steps?date=2026-08-17 200 in 55ms (next.js: 8ms, proxy.ts: 29ms, application-code: 18ms)
+ GET /api/log?before=2026-08-17 200 in 45ms (next.js: 7ms, proxy.ts: 19ms, application-code: 19ms)
+ GET /api/log?before=2026-08-17 200 in 41ms (next.js: 8ms, proxy.ts: 17ms, application-code: 16ms)
+ GET /api/health/steps?date=2026-08-17 200 in 38ms (next.js: 11ms, proxy.ts: 15ms, application-code: 12ms)
+ GET /api/health/steps?date=2026-08-17 200 in 38ms (next.js: 13ms, proxy.ts: 14ms, application-code: 11ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 116ms (next.js: 65ms, proxy.ts: 24ms, application-code: 28ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 58ms (next.js: 11ms, proxy.ts: 16ms, application-code: 31ms)
+ GET /api/today?date=2026-08-17 200 in 615ms (next.js: 43ms, proxy.ts: 24ms, application-code: 548ms)
+ GET /api/today?date=2026-08-17 200 in 48ms (next.js: 6ms, proxy.ts: 13ms, application-code: 28ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 474ms (next.js: 9ms, proxy.ts: 13ms, application-code: 452ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 195ms (next.js: 21ms, proxy.ts: 16ms, application-code: 159ms)
+ GET /api/today?date=2026-08-16 200 in 88ms (next.js: 11ms, proxy.ts: 27ms, application-code: 51ms)
+ GET /api/skills?date=2026-08-16 200 in 786ms (next.js: 694ms, proxy.ts: 25ms, application-code: 67ms)
+ GET /api/adherence?days=9&center=2026-08-16 200 in 415ms (next.js: 15ms, proxy.ts: 53ms, application-code: 347ms)
+ GET /api/adherence?days=14&to=2026-08-16 200 in 717ms (next.js: 38ms, proxy.ts: 51ms, application-code: 628ms)
+ GET /api/rings?date=2026-08-16 200 in 753ms (next.js: 70ms, proxy.ts: 48ms, application-code: 635ms)
+ GET /api/skills?date=2026-08-15 200 in 31ms (next.js: 6ms, proxy.ts: 12ms, application-code: 12ms)
+ GET /api/today?date=2026-08-15 200 in 56ms (next.js: 11ms, proxy.ts: 15ms, application-code: 30ms)
+ GET /api/adherence?days=9&center=2026-08-15 200 in 585ms (next.js: 51ms, proxy.ts: 58ms, application-code: 475ms)
+ GET /api/adherence?days=14&to=2026-08-15 200 in 634ms (next.js: 18ms, proxy.ts: 54ms, application-code: 562ms)
+ GET /api/rings?date=2026-08-15 200 in 1004ms (next.js: 79ms, proxy.ts: 54ms, application-code: 871ms)
+ POST /api/journal 200 in 1191ms (next.js: 1101ms, proxy.ts: 26ms, application-code: 63ms)
+ GET /api/today?date=2026-08-15 200 in 79ms (next.js: 11ms, proxy.ts: 17ms, application-code: 51ms)
+ GET /api/adherence?days=7&to=2026-08-17 200 in 121ms (next.js: 18ms, proxy.ts: 42ms, application-code: 60ms)
+ GET /api/rings?date=2026-08-15 200 in 195ms (next.js: 97ms, proxy.ts: 39ms, application-code: 58ms)
+ GET /api/gym/recent?kind=strength&before=2026-08-15&limit=5 200 in 716ms (next.js: 674ms, proxy.ts: 18ms, application-code: 24ms)
+ GET /api/gym/recent?kind=strength&before=2026-08-15&limit=5 200 in 101ms (next.js: 45ms, proxy.ts: 34ms, application-code: 23ms)
+ POST /api/gym 200 in 790ms (next.js: 721ms, proxy.ts: 21ms, application-code: 48ms)
+ GET /api/rings?date=2026-08-15 200 in 714ms (next.js: 10ms, proxy.ts: 13ms, application-code: 691ms)
+ GET /api/gym/recent?kind=cardio&before=2026-08-15&limit=5 200 in 40ms (next.js: 7ms, proxy.ts: 18ms, application-code: 15ms)
+ GET /api/gym/recent?kind=cardio&before=2026-08-15&limit=5 200 in 68ms (next.js: 24ms, proxy.ts: 31ms, application-code: 13ms)
+ GET /api/gym/recent?kind=cardio&before=2026-08-15&limit=5 200 in 36ms (next.js: 9ms, proxy.ts: 12ms, application-code: 15ms)
+ GET /api/gym/recent?kind=cardio&before=2026-08-15&limit=5 200 in 119ms (next.js: 26ms, proxy.ts: 69ms, application-code: 23ms)
+ POST /api/gym 200 in 59ms (next.js: 6ms, proxy.ts: 18ms, application-code: 35ms)
+ GET /api/rings?date=2026-08-15 200 in 107ms (next.js: 9ms, proxy.ts: 23ms, application-code: 76ms)
+ GET /api/goals 200 in 318ms (next.js: 170ms, proxy.ts: 124ms, application-code: 25ms)
+ GET /api/tasks?all=1 200 in 364ms (next.js: 139ms, proxy.ts: 181ms, application-code: 44ms)
+ GET /api/trends?days=30&to=2026-08-15 200 in 531ms (next.js: 340ms, proxy.ts: 175ms, application-code: 16ms)
+ GET /api/goals 200 in 161ms (next.js: 20ms, proxy.ts: 133ms, application-code: 9ms)
+ GET /api/tasks?all=1 200 in 97ms (next.js: 39ms, proxy.ts: 45ms, application-code: 13ms)
+ GET /api/trends?days=30&to=2026-08-15 200 in 103ms (next.js: 34ms, proxy.ts: 49ms, application-code: 20ms)
+ GET /api/today?date=2026-08-15 200 in 1092ms (next.js: 185ms, proxy.ts: 182ms, application-code: 724ms)
+ GET /api/rings?date=2026-08-15 200 in 1172ms (next.js: 122ms, proxy.ts: 117ms, application-code: 933ms)
+ GET /api/today?date=2026-08-15 200 in 120ms (next.js: 23ms, proxy.ts: 76ms, application-code: 21ms)
+ GET /api/rings?date=2026-08-15 200 in 91ms (next.js: 14ms, proxy.ts: 55ms, application-code: 23ms)
+ GET /api/adherence?days=30&to=2026-08-15 200 in 1357ms (next.js: 325ms, proxy.ts: 175ms, application-code: 857ms)
+ GET /api/adherence?days=30&to=2026-08-15 200 in 94ms (next.js: 6ms, proxy.ts: 14ms, application-code: 74ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 218ms (next.js: 98ms, proxy.ts: 78ms, application-code: 42ms)
+ GET /api/today?date=2026-08-17 200 in 553ms (next.js: 24ms, proxy.ts: 41ms, application-code: 488ms)
+ GET /api/adherence?days=14&to=2026-08-15 200 in 294ms (next.js: 84ms, proxy.ts: 66ms, application-code: 144ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 300ms (next.js: 230ms, proxy.ts: 47ms, application-code: 23ms)
+ GET /api/today?date=2026-08-17 200 in 97ms (next.js: 22ms, proxy.ts: 37ms, application-code: 38ms)
+ GET /api/adherence?days=14&to=2026-08-15 200 in 158ms (next.js: 63ms, proxy.ts: 37ms, application-code: 58ms)
+ POST /api/skills/2/time 200 in 2.5s (next.js: 2.5s, proxy.ts: 18ms, application-code: 28ms)
+ GET /api/rings?date=2026-08-15 200 in 37ms (next.js: 9ms, proxy.ts: 12ms, application-code: 16ms)
+ GET /api/goals 200 in 340ms (next.js: 133ms, proxy.ts: 172ms, application-code: 35ms)
+ GET /api/tasks?all=1 200 in 364ms (next.js: 152ms, proxy.ts: 193ms, application-code: 19ms)
+ GET /api/trends?days=30&to=2026-08-15 200 in 477ms (next.js: 217ms, proxy.ts: 187ms, application-code: 73ms)
+ GET /api/tasks?all=1 200 in 97ms (next.js: 16ms, proxy.ts: 66ms, application-code: 14ms)
+ GET /api/goals 200 in 127ms (next.js: 39ms, proxy.ts: 68ms, application-code: 20ms)
+ GET /api/trends?days=30&to=2026-08-15 200 in 141ms (next.js: 68ms, proxy.ts: 50ms, application-code: 23ms)
+ GET /api/today?date=2026-08-15 200 in 1119ms (next.js: 167ms, proxy.ts: 194ms, application-code: 758ms)
+ GET /api/rings?date=2026-08-15 200 in 1200ms (next.js: 124ms, proxy.ts: 123ms, application-code: 954ms)
+ GET /api/today?date=2026-08-15 200 in 82ms (next.js: 38ms, proxy.ts: 20ms, application-code: 24ms)
+ GET /api/rings?date=2026-08-15 200 in 50ms (next.js: 12ms, proxy.ts: 21ms, application-code: 18ms)
+ GET /api/adherence?days=30&to=2026-08-15 200 in 1374ms (next.js: 331ms, proxy.ts: 187ms, application-code: 856ms)
+ GET /api/log?before=2026-08-15 200 in 45ms (next.js: 11ms, proxy.ts: 21ms, application-code: 14ms)
+ GET /api/adherence?days=30&to=2026-08-15 200 in 133ms (next.js: 27ms, proxy.ts: 19ms, application-code: 87ms)
+ GET /api/log?before=2026-08-15 200 in 50ms (next.js: 7ms, proxy.ts: 29ms, application-code: 14ms)
+ GET /api/health/steps?date=2026-08-15 200 in 39ms (next.js: 6ms, proxy.ts: 16ms, application-code: 17ms)
+ GET /api/health/steps?date=2026-08-15 200 in 30ms (next.js: 6ms, proxy.ts: 14ms, application-code: 10ms)
+ GET /api/adherence?days=14&to=2026-08-15 200 in 721ms (next.js: 8ms, proxy.ts: 20ms, application-code: 693ms)
+ GET /api/adherence?days=14&to=2026-08-15 200 in 72ms (next.js: 6ms, proxy.ts: 19ms, application-code: 47ms)
+ GET /journal 200 in 3.9s (next.js: 3.1s, proxy.ts: 38ms, application-code: 667ms)
+ GET /api/chapter 200 in 35ms (next.js: 8ms, proxy.ts: 15ms, application-code: 12ms)
+ GET / 200 in 829ms (next.js: 27ms, proxy.ts: 43ms, application-code: 759ms)
+ GET /api/chapter 200 in 165ms (next.js: 56ms, proxy.ts: 80ms, application-code: 29ms)
+ GET /api/chapter 200 in 54ms (next.js: 5ms, proxy.ts: 32ms, application-code: 16ms)
+ GET /api/adherence?days=9&center=2026-08-17 200 in 536ms (next.js: 27ms, proxy.ts: 136ms, application-code: 373ms)
+ GET /api/adherence?days=9&center=2026-08-17 200 in 92ms (next.js: 16ms, proxy.ts: 18ms, application-code: 58ms)
+ GET /api/adherence?days=7&to=2026-08-17 200 in 758ms (next.js: 85ms, proxy.ts: 73ms, application-code: 600ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 892ms (next.js: 35ms, proxy.ts: 126ms, application-code: 731ms)
+ GET /api/rings?date=2026-08-17 200 in 873ms (next.js: 102ms, proxy.ts: 71ms, application-code: 700ms)
+ GET /api/adherence?days=7&to=2026-08-17 200 in 102ms (next.js: 24ms, proxy.ts: 45ms, application-code: 33ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 197ms (next.js: 56ms, proxy.ts: 47ms, application-code: 94ms)
+ GET /api/rings?date=2026-08-17 200 in 220ms (next.js: 151ms, proxy.ts: 37ms, application-code: 32ms)
+ GET /api/rings?date=2026-08-17 200 in 357ms (next.js: 166ms, proxy.ts: 140ms, application-code: 52ms)
+ GET /api/goals 200 in 421ms (next.js: 227ms, proxy.ts: 144ms, application-code: 49ms)
+ GET /api/tasks?all=1 200 in 471ms (next.js: 263ms, proxy.ts: 175ms, application-code: 33ms)
+ GET /api/today?date=2026-08-17 200 in 548ms (next.js: 284ms, proxy.ts: 239ms, application-code: 25ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 699ms (next.js: 324ms, proxy.ts: 355ms, application-code: 20ms)
+ GET /api/rings?date=2026-08-17 200 in 388ms (next.js: 33ms, proxy.ts: 339ms, application-code: 17ms)
+ GET /api/goals 200 in 276ms (next.js: 50ms, proxy.ts: 214ms, application-code: 12ms)
+ GET /api/tasks?all=1 200 in 318ms (next.js: 82ms, proxy.ts: 212ms, application-code: 25ms)
+ GET /api/today?date=2026-08-17 200 in 306ms (next.js: 113ms, proxy.ts: 158ms, application-code: 35ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 196ms (next.js: 11ms, proxy.ts: 165ms, application-code: 20ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 1309ms (next.js: 317ms, proxy.ts: 241ms, application-code: 751ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 149ms (next.js: 17ms, proxy.ts: 62ms, application-code: 71ms)
+ GET /api/log?before=2026-08-17 200 in 133ms (next.js: 8ms, proxy.ts: 109ms, application-code: 16ms)
+ GET /api/log?before=2026-08-17 200 in 57ms (next.js: 7ms, proxy.ts: 16ms, application-code: 34ms)
+ GET /api/health/steps?date=2026-08-17 200 in 38ms (next.js: 6ms, proxy.ts: 20ms, application-code: 11ms)
+ GET /api/health/steps?date=2026-08-17 200 in 35ms (next.js: 7ms, proxy.ts: 13ms, application-code: 15ms)
+ GET /api/health/steps?date=2026-08-17 200 in 28ms (next.js: 6ms, proxy.ts: 13ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 17ms (next.js: 4ms, proxy.ts: 7ms, application-code: 5ms)
+ GET /api/health/steps?date=2026-08-17 200 in 40ms (next.js: 6ms, proxy.ts: 24ms, application-code: 11ms)
+ GET /api/health/steps?date=2026-08-17 200 in 17ms (next.js: 4ms, proxy.ts: 7ms, application-code: 5ms)
+ GET /api/health/steps?date=2026-08-17 200 in 34ms (next.js: 9ms, proxy.ts: 15ms, application-code: 10ms)
+ GET /api/health/steps?date=2026-08-17 200 in 50ms (next.js: 11ms, proxy.ts: 21ms, application-code: 17ms)
+ GET /api/health/steps?date=2026-08-17 200 in 39ms (next.js: 9ms, proxy.ts: 19ms, application-code: 11ms)
+ GET /api/health/steps?date=2026-08-17 200 in 24ms (next.js: 5ms, proxy.ts: 13ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 40ms (next.js: 8ms, proxy.ts: 19ms, application-code: 13ms)
+ GET /api/health/steps?date=2026-08-17 200 in 24ms (next.js: 6ms, proxy.ts: 13ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 33ms (next.js: 9ms, proxy.ts: 15ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 79ms (next.js: 30ms, proxy.ts: 38ms, application-code: 11ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 669ms (next.js: 5ms, proxy.ts: 14ms, application-code: 650ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 81ms (next.js: 9ms, proxy.ts: 15ms, application-code: 57ms)
+ GET /api/goals 200 in 118ms (next.js: 58ms, proxy.ts: 37ms, application-code: 22ms)
+ GET /api/tasks?all=1 200 in 193ms (next.js: 96ms, proxy.ts: 37ms, application-code: 60ms)
+ GET /api/rings?date=2026-08-17 200 in 343ms (next.js: 186ms, proxy.ts: 37ms, application-code: 120ms)
+ GET /api/today?date=2026-08-17 200 in 993ms (next.js: 86ms, proxy.ts: 862ms, application-code: 45ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 1032ms (next.js: 155ms, proxy.ts: 860ms, application-code: 16ms)
+ GET /api/goals 200 in 511ms (next.js: 147ms, proxy.ts: 351ms, application-code: 14ms)
+ GET /api/tasks?all=1 200 in 528ms (next.js: 156ms, proxy.ts: 354ms, application-code: 19ms)
+ GET /api/rings?date=2026-08-17 200 in 567ms (next.js: 188ms, proxy.ts: 350ms, application-code: 30ms)
+ GET /api/today?date=2026-08-17 200 in 208ms (next.js: 25ms, proxy.ts: 141ms, application-code: 42ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 223ms (next.js: 82ms, proxy.ts: 94ms, application-code: 47ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 1555ms (next.js: 137ms, proxy.ts: 856ms, application-code: 562ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 134ms (next.js: 7ms, proxy.ts: 16ms, application-code: 112ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 56ms (next.js: 16ms, proxy.ts: 23ms, application-code: 17ms)
+ GET /api/today?date=2026-08-17 200 in 122ms (next.js: 47ms, proxy.ts: 31ms, application-code: 44ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 100ms (next.js: 17ms, proxy.ts: 60ms, application-code: 23ms)
+ GET /api/today?date=2026-08-17 200 in 136ms (next.js: 47ms, proxy.ts: 51ms, application-code: 38ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 167ms (next.js: 12ms, proxy.ts: 14ms, application-code: 141ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 98ms (next.js: 7ms, proxy.ts: 18ms, application-code: 73ms)
+ GET /journal 200 in 441ms (next.js: 14ms, proxy.ts: 26ms, application-code: 401ms)
+ GET /api/chapter 200 in 29ms (next.js: 6ms, proxy.ts: 14ms, application-code: 9ms)
+ GET / 200 in 746ms (next.js: 9ms, proxy.ts: 13ms, application-code: 724ms)
+ GET /api/chapter 200 in 150ms (next.js: 84ms, proxy.ts: 52ms, application-code: 14ms)
+ GET /api/chapter 200 in 50ms (next.js: 12ms, proxy.ts: 27ms, application-code: 10ms)
+ GET /api/adherence?days=9&center=2026-08-17 200 in 595ms (next.js: 112ms, proxy.ts: 58ms, application-code: 424ms)
+ GET /api/adherence?days=9&center=2026-08-17 200 in 48ms (next.js: 7ms, proxy.ts: 15ms, application-code: 26ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 697ms (next.js: 63ms, proxy.ts: 53ms, application-code: 580ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 72ms (next.js: 12ms, proxy.ts: 10ms, application-code: 50ms)
+ GET /api/rings?date=2026-08-17 200 in 783ms (next.js: 78ms, proxy.ts: 103ms, application-code: 602ms)
+ GET /api/adherence?days=7&to=2026-08-17 200 in 864ms (next.js: 83ms, proxy.ts: 65ms, application-code: 716ms)
+ GET /api/rings?date=2026-08-17 200 in 138ms (next.js: 29ms, proxy.ts: 76ms, application-code: 33ms)
+ GET /api/adherence?days=7&to=2026-08-17 200 in 143ms (next.js: 14ms, proxy.ts: 77ms, application-code: 52ms)
+ GET /api/health/steps?date=2026-08-17 200 in 40ms (next.js: 9ms, proxy.ts: 19ms, application-code: 12ms)
+ GET /api/health/steps?date=2026-08-17 200 in 27ms (next.js: 7ms, proxy.ts: 12ms, application-code: 8ms)
+ GET /api/health/steps?date=2026-08-17 200 in 31ms (next.js: 6ms, proxy.ts: 16ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 46ms (next.js: 10ms, proxy.ts: 22ms, application-code: 13ms)
+ GET /api/health/steps?date=2026-08-17 200 in 46ms (next.js: 17ms, proxy.ts: 17ms, application-code: 12ms)
+ GET /api/health/steps?date=2026-08-17 200 in 28ms (next.js: 9ms, proxy.ts: 10ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 33ms (next.js: 9ms, proxy.ts: 13ms, application-code: 11ms)
+ GET /api/health/steps?date=2026-08-17 200 in 37ms (next.js: 7ms, proxy.ts: 19ms, application-code: 12ms)
+ GET /api/health/steps?date=2026-08-17 200 in 60ms (next.js: 37ms, proxy.ts: 13ms, application-code: 10ms)
+ GET /api/health/steps?date=2026-08-17 200 in 30ms (next.js: 6ms, proxy.ts: 14ms, application-code: 10ms)
+ GET /api/health/steps?date=2026-08-17 200 in 50ms (next.js: 7ms, proxy.ts: 23ms, application-code: 20ms)
+ GET /api/health/steps?date=2026-08-17 200 in 38ms (next.js: 8ms, proxy.ts: 17ms, application-code: 13ms)
+ GET /api/health/steps?date=2026-08-17 200 in 44ms (next.js: 10ms, proxy.ts: 21ms, application-code: 14ms)
+ GET /api/health/steps?date=2026-08-17 200 in 34ms (next.js: 7ms, proxy.ts: 14ms, application-code: 13ms)
+ GET /api/goals 200 in 498ms (next.js: 264ms, proxy.ts: 207ms, application-code: 28ms)
+ GET /api/tasks?all=1 200 in 572ms (next.js: 191ms, proxy.ts: 363ms, application-code: 19ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 667ms (next.js: 248ms, proxy.ts: 400ms, application-code: 19ms)
+ GET /api/tasks?all=1 200 in 78ms (next.js: 18ms, proxy.ts: 46ms, application-code: 14ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 85ms (next.js: 30ms, proxy.ts: 38ms, application-code: 17ms)
+ GET /api/goals 200 in 132ms (next.js: 63ms, proxy.ts: 48ms, application-code: 21ms)
+ GET /api/log?before=2026-08-17 200 in 51ms (next.js: 15ms, proxy.ts: 21ms, application-code: 15ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 1644ms (next.js: 209ms, proxy.ts: 395ms, application-code: 1040ms)
+ GET /api/today?date=2026-08-17 200 in 1670ms (next.js: 233ms, proxy.ts: 396ms, application-code: 1041ms)
+ GET /api/rings?date=2026-08-17 200 in 1698ms (next.js: 214ms, proxy.ts: 365ms, application-code: 1118ms)
+ GET /api/log?before=2026-08-17 200 in 203ms (next.js: 52ms, proxy.ts: 140ms, application-code: 11ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 101ms (next.js: 10ms, proxy.ts: 51ms, application-code: 40ms)
+ GET /api/today?date=2026-08-17 200 in 121ms (next.js: 57ms, proxy.ts: 43ms, application-code: 21ms)
+ GET /api/rings?date=2026-08-17 200 in 142ms (next.js: 81ms, proxy.ts: 38ms, application-code: 23ms)
+ GET /api/health/steps?date=2026-08-17 200 in 31ms (next.js: 9ms, proxy.ts: 14ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 27ms (next.js: 6ms, proxy.ts: 12ms, application-code: 10ms)
+ GET /api/health/steps?date=2026-08-17 200 in 35ms (next.js: 11ms, proxy.ts: 14ms, application-code: 10ms)
+ GET /api/health/steps?date=2026-08-17 200 in 35ms (next.js: 11ms, proxy.ts: 15ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 31ms (next.js: 6ms, proxy.ts: 14ms, application-code: 11ms)
+ GET /api/health/steps?date=2026-08-17 200 in 60ms (next.js: 32ms, proxy.ts: 16ms, application-code: 12ms)
+ GET /api/health/steps?date=2026-08-17 200 in 40ms (next.js: 9ms, proxy.ts: 19ms, application-code: 11ms)
+ GET /api/health/steps?date=2026-08-17 200 in 27ms (next.js: 6ms, proxy.ts: 12ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 33ms (next.js: 6ms, proxy.ts: 17ms, application-code: 10ms)
+ GET /api/health/steps?date=2026-08-17 200 in 28ms (next.js: 5ms, proxy.ts: 11ms, application-code: 11ms)
+ GET /api/health/steps?date=2026-08-17 200 in 47ms (next.js: 9ms, proxy.ts: 26ms, application-code: 12ms)
+ GET /api/health/steps?date=2026-08-17 200 in 40ms (next.js: 12ms, proxy.ts: 16ms, application-code: 12ms)
+✓ Compiled in 1570ms
+ GET / 200 in 1022ms (next.js: 318ms, proxy.ts: 195ms, application-code: 509ms)
+ GET / 200 in 1005ms (next.js: 11ms, proxy.ts: 23ms, application-code: 970ms)
+ GET / 200 in 921ms (next.js: 29ms, proxy.ts: 80ms, application-code: 812ms)
+ GET / 200 in 921ms (next.js: 94ms, proxy.ts: 79ms, application-code: 747ms)
+ GET / 200 in 920ms (next.js: 180ms, proxy.ts: 77ms, application-code: 663ms)
+ GET / 200 in 919ms (next.js: 375ms, proxy.ts: 75ms, application-code: 470ms)
+ GET / 200 in 1081ms (next.js: 551ms, proxy.ts: 56ms, application-code: 473ms)
+ GET / 200 in 908ms (next.js: 46ms, proxy.ts: 35ms, application-code: 827ms)
+ GET / 200 in 789ms (next.js: 31ms, proxy.ts: 121ms, application-code: 637ms)
+ GET / 200 in 798ms (next.js: 127ms, proxy.ts: 123ms, application-code: 548ms)
+ GET / 200 in 793ms (next.js: 201ms, proxy.ts: 119ms, application-code: 473ms)
+ GET / 200 in 806ms (next.js: 266ms, proxy.ts: 124ms, application-code: 415ms)
+ GET / 200 in 897ms (next.js: 402ms, proxy.ts: 55ms, application-code: 440ms)
+ GET / 200 in 531ms (next.js: 66ms, proxy.ts: 40ms, application-code: 424ms)
+ GET / 200 in 247ms (next.js: 43ms, proxy.ts: 38ms, application-code: 166ms)
+✓ Compiled in 1058ms
+ GET / 200 in 1687ms (next.js: 407ms, proxy.ts: 460ms, application-code: 820ms)
+ GET / 200 in 1131ms (next.js: 17ms, proxy.ts: 92ms, application-code: 1022ms)
+ GET / 200 in 934ms (next.js: 48ms, proxy.ts: 99ms, application-code: 787ms)
+ GET / 200 in 932ms (next.js: 160ms, proxy.ts: 97ms, application-code: 676ms)
+ GET / 200 in 931ms (next.js: 239ms, proxy.ts: 94ms, application-code: 598ms)
+ GET / 200 in 1020ms (next.js: 547ms, proxy.ts: 107ms, application-code: 365ms)
+ GET / 200 in 986ms (next.js: 14ms, proxy.ts: 729ms, application-code: 244ms)
+ GET / 200 in 537ms (next.js: 15ms, proxy.ts: 20ms, application-code: 501ms)
+ GET / 200 in 527ms (next.js: 49ms, proxy.ts: 62ms, application-code: 416ms)
+ GET / 200 in 594ms (next.js: 125ms, proxy.ts: 58ms, application-code: 410ms)
+ GET / 200 in 594ms (next.js: 177ms, proxy.ts: 56ms, application-code: 361ms)
+ GET / 200 in 635ms (next.js: 235ms, proxy.ts: 75ms, application-code: 325ms)
+ GET / 200 in 595ms (next.js: 27ms, proxy.ts: 306ms, application-code: 262ms)
+ GET / 200 in 379ms (next.js: 16ms, proxy.ts: 100ms, application-code: 264ms)
+ GET / 200 in 138ms (next.js: 14ms, proxy.ts: 21ms, application-code: 103ms)
+✓ Compiled in 918ms
+ GET / 200 in 1485ms (next.js: 470ms, proxy.ts: 412ms, application-code: 603ms)
+ GET / 200 in 358ms (next.js: 67ms, proxy.ts: 18ms, application-code: 273ms)
+ GET / 200 in 333ms (next.js: 19ms, proxy.ts: 25ms, application-code: 288ms)
+ GET / 200 in 437ms (next.js: 37ms, proxy.ts: 32ms, application-code: 368ms)
+ GET / 200 in 889ms (next.js: 10ms, proxy.ts: 20ms, application-code: 859ms)
+ GET / 200 in 905ms (next.js: 38ms, proxy.ts: 69ms, application-code: 798ms)
+ GET / 200 in 904ms (next.js: 110ms, proxy.ts: 69ms, application-code: 725ms)
+ GET / 200 in 913ms (next.js: 295ms, proxy.ts: 72ms, application-code: 547ms)
+ GET / 200 in 912ms (next.js: 405ms, proxy.ts: 71ms, application-code: 436ms)
+ GET / 200 in 892ms (next.js: 47ms, proxy.ts: 631ms, application-code: 214ms)
+ GET / 200 in 525ms (next.js: 10ms, proxy.ts: 20ms, application-code: 495ms)
+ GET / 200 in 433ms (next.js: 17ms, proxy.ts: 53ms, application-code: 363ms)
+ GET / 200 in 432ms (next.js: 55ms, proxy.ts: 53ms, application-code: 325ms)
+ GET / 200 in 423ms (next.js: 155ms, proxy.ts: 46ms, application-code: 221ms)
+ GET / 200 in 421ms (next.js: 221ms, proxy.ts: 44ms, application-code: 156ms)
+✓ Compiled in 2.5s
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+ GET / 200 in 1884ms (next.js: 178ms, proxy.ts: 139ms, application-code: 1567ms)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+ GET / 200 in 1165ms (next.js: 229ms, proxy.ts: 33ms, application-code: 903ms)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '1832460734'
+}
+ GET / 200 in 2.3s (next.js: 26ms, proxy.ts: 68ms, application-code: 2.2s)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '1832460734'
+}
+ GET / 200 in 1935ms (next.js: 41ms, proxy.ts: 244ms, application-code: 1651ms)
+ GET / 200 in 1931ms (next.js: 149ms, proxy.ts: 238ms, application-code: 1544ms)
+ GET / 200 in 1936ms (next.js: 351ms, proxy.ts: 237ms, application-code: 1348ms)
+ GET / 200 in 1932ms (next.js: 573ms, proxy.ts: 235ms, application-code: 1124ms)
+ GET / 200 in 2.2s (next.js: 1264ms, proxy.ts: 141ms, application-code: 809ms)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+ GET / 200 in 2.2s (next.js: 75ms, proxy.ts: 44ms, application-code: 2.1s)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '1832460734'
+}
+ GET / 200 in 2.2s (next.js: 63ms, proxy.ts: 255ms, application-code: 1836ms)
+ GET / 200 in 2.2s (next.js: 235ms, proxy.ts: 255ms, application-code: 1660ms)
+ GET / 200 in 2.2s (next.js: 482ms, proxy.ts: 252ms, application-code: 1427ms)
+ GET / 200 in 2.2s (next.js: 649ms, proxy.ts: 256ms, application-code: 1308ms)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+ GET / 200 in 2.2s (next.js: 1206ms, proxy.ts: 116ms, application-code: 841ms)
+ GET / 200 in 702ms (next.js: 16ms, proxy.ts: 33ms, application-code: 653ms)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '1832460734'
+}
+ GET / 200 in 1780ms (next.js: 191ms, proxy.ts: 221ms, application-code: 1369ms)
+ GET / 200 in 1775ms (next.js: 303ms, proxy.ts: 266ms, application-code: 1206ms)
+ GET / 200 in 1792ms (next.js: 624ms, proxy.ts: 224ms, application-code: 944ms)
+ GET / 200 in 1789ms (next.js: 476ms, proxy.ts: 217ms, application-code: 1096ms)
+ GET / 200 in 1602ms (next.js: 933ms, proxy.ts: 98ms, application-code: 571ms)
+ GET / 200 in 692ms (next.js: 13ms, proxy.ts: 334ms, application-code: 346ms)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '1832460734'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '1832460734'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '1832460734'
+}
+ GET / 200 in 1384ms (next.js: 37ms, proxy.ts: 93ms, application-code: 1254ms)
+ GET / 200 in 1383ms (next.js: 146ms, proxy.ts: 93ms, application-code: 1143ms)
+ GET / 200 in 1387ms (next.js: 290ms, proxy.ts: 91ms, application-code: 1007ms)
+ GET / 200 in 1391ms (next.js: 357ms, proxy.ts: 91ms, application-code: 943ms)
+ GET / 200 in 1430ms (next.js: 709ms, proxy.ts: 68ms, application-code: 652ms)
+ GET / 200 in 1344ms (next.js: 54ms, proxy.ts: 685ms, application-code: 604ms)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '1832460734'
+}
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '3413518077'
+}
+ GET / 200 in 1777ms (next.js: 46ms, proxy.ts: 254ms, application-code: 1477ms)
+ GET / 200 in 1884ms (next.js: 279ms, proxy.ts: 318ms, application-code: 1287ms)
+ GET / 200 in 1602ms (next.js: 409ms, proxy.ts: 102ms, application-code: 1091ms)
+ GET / 200 in 1900ms (next.js: 645ms, proxy.ts: 318ms, application-code: 937ms)
+ GET / 200 in 1906ms (next.js: 1013ms, proxy.ts: 319ms, application-code: 574ms)
+⨯ TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at async Page (src\app\page.tsx:34:33)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 | {
+  digest: '2441860051'
+}
+ GET / 500 in 1151ms (next.js: 7ms, proxy.ts: 21ms, application-code: 1123ms)
+[browser] Uncaught TypeError: Cannot read properties of undefined (reading 'steps')
+    at adherenceFor (src\lib\adherence.ts:305:24)
+    at getDayView (src\lib\queries.ts:624:33)
+    at  Page (src\app\page.tsx:34:33)
+    at resolveErrorDev (file://C:/Users/62816/PROJECT II/.next/dev/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js:1919:105)
+    at processFullStringRow (file://C:/Users/62816/PROJECT II/.next/dev/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js:2434:29)
+    at processFullBinaryRow (file://C:/Users/62816/PROJECT II/.next/dev/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js:2393:9)
+    at processBinaryChunk (file://C:/Users/62816/PROJECT II/.next/dev/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js:2502:221)
+    at progress (file://C:/Users/62816/PROJECT II/.next/dev/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js:2689:13)
+  303 |   // measured; see FLOOR_ITEMS.
+  304 |   const floorEarned =
+> 305 |     floorCredit(floors.steps, STEPS_FLOOR) +
+      |                        ^
+  306 |     floorCredit(floors.calories, CALORIE_FLOOR);
+  307 |   const habitItems = habitsScheduled + FLOOR_ITEMS;
+  308 |
+✓ Compiled in 798ms
+ GET / 200 in 2.8s (next.js: 307ms, proxy.ts: 185ms, application-code: 2.3s)
+ GET /api/chapter 200 in 375ms (next.js: 300ms, proxy.ts: 59ms, application-code: 16ms)
+ GET /api/adherence?days=9&center=2026-08-17 500 in 678ms (next.js: 145ms, proxy.ts: 61ms, application-code: 472ms)
+ GET /api/adherence?days=7&to=2026-08-17 500 in 1097ms (next.js: 317ms, proxy.ts: 59ms, application-code: 720ms)
+ GET /api/adherence?days=14&to=2026-08-17 500 in 1145ms (next.js: 168ms, proxy.ts: 61ms, application-code: 916ms)
+ GET /api/rings?date=2026-08-17 200 in 1221ms (next.js: 425ms, proxy.ts: 50ms, application-code: 746ms)
+✓ Compiled in 743ms
+ GET / 200 in 644ms (next.js: 205ms, proxy.ts: 125ms, application-code: 314ms)
+ GET / 200 in 555ms (next.js: 7ms, proxy.ts: 13ms, application-code: 535ms)
+ GET / 200 in 579ms (next.js: 21ms, proxy.ts: 52ms, application-code: 506ms)
+ GET / 200 in 579ms (next.js: 106ms, proxy.ts: 50ms, application-code: 422ms)
+ GET / 200 in 580ms (next.js: 170ms, proxy.ts: 48ms, application-code: 363ms)
+ GET / 200 in 686ms (next.js: 230ms, proxy.ts: 48ms, application-code: 408ms)
+ GET / 200 in 703ms (next.js: 27ms, proxy.ts: 370ms, application-code: 306ms)
+ GET / 200 in 865ms (next.js: 30ms, proxy.ts: 30ms, application-code: 805ms)
+ GET / 200 in 824ms (next.js: 61ms, proxy.ts: 51ms, application-code: 711ms)
+ GET / 200 in 823ms (next.js: 178ms, proxy.ts: 50ms, application-code: 596ms)
+ GET / 200 in 906ms (next.js: 391ms, proxy.ts: 52ms, application-code: 463ms)
+ GET / 200 in 902ms (next.js: 491ms, proxy.ts: 46ms, application-code: 364ms)
+ GET / 200 in 866ms (next.js: 16ms, proxy.ts: 624ms, application-code: 226ms)
+ GET / 200 in 137ms (next.js: 18ms, proxy.ts: 22ms, application-code: 97ms)
+ GET / 200 in 768ms (next.js: 247ms, proxy.ts: 200ms, application-code: 321ms)
+ GET / 200 in 900ms (next.js: 360ms, proxy.ts: 283ms, application-code: 257ms)
+✓ Compiled in 632ms
+✓ Compiled in 1090ms
+ GET / 200 in 1092ms (next.js: 247ms, proxy.ts: 307ms, application-code: 538ms)
+ GET / 200 in 444ms (next.js: 15ms, proxy.ts: 64ms, application-code: 366ms)
+ GET / 200 in 173ms (next.js: 9ms, proxy.ts: 30ms, application-code: 134ms)
+ GET / 200 in 3.8s (next.js: 1378ms, proxy.ts: 303ms, application-code: 2.1s)
+✓ Compiled in 1112ms
+ GET / 200 in 1031ms (next.js: 291ms, proxy.ts: 184ms, application-code: 556ms)
+ GET / 200 in 297ms (next.js: 8ms, proxy.ts: 14ms, application-code: 275ms)
+ GET / 200 in 346ms (next.js: 120ms, proxy.ts: 48ms, application-code: 178ms)
+ GET / 200 in 357ms (next.js: 203ms, proxy.ts: 56ms, application-code: 98ms)
+✓ Compiled in 646ms
+ GET / 200 in 874ms (next.js: 298ms, proxy.ts: 186ms, application-code: 391ms)
+ GET / 200 in 142ms (next.js: 9ms, proxy.ts: 24ms, application-code: 109ms)
+✓ Compiled in 780ms
+ GET / 200 in 946ms (next.js: 338ms, proxy.ts: 194ms, application-code: 414ms)
+ GET / 200 in 327ms (next.js: 40ms, proxy.ts: 53ms, application-code: 233ms)
+✓ Compiled in 676ms
+ GET / 200 in 1090ms (next.js: 285ms, proxy.ts: 495ms, application-code: 309ms)
+ GET / 200 in 109ms (next.js: 8ms, proxy.ts: 13ms, application-code: 87ms)
+✓ Compiled in 431ms
+ GET / 200 in 967ms (next.js: 391ms, proxy.ts: 169ms, application-code: 407ms)
+ GET / 200 in 330ms (next.js: 147ms, proxy.ts: 52ms, application-code: 131ms)
+✓ Compiled in 976ms
+ GET / 200 in 812ms (next.js: 264ms, proxy.ts: 159ms, application-code: 389ms)
+ GET / 200 in 168ms (next.js: 16ms, proxy.ts: 32ms, application-code: 119ms)
+ GET /api/up 200 in 80ms (next.js: 56ms, proxy.ts: 9ms, application-code: 16ms)
+ GET /api/health/steps?date=2026-08-17 200 in 99ms (next.js: 67ms, proxy.ts: 11ms, application-code: 21ms)
+ GET /api/health/steps?date=2026-08-17 200 in 33ms (next.js: 6ms, proxy.ts: 17ms, application-code: 9ms)
+ GET /api/goals 200 in 523ms (next.js: 401ms, proxy.ts: 91ms, application-code: 31ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 596ms (next.js: 494ms, proxy.ts: 89ms, application-code: 13ms)
+ GET /api/tasks?all=1 200 in 746ms (next.js: 625ms, proxy.ts: 89ms, application-code: 32ms)
+ GET /api/goals 200 in 171ms (next.js: 45ms, proxy.ts: 110ms, application-code: 17ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 173ms (next.js: 48ms, proxy.ts: 107ms, application-code: 19ms)
+ GET /api/tasks?all=1 200 in 197ms (next.js: 75ms, proxy.ts: 106ms, application-code: 16ms)
+ GET /api/chapter 200 in 122ms (next.js: 85ms, proxy.ts: 22ms, application-code: 16ms)
+ GET /api/log?before=2026-08-17 200 in 220ms (next.js: 189ms, proxy.ts: 15ms, application-code: 16ms)
+ GET /api/chapter 200 in 126ms (next.js: 9ms, proxy.ts: 111ms, application-code: 7ms)
+ GET /api/log?before=2026-08-17 200 in 37ms (next.js: 16ms, proxy.ts: 11ms, application-code: 10ms)
+ GET /api/today?date=2026-08-17 200 in 2.4s (next.js: 785ms, proxy.ts: 93ms, application-code: 1475ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 2.4s (next.js: 896ms, proxy.ts: 90ms, application-code: 1443ms)
+ GET /api/today?date=2026-08-17 200 in 50ms (next.js: 10ms, proxy.ts: 24ms, application-code: 16ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 127ms (next.js: 31ms, proxy.ts: 23ms, application-code: 73ms)
+ GET /api/journal/4/image 200 in 240ms (next.js: 199ms, proxy.ts: 24ms, application-code: 18ms)
+ GET /api/journal/5/image 200 in 244ms (next.js: 219ms, proxy.ts: 18ms, application-code: 7ms)
+ GET /api/rings?date=2026-08-17 200 in 2.8s (next.js: 201ms, proxy.ts: 90ms, application-code: 2.5s)
+ GET /api/journal/1/image 200 in 208ms (next.js: 81ms, proxy.ts: 115ms, application-code: 12ms)
+ GET /api/rings?date=2026-08-17 200 in 90ms (next.js: 10ms, proxy.ts: 56ms, application-code: 24ms)
+ GET /api/log?before=2026-07-20 200 in 33ms (next.js: 6ms, proxy.ts: 13ms, application-code: 14ms)
+ GET /api/health/steps?date=2026-08-17 200 in 35ms (next.js: 7ms, proxy.ts: 12ms, application-code: 16ms)
+ GET /api/health/steps?date=2026-08-17 200 in 16ms (next.js: 4ms, proxy.ts: 7ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 34ms (next.js: 11ms, proxy.ts: 13ms, application-code: 11ms)
+ GET /api/health/steps?date=2026-08-17 200 in 15ms (next.js: 3ms, proxy.ts: 6ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 26ms (next.js: 4ms, proxy.ts: 13ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 16ms (next.js: 5ms, proxy.ts: 6ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 30ms (next.js: 8ms, proxy.ts: 13ms, application-code: 8ms)
+ GET /api/health/steps?date=2026-08-17 200 in 18ms (next.js: 5ms, proxy.ts: 7ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 24ms (next.js: 5ms, proxy.ts: 13ms, application-code: 7ms)
+ GET /api/health/steps?date=2026-08-17 200 in 14ms (next.js: 4ms, proxy.ts: 6ms, application-code: 4ms)
+ GET /api/health/steps?date=2026-08-17 200 in 27ms (next.js: 5ms, proxy.ts: 13ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 21ms (next.js: 6ms, proxy.ts: 8ms, application-code: 7ms)
+ GET /api/health/steps?date=2026-08-17 200 in 31ms (next.js: 10ms, proxy.ts: 11ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 29ms (next.js: 7ms, proxy.ts: 14ms, application-code: 8ms)
+ GET /api/health/steps?date=2026-08-17 200 in 33ms (next.js: 6ms, proxy.ts: 13ms, application-code: 13ms)
+ GET /api/health/steps?date=2026-08-17 200 in 32ms (next.js: 7ms, proxy.ts: 17ms, application-code: 8ms)
+ GET /api/health/steps?date=2026-08-17 200 in 28ms (next.js: 8ms, proxy.ts: 11ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 38ms (next.js: 12ms, proxy.ts: 17ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 28ms (next.js: 4ms, proxy.ts: 12ms, application-code: 12ms)
+ GET /api/health/steps?date=2026-08-17 200 in 19ms (next.js: 5ms, proxy.ts: 9ms, application-code: 6ms)
+ GET /stats 200 in 1604ms (next.js: 710ms, proxy.ts: 16ms, application-code: 878ms)
+ GET /api/tasks?all=1 200 in 85ms (next.js: 19ms, proxy.ts: 45ms, application-code: 21ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 167ms (next.js: 95ms, proxy.ts: 47ms, application-code: 24ms)
+ GET /api/goals 200 in 248ms (next.js: 194ms, proxy.ts: 44ms, application-code: 9ms)
+ GET /api/today?date=2026-08-17 200 in 968ms (next.js: 40ms, proxy.ts: 46ms, application-code: 881ms)
+ GET /api/rings?date=2026-08-17 200 in 1077ms (next.js: 10ms, proxy.ts: 13ms, application-code: 1054ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 1086ms (next.js: 138ms, proxy.ts: 46ms, application-code: 901ms)
+ GET /api/today?date=2026-08-17 200 in 29ms (next.js: 5ms, proxy.ts: 9ms, application-code: 16ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 28ms (next.js: 5ms, proxy.ts: 9ms, application-code: 14ms)
+ GET /api/today?date=2026-08-17 200 in 58ms (next.js: 9ms, proxy.ts: 28ms, application-code: 21ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 72ms (next.js: 33ms, proxy.ts: 27ms, application-code: 13ms)
+ GET /api/chapter 200 in 34ms (next.js: 7ms, proxy.ts: 11ms, application-code: 16ms)
+ GET /api/log?before=2026-08-17 200 in 39ms (next.js: 15ms, proxy.ts: 9ms, application-code: 15ms)
+ GET /api/chapter 200 in 21ms (next.js: 5ms, proxy.ts: 9ms, application-code: 8ms)
+ GET /api/log?before=2026-08-17 200 in 28ms (next.js: 5ms, proxy.ts: 9ms, application-code: 14ms)
+✓ Compiled in 1080ms
+ GET /stats 200 in 867ms (next.js: 353ms, proxy.ts: 348ms, application-code: 165ms)
+ GET /stats 200 in 77ms (next.js: 5ms, proxy.ts: 10ms, application-code: 62ms)
+ GET / 200 in 1543ms (next.js: 202ms, proxy.ts: 154ms, application-code: 1187ms)
+ GET / 200 in 1088ms (next.js: 89ms, proxy.ts: 60ms, application-code: 939ms)
+ GET /api/health/steps?date=2026-08-17 200 in 141ms (next.js: 92ms, proxy.ts: 29ms, application-code: 20ms)
+ GET /api/health/steps?date=2026-08-17 200 in 25ms (next.js: 7ms, proxy.ts: 9ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 25ms (next.js: 5ms, proxy.ts: 13ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 19ms (next.js: 5ms, proxy.ts: 7ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 26ms (next.js: 6ms, proxy.ts: 11ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 18ms (next.js: 6ms, proxy.ts: 8ms, application-code: 4ms)
+ GET /api/health/steps?date=2026-08-17 200 in 49ms (next.js: 9ms, proxy.ts: 13ms, application-code: 27ms)
+ GET /api/health/steps?date=2026-08-17 200 in 14ms (next.js: 3ms, proxy.ts: 6ms, application-code: 6ms)
+ GET /api/health/steps?date=2026-08-17 200 in 26ms (next.js: 5ms, proxy.ts: 12ms, application-code: 9ms)
+ GET /api/health/steps?date=2026-08-17 200 in 16ms (next.js: 4ms, proxy.ts: 6ms, application-code: 6ms)
+✓ Compiled in 642ms
+ GET /stats 200 in 469ms (next.js: 183ms, proxy.ts: 113ms, application-code: 174ms)
+ GET / 200 in 956ms (next.js: 358ms, proxy.ts: 311ms, application-code: 287ms)
+ GET /stats 200 in 612ms (next.js: 463ms, proxy.ts: 14ms, application-code: 135ms)
+ GET / 200 in 148ms (next.js: 6ms, proxy.ts: 67ms, application-code: 75ms)
+✓ Compiled in 626ms
+ GET / 200 in 810ms (next.js: 256ms, proxy.ts: 131ms, application-code: 423ms)
+ GET /stats 200 in 899ms (next.js: 183ms, proxy.ts: 377ms, application-code: 339ms)
+ GET /stats 200 in 262ms (next.js: 13ms, proxy.ts: 39ms, application-code: 209ms)
+ GET / 200 in 480ms (next.js: 173ms, proxy.ts: 242ms, application-code: 64ms)
+✓ Compiled in 666ms
+ GET /stats 200 in 870ms (next.js: 205ms, proxy.ts: 75ms, application-code: 590ms)
+ GET / 200 in 899ms (next.js: 495ms, proxy.ts: 23ms, application-code: 381ms)
+ GET /stats 200 in 600ms (next.js: 16ms, proxy.ts: 412ms, application-code: 172ms)
+ GET / 200 in 200ms (next.js: 16ms, proxy.ts: 81ms, application-code: 104ms)
+ GET /api/health/steps?date=2026-08-17 200 in 120ms (next.js: 81ms, proxy.ts: 15ms, application-code: 25ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 190ms (next.js: 156ms, proxy.ts: 13ms, application-code: 21ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 22ms (next.js: 8ms, proxy.ts: 7ms, application-code: 8ms)
+ GET /api/today?date=2026-08-17 200 in 905ms (next.js: 67ms, proxy.ts: 13ms, application-code: 825ms)
+ GET /api/today?date=2026-08-17 200 in 28ms (next.js: 4ms, proxy.ts: 11ms, application-code: 14ms)
+ GET /api/chapter 200 in 73ms (next.js: 46ms, proxy.ts: 19ms, application-code: 8ms)
+ GET /api/log?before=2026-08-17 200 in 138ms (next.js: 108ms, proxy.ts: 15ms, application-code: 15ms)
+ GET /api/chapter 200 in 73ms (next.js: 40ms, proxy.ts: 22ms, application-code: 11ms)
+ GET /api/log?before=2026-08-17 200 in 79ms (next.js: 48ms, proxy.ts: 20ms, application-code: 11ms)
+ GET /stats 200 in 1601ms (next.js: 339ms, proxy.ts: 338ms, application-code: 924ms)
+ GET /api/goals 200 in 161ms (next.js: 98ms, proxy.ts: 40ms, application-code: 23ms)
+ GET /api/tasks?all=1 200 in 312ms (next.js: 256ms, proxy.ts: 44ms, application-code: 11ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 404ms (next.js: 110ms, proxy.ts: 283ms, application-code: 11ms)
+ GET /api/rings?date=2026-08-17 200 in 1129ms (next.js: 198ms, proxy.ts: 37ms, application-code: 894ms)
+ GET /api/today?date=2026-08-17 200 in 1118ms (next.js: 293ms, proxy.ts: 52ms, application-code: 773ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 1253ms (next.js: 185ms, proxy.ts: 283ms, application-code: 785ms)
+ GET /api/today?date=2026-08-17 200 in 40ms (next.js: 9ms, proxy.ts: 14ms, application-code: 17ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 50ms (next.js: 9ms, proxy.ts: 33ms, application-code: 8ms)
+ GET /api/today?date=2026-08-17 200 in 64ms (next.js: 8ms, proxy.ts: 26ms, application-code: 29ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 65ms (next.js: 7ms, proxy.ts: 45ms, application-code: 14ms)
+ GET /api/chapter 200 in 99ms (next.js: 70ms, proxy.ts: 22ms, application-code: 8ms)
+ GET /api/log?before=2026-08-17 200 in 173ms (next.js: 66ms, proxy.ts: 86ms, application-code: 22ms)
+ GET /api/chapter 200 in 165ms (next.js: 25ms, proxy.ts: 123ms, application-code: 16ms)
+ GET /api/log?before=2026-08-17 200 in 76ms (next.js: 37ms, proxy.ts: 29ms, application-code: 10ms)
+ GET /api/pillars 200 in 839ms (next.js: 804ms, proxy.ts: 23ms, application-code: 12ms)
+ GET /api/pillars 200 in 21ms (next.js: 5ms, proxy.ts: 8ms, application-code: 8ms)
+✓ Compiled in 833ms
+ GET /stats 200 in 676ms (next.js: 297ms, proxy.ts: 201ms, application-code: 178ms)
+ GET /stats 200 in 193ms (next.js: 7ms, proxy.ts: 13ms, application-code: 173ms)
+✓ Compiled in 770ms
+ GET /api/pillars 200 in 137ms (next.js: 46ms, proxy.ts: 76ms, application-code: 15ms)
+ GET /api/log?before=2026-08-17 200 in 219ms (next.js: 131ms, proxy.ts: 76ms, application-code: 12ms)
+ GET /api/chapter 200 in 329ms (next.js: 241ms, proxy.ts: 76ms, application-code: 11ms)
+ GET /stats 200 in 780ms (next.js: 181ms, proxy.ts: 128ms, application-code: 471ms)
+ GET /stats 200 in 365ms (next.js: 238ms, proxy.ts: 76ms, application-code: 51ms)
+✓ Compiled in 484ms
+ GET /api/chapter 200 in 372ms (next.js: 72ms, proxy.ts: 284ms, application-code: 16ms)
+ GET /api/pillars 200 in 402ms (next.js: 108ms, proxy.ts: 286ms, application-code: 7ms)
+ GET /api/log?before=2026-08-17 200 in 188ms (next.js: 141ms, proxy.ts: 37ms, application-code: 10ms)
+ GET /stats 200 in 635ms (next.js: 187ms, proxy.ts: 124ms, application-code: 324ms)
+ GET /stats 200 in 227ms (next.js: 54ms, proxy.ts: 131ms, application-code: 43ms)
+✓ Compiled in 657ms
+ GET /stats 200 in 469ms (next.js: 180ms, proxy.ts: 109ms, application-code: 181ms)
+ GET /stats 200 in 88ms (next.js: 9ms, proxy.ts: 23ms, application-code: 56ms)
+✓ Compiled in 549ms
+ GET /stats 200 in 407ms (next.js: 167ms, proxy.ts: 113ms, application-code: 127ms)
+ GET /stats 200 in 233ms (next.js: 43ms, proxy.ts: 12ms, application-code: 178ms)
+✓ Compiled in 475ms
+ GET /stats 200 in 332ms (next.js: 122ms, proxy.ts: 90ms, application-code: 120ms)
+ GET /stats 200 in 59ms (next.js: 5ms, proxy.ts: 9ms, application-code: 44ms)
+✓ Compiled in 395ms
+ GET /stats 200 in 359ms (next.js: 166ms, proxy.ts: 106ms, application-code: 88ms)
+ GET /stats 200 in 88ms (next.js: 9ms, proxy.ts: 12ms, application-code: 67ms)
+✓ Compiled in 304ms
+ GET /stats 200 in 520ms (next.js: 172ms, proxy.ts: 102ms, application-code: 245ms)
+ GET /stats 200 in 113ms (next.js: 5ms, proxy.ts: 48ms, application-code: 60ms)
+ GET / 200 in 1448ms (next.js: 370ms, proxy.ts: 19ms, application-code: 1059ms)
+ GET /api/chapter 200 in 152ms (next.js: 82ms, proxy.ts: 50ms, application-code: 20ms)
+ GET /api/adherence?days=9&center=2026-08-17 200 in 698ms (next.js: 169ms, proxy.ts: 51ms, application-code: 478ms)
+ GET /api/adherence?days=7&to=2026-08-17 200 in 953ms (next.js: 203ms, proxy.ts: 39ms, application-code: 710ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 995ms (next.js: 185ms, proxy.ts: 40ms, application-code: 769ms)
+ GET /api/rings?date=2026-08-17 200 in 1016ms (next.js: 260ms, proxy.ts: 37ms, application-code: 718ms)
+ GET /api/rings?date=2026-08-17 200 in 95ms (next.js: 25ms, proxy.ts: 51ms, application-code: 19ms)
+ GET /api/goals 200 in 158ms (next.js: 96ms, proxy.ts: 51ms, application-code: 11ms)
+ GET /api/tasks?all=1 200 in 225ms (next.js: 164ms, proxy.ts: 50ms, application-code: 10ms)
+ GET /api/today?date=2026-08-17 200 in 365ms (next.js: 265ms, proxy.ts: 49ms, application-code: 51ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 507ms (next.js: 443ms, proxy.ts: 43ms, application-code: 21ms)
+ GET /api/rings?date=2026-08-17 200 in 204ms (next.js: 55ms, proxy.ts: 109ms, application-code: 39ms)
+ GET /api/goals 200 in 216ms (next.js: 98ms, proxy.ts: 110ms, application-code: 7ms)
+ GET /api/tasks?all=1 200 in 229ms (next.js: 109ms, proxy.ts: 107ms, application-code: 13ms)
+ GET /api/today?date=2026-08-17 200 in 258ms (next.js: 132ms, proxy.ts: 105ms, application-code: 21ms)
+ GET /api/trends?days=30&to=2026-08-17 200 in 238ms (next.js: 123ms, proxy.ts: 94ms, application-code: 21ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 935ms (next.js: 319ms, proxy.ts: 48ms, application-code: 568ms)
+ GET /api/adherence?days=30&to=2026-08-17 200 in 69ms (next.js: 8ms, proxy.ts: 7ms, application-code: 54ms)
+ GET /api/today?date=2026-08-17 200 in 35ms (next.js: 12ms, proxy.ts: 9ms, application-code: 14ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 54ms (next.js: 13ms, proxy.ts: 32ms, application-code: 9ms)
+ GET /api/today?date=2026-08-17 200 in 58ms (next.js: 12ms, proxy.ts: 32ms, application-code: 13ms)
+ GET /api/trends?days=366&to=2026-08-17 200 in 52ms (next.js: 5ms, proxy.ts: 32ms, application-code: 14ms)
+ GET /api/chapter 200 in 33ms (next.js: 10ms, proxy.ts: 18ms, application-code: 5ms)
+ GET /api/pillars 200 in 60ms (next.js: 36ms, proxy.ts: 19ms, application-code: 5ms)
+ GET /api/log?before=2026-08-17 200 in 103ms (next.js: 74ms, proxy.ts: 18ms, application-code: 12ms)
+ GET /api/log?before=2026-08-17 200 in 178ms (next.js: 110ms, proxy.ts: 57ms, application-code: 12ms)
+ GET /api/pillars 200 in 217ms (next.js: 126ms, proxy.ts: 84ms, application-code: 7ms)
+ GET /api/chapter 200 in 228ms (next.js: 137ms, proxy.ts: 84ms, application-code: 7ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 45ms (next.js: 9ms, proxy.ts: 10ms, application-code: 26ms)
+ GET /api/adherence?days=14&to=2026-08-17 200 in 62ms (next.js: 5ms, proxy.ts: 13ms, application-code: 45ms)
