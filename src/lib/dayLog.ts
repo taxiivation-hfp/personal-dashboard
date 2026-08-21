@@ -17,7 +17,13 @@
 // the merge and the ordering, which is the part with rules in it.
 
 /** What a single written thing IS. The discriminator every consumer switches on. */
-export type LogKind = "journal" | "gym" | "skill" | "outreach" | "drift";
+export type LogKind =
+  | "journal"
+  | "gym"
+  | "skill"
+  | "outreach"
+  | "reading"
+  | "drift";
 
 export type LogEntry = {
   kind: LogKind;
@@ -50,8 +56,10 @@ export type LogDay = { date: string; entries: LogEntry[] };
  *
  * The journal leads because it is the only entry that is about the day AS A WHOLE — the
  * others are about a thing that happened during it. Sessions follow in the order the body
- * did them. Drift reasons come last because they are the smallest and the most incidental:
- * a line explaining why an afternoon went elsewhere is a footnote to a day, not its opening.
+ * did them; the two document habits after them, outreach before reading because that is
+ * the checklist's own order. Drift reasons come last because they are the smallest and the
+ * most incidental: a line explaining why an afternoon went elsewhere is a footnote to a
+ * day, not its opening.
  *
  * This is the ONLY place that order is decided. A screen sorting these itself would be a
  * second opinion about the same day.
@@ -61,7 +69,8 @@ const ORDER: Record<LogKind, number> = {
   gym: 1,
   skill: 2,
   outreach: 3,
-  drift: 4,
+  reading: 4,
+  drift: 5,
 };
 
 /**

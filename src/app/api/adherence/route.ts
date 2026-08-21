@@ -90,6 +90,21 @@ export async function GET(req: Request) {
       ticksByDate.get(d)!.add(Number(r.habit_id));
     }
 
+    // One-off non-negotiables join their day's tally — the same items getDayView counts,
+    // read here too so the strip and the hero can never disagree about a day.
+    const oneOffRows = await db.execute({
+      sql: "SELECT date, done FROM one_off_habits WHERE date BETWEEN ? AND ?",
+      args: [start, end],
+    });
+    const oneOffsByDate = new Map<string, { scheduled: number; done: number }>();
+    for (const r of oneOffRows.rows) {
+      const d = String(r.date);
+      const cur = oneOffsByDate.get(d) ?? { scheduled: 0, done: 0 };
+      cur.scheduled++;
+      if (Number(r.done)) cur.done++;
+      oneOffsByDate.set(d, cur);
+    }
+
     // NO day titles here. The strip used to carry them so the days ahead could be named
     // inline; it ends on today now and names none of them, so the query lost its consumer —
     // and this route is fetched four times a page load (Today, CalendarColumn, Stats,
@@ -145,7 +160,12 @@ export async function GET(req: Request) {
       const scheduled = activeHabits.filter((h) => (h.mask & bit) !== 0);
       const ticked = ticksByDate.get(d) ?? new Set<number>();
       const habitsDone = scheduled.filter((h) => ticked.has(h.id)).length;
-      const tally = habitTallyFor(d, scheduled.length, habitsDone);
+      const oo = oneOffsByDate.get(d) ?? { scheduled: 0, done: 0 };
+      const tally = habitTallyFor(
+        d,
+        scheduled.length + oo.scheduled,
+        habitsDone + oo.done,
+      );
 
       /**
        * The productivity score — hours SPENT, never results produced. See CLAUDE.md's
@@ -171,6 +191,10 @@ export async function GET(req: Request) {
               state: b.state,
               workedFraction: b.workedFraction,
             })),
+            // STANDING ticks only — one-off non-negotiables feed adherence and nothing
+            // else, the owner's ask stated literally ("counts towards tomorrow's
+            // adherence"). Keeping them out of the score also keeps /api/productivity's
+            // breakdown agreeing with this bar without a third reader of the new table.
             habitsDone,
             calories: calByDate.get(d) ?? null,
             workouts: gymByDate.get(d) ?? 0,

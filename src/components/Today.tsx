@@ -161,6 +161,42 @@ const STEPS_SETTLE_MS = 2_500;
 const NUM_FIELD =
   "w-[3rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-small tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]";
 
+/**
+ * The non-negotiables whose row IS a logger — one control, the owner's ruling 2026-08-21.
+ * Tapping the row opens the document; saving is what ticks, and unticking lives inside the
+ * dialog. Keyed by system_key so a rename changes nothing. `pagesLabel` turns on the
+ * quantity field — reading logs how much as well as what it left behind.
+ *
+ * The Journal row deliberately is NOT here: a page IS its document, and its row opens the
+ * page chooser instead.
+ */
+const DOC_HABITS: Record<string, { placeholder: string; pagesLabel?: string }> =
+  {
+    outreach: { placeholder: "Who did you reach out to, and what about?" },
+    reading: {
+      placeholder: "What did you read — and what did it leave you with?",
+      pagesLabel: "Pages read",
+    },
+  };
+
+/**
+ * A row's streak, printed as the quiet fact it is: tabular, muted, and NOTHING at zero —
+ * a row that greets an off week with "0" is a row that scolds, and a list that scolds is
+ * a list you stop ticking honestly. No flame, no badge, no "don't break it".
+ */
+function StreakMark({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]"
+      title={`${count} day${count === 1 ? "" : "s"} in a row`}
+      aria-label={`${count} day${count === 1 ? "" : "s"} in a row`}
+    >
+      {count}d
+    </span>
+  );
+}
+
 export default function Today({
   initial,
   today: serverToday,
@@ -562,13 +598,42 @@ export default function Today({
   }
 
   /** The document behind a non-negotiable. Writing it ticks the day server-side, so the
-   *  refresh below picks up both the note and the tick in one read. */
-  async function saveHabitNote(id: number, note: string | null) {
-    await fetch("/api/habits/log", {
+   *  refresh below picks up both the note and the tick in one read. `pages` travels only
+   *  when the dialog owns a pages field — see /api/habits/log. */
+  async function saveHabitNote(
+    id: number,
+    note: string | null,
+    pages?: number | null,
+  ) {
+    const r = await fetch("/api/habits/log", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ habit_id: id, date: data.date, note }),
+      body: JSON.stringify({
+        habit_id: id,
+        date: data.date,
+        note,
+        ...(pages !== undefined ? { pages } : {}),
+      }),
     });
+    // THROWS on a save that did not land, and that is load-bearing: the dialog closes
+    // itself when this resolves, and closing over a 4xx would discard the only copy of
+    // the words while looking exactly like success. NoteLog catches this and stays open.
+    if (!r.ok) {
+      const b = await r.json().catch(() => null);
+      throw new Error(
+        typeof b?.error === "string" ? b.error : "could not save",
+      );
+    }
+    refresh();
+  }
+
+  /** Tick or untick a one-off non-negotiable. The row knows its own day. */
+  async function toggleOneOff(id: number, done: boolean) {
+    await fetch("/api/habits/one-off", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, done }),
+    }).catch(() => {});
     refresh();
   }
 
@@ -946,6 +1011,11 @@ export default function Today({
                         {h.name}
                       </label>
                     )}
+                    {/* The run, before the field — a fact about the row, not about the
+                        number being typed. Only on a live day: the days you step back to
+                        are precisely the unmarked ones, the same reason the app-wide
+                        streak hides off today. */}
+                    {back === 0 && <StreakMark count={h.streak} />}
                     {/* A value written on a line, not typed into a chip. The underline is
                         the field; it darkens on focus rather than growing a box. */}
                     <span className="flex shrink-0 items-baseline gap-1">
@@ -981,46 +1051,71 @@ export default function Today({
                 >
                   <button
                     onClick={() =>
-                      // The journal is not a thing you tick, it is a thing you write. Its
-                      // row opens the page picker instead of toggling, and the tick follows
-                      // from saving a page — the only honest signal that one exists.
+                      // Two rows are not ticked, they are WRITTEN. The journal's opens the
+                      // page picker — a page existing is what ticks it. A document habit
+                      // (outreach, reading) opens its logger: ONE control, the owner's
+                      // ruling, replacing the tick-plus-side-button pair — saving is what
+                      // ticks, and unticking lives inside the dialog it opens.
                       h.system_key === "journal"
                         ? setJournalPrompt(true)
-                        : toggleHabit(h.id, !h.done)
+                        : h.system_key != null && DOC_HABITS[h.system_key]
+                          ? setNoteHabit(h.id)
+                          : toggleHabit(h.id, !h.done)
                     }
                     aria-pressed={
-                      h.system_key === "journal" ? undefined : h.done
+                      h.system_key === "journal" ||
+                      (h.system_key != null && DOC_HABITS[h.system_key])
+                        ? undefined
+                        : h.done
+                    }
+                    aria-haspopup={
+                      h.system_key != null && DOC_HABITS[h.system_key]
+                        ? "dialog"
+                        : undefined
                     }
                     className="-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
                   >
                     <HabitBox done={h.done} tone={habitTone(h.pillar)} />
                     <span
-                      className={`min-w-0 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                      className={`min-w-0 flex-1 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
                     >
                       {h.name}
                     </span>
+                    {/* The run, at the row's far edge. A fact, not a mechanic — see
+                        StreakMark — and only on a live day, for the app-wide streak's own
+                        reason: the days you step back to are the unmarked ones. */}
+                    {back === 0 && <StreakMark count={h.streak} />}
                   </button>
-                  {/* OUTREACH CARRIES A DOCUMENT, and it sits BESIDE the tick rather than
-                      replacing it — the owner asked for a logger "as well". The row still
-                      ticks in one tap on a day you did it and have nothing to say; this is
-                      the way in when you do. Same shape as the Weight row, where the field
-                      logs and the name opens the trend.
-
-                      The Journal row deliberately does NOT get one of these: a journal page
-                      IS the document, and a note about it would be a second diary. */}
-                  {h.system_key === "outreach" && (
-                    <button
-                      type="button"
-                      onClick={() => setNoteHabit(h.id)}
-                      aria-haspopup="dialog"
-                      className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                    >
-                      {h.note ? "note" : "log"}
-                    </button>
-                  )}
                 </li>
               ),
             )}
+
+            {/* ONE-OFF NON-NEGOTIABLES — "Tomorrow, specifically", arrived. Items of this
+                day's checklist and its tally exactly like the standing ones; what differs
+                is only that they exist on this one date, which the quiet suffix says.
+                Accent, not a pillar hue — a one-off belongs to the day, not to a pillar. */}
+            {data.oneOffs.map((o) => (
+              <li
+                key={`${data.date}-o${o.id}`}
+                className={`${CHECK_ROW} flex items-center gap-2`}
+              >
+                <button
+                  onClick={() => toggleOneOff(o.id, !o.done)}
+                  aria-pressed={o.done}
+                  className="-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+                >
+                  <HabitBox done={o.done} tone="var(--color-accent)" />
+                  <span
+                    className={`min-w-0 flex-1 font-serif text-small leading-snug ${o.done ? "text-[var(--color-muted)]" : ""}`}
+                  >
+                    {o.title}
+                  </span>
+                  <span className="shrink-0 text-micro text-[var(--color-muted)]">
+                    one-off
+                  </span>
+                </button>
+              </li>
+            ))}
 
             {/* CALORIES. A row of the checklist like any other, with the running total
                 where a tick would be — because a total IS the state here, and a box you
@@ -1031,6 +1126,10 @@ export default function Today({
                 today={today}
                 calories={data.calories}
                 entries={data.calorieEntries}
+                // The LOG streak — days the total reached 2,000, deliberately below the
+                // 2,500 floor: it counts logging the day, not eating enough. Hidden off
+                // today with every other streak.
+                streak={back === 0 ? data.calorieStreak : 0}
                 onChanged={refresh}
               />
             </li>
@@ -1108,7 +1207,7 @@ export default function Today({
               </div>
             </li>
 
-            {data.habits.length === 0 && (
+            {data.habits.length === 0 && data.oneOffs.length === 0 && (
               <li className="py-2.5 text-small leading-relaxed text-[var(--color-muted)]">
                 Nothing set for {back === 0 ? "today" : shortDay(data.date)}.{" "}
                 <Link
@@ -1499,6 +1598,9 @@ export default function Today({
         (() => {
           const h = data.habits.find((x) => x.id === noteHabit);
           if (!h) return null;
+          const cfg = DOC_HABITS[h.system_key ?? ""] ?? {
+            placeholder: "What happened?",
+          };
           return (
             <NoteLog
               key={`${data.date}-${h.id}`}
@@ -1506,9 +1608,22 @@ export default function Today({
               date={data.date}
               note={h.note}
               hue={habitTone(h.pillar)}
-              onSave={async (note) => {
-                await saveHabitNote(h.id, note);
+              done={h.done}
+              // value 1 is a bare tick, not "one page" — see setHabitNote. Above 1 it is
+              // a number someone typed, so it seeds the field.
+              pages={cfg.pagesLabel ? h.value : null}
+              pagesLabel={cfg.pagesLabel}
+              placeholder={cfg.placeholder}
+              onSave={async (note, pages) => {
+                await saveHabitNote(h.id, note, pages);
               }}
+              onUntick={
+                h.done
+                  ? async () => {
+                      await toggleHabit(h.id, false);
+                    }
+                  : undefined
+              }
               onClose={() => setNoteHabit(null)}
             />
           );

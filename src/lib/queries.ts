@@ -17,6 +17,7 @@ import { addDays, daysBetween } from "./dates";
 import { deriveWeights } from "./goals";
 import { METRICS, WINDOW_DAYS, type RawCount, type PillarKey } from "./rings";
 import { carriedDays, tasksFor, type DayTask } from "./tasks";
+import { CALORIE_STREAK_FLOOR, streakEnding } from "./streaks";
 import { workedFraction } from "./worked";
 
 // PillarKey now lives in rings.ts, which must stay import-free to be testable under
@@ -59,6 +60,14 @@ export type HabitView = {
    * day you did it and said nothing about it, and that stays a perfectly good tick.
    */
   note: string | null;
+  /**
+   * Consecutive days this item was done, ending on the day being viewed — a plain count,
+   * a fact and never a mechanic, same standing as the app-wide streak. Days the item is
+   * not scheduled neither count nor break (see streaks.ts). 0 where it has no run, or on
+   * the editor's dateless roster; the screen draws 0 as NOTHING, because a row that
+   * greets an off week with "0" is a row that scolds.
+   */
+  streak: number;
 };
 
 export type SubgoalView = {
@@ -172,6 +181,17 @@ export type DayView = {
    * already ruled out once for the gym.
    */
   tasks: DayTaskView[];
+  /**
+   * One-off non-negotiables belonging to THIS day. Unlike `tasks` above, these ARE in
+   * `adherence` — each is one more item of the habit share, added the evening before so
+   * the denominator is still a thing the morning knew. See one_off_habits.
+   */
+  oneOffs: OneOffHabitView[];
+  /**
+   * Consecutive days the food log reached CALORIE_STREAK_FLOOR (2,000), ending on this
+   * day. The LOG streak, deliberately not the 2,500 eating floor — see streaks.ts.
+   */
+  calorieStreak: number;
   pillars: PillarView[];
 };
 
@@ -558,30 +578,118 @@ export async function habitsForDate(
     unit: str(h.unit),
     value: h.v == null ? null : Number(h.v),
     note: str(h.note),
+    // Filled in by getDayView, which holds the whole-history read a streak needs. This
+    // function answers "what is on the list today", and a per-row default of 0 keeps that
+    // question cheap for the callers that never print a streak.
+    streak: 0,
   }));
 }
 
-/** The raw overrides for one date, keyed by habit id — the editor needs to know which
- *  fields are actually overridden, which the COALESCEd view above cannot say. */
-export async function habitOverridesFor(
+// habitOverridesFor is gone with the override editor (owner's ruling, 2026-08-21). The
+// COALESCE read in habitsForDate stays, so days dressed while the feature lived read back
+// as they were worn.
+
+/**
+ * Each habit's streak ending at `anchor`: consecutive scheduled days with an entry.
+ *
+ * "Has an entry" mirrors habitsForDate's `done` (an entry exists) rather than the rings'
+ * `value > 0` guard, deliberately — the number beside a row and the tick in its box must
+ * never disagree about the same day.
+ *
+ * One query for the whole list, whole history: a single-user table of text dates, read
+ * once per day view. `grace` is passed through to streaks.ts — true only when the anchor
+ * is the real today, so a pending morning shows the run it is about to extend while a
+ * past day's record stays exactly what it was.
+ */
+async function habitStreaksFor(
   db: Client,
-  date: string,
-): Promise<Map<number, { name: string | null; pillar: PillarKey | null }>> {
-  const { byId } = await pillarMaps(db);
+  habits: HabitView[],
+  anchor: string,
+  grace: boolean,
+): Promise<Map<number, number>> {
+  if (!habits.length) return new Map();
+  const ids = habits.map((h) => h.id);
   const r = await db.execute({
-    sql: "SELECT habit_id, name, pillar_id FROM habit_overrides WHERE date=?",
-    args: [date],
+    sql: `SELECT habit_id, date FROM habit_entries
+          WHERE date <= ? AND habit_id IN (${ids.map(() => "?").join(",")})`,
+    args: [anchor, ...ids],
   });
+  const earned = new Map<number, Set<string>>();
+  for (const x of r.rows) {
+    const id = num(x.habit_id);
+    if (!earned.has(id)) earned.set(id, new Set());
+    earned.get(id)!.add(String(x.date));
+  }
   return new Map(
-    r.rows.map((x) => [
-      num(x.habit_id),
-      {
-        name: x.name == null ? null : String(x.name),
-        pillar:
-          x.pillar_id == null ? null : (byId.get(num(x.pillar_id)) ?? null),
-      },
+    habits.map((h) => [
+      h.id,
+      streakEnding(anchor, earned.get(h.id) ?? new Set(), {
+        scheduledOn: (d) => (h.days_mask & weekdayBit(d)) !== 0,
+        grace,
+      }),
     ]),
   );
+}
+
+/**
+ * The FOOD-LOG streak: consecutive days whose logged total reached
+ * CALORIE_STREAK_FLOOR (2,000) — "did you log the day", deliberately not the 2,500
+ * eating floor. See the constant's own comment in streaks.ts.
+ */
+async function calorieStreakFor(
+  db: Client,
+  anchor: string,
+  grace: boolean,
+): Promise<number> {
+  const r = await db.execute({
+    sql: `SELECT date FROM calorie_entries WHERE date <= ?
+          GROUP BY date HAVING SUM(kcal) >= ?`,
+    args: [anchor, CALORIE_STREAK_FLOOR],
+  });
+  return streakEnding(anchor, new Set(r.rows.map((x) => String(x.date))), {
+    grace,
+  });
+}
+
+/** A one-off non-negotiable, as its day's checklist needs it. See one_off_habits. */
+export type OneOffHabitView = {
+  id: number;
+  date: string;
+  title: string;
+  done: boolean;
+};
+
+const oneOffOf = (x: Record<string, unknown>): OneOffHabitView => ({
+  id: num(x.id),
+  date: String(x.date),
+  title: String(x.title),
+  done: num(x.done) === 1,
+});
+
+/** The one-offs belonging to ONE day — they join that day's checklist and tally. */
+export async function oneOffHabitsFor(
+  db: Client,
+  date: string,
+): Promise<OneOffHabitView[]> {
+  const r = await db.execute({
+    sql: "SELECT id,date,title,done FROM one_off_habits WHERE date=? ORDER BY id",
+    args: [date],
+  });
+  return r.rows.map(oneOffOf);
+}
+
+/** Every one-off still AHEAD — the planning list on /habits. Days already lived are not
+ *  listed there (their day's own screen is where they are ticked), and only these can be
+ *  removed at all — see engine.deleteOneOffHabit. */
+export async function upcomingOneOffHabits(
+  db: Client,
+  today: string,
+): Promise<OneOffHabitView[]> {
+  const r = await db.execute({
+    sql: "SELECT id,date,title,done FROM one_off_habits WHERE date > ? ORDER BY date, id",
+    args: [today],
+  });
+  return r.rows.map(oneOffOf);
 }
 
 /** Every habit, for the editor — including ones not scheduled today. */
@@ -595,15 +703,16 @@ export async function allHabits(db: Client): Promise<HabitView[]> {
     name: String(h.name),
     pillar: h.pillar_id == null ? null : (byId.get(num(h.pillar_id)) ?? null),
     days_mask: num(h.days_mask),
-    // The EDITOR's view: the roster, not a day. `done`, `value` and `note` are all facts
-    // about a specific date and there is no date here, so they are stated as absent rather
-    // than guessed at.
+    // The EDITOR's view: the roster, not a day. `done`, `value`, `note` and `streak` are
+    // all facts about a specific date and there is no date here, so they are stated as
+    // absent rather than guessed at.
     done: false,
     system_key: str(h.system_key),
     input: (str(h.input) ?? "check") as "check" | "number",
     unit: str(h.unit),
     value: null,
     note: null,
+    streak: 0,
   }));
 }
 
@@ -616,8 +725,23 @@ export async function getDayView(
   const marks = await loadMarks(db, date);
   const blocks = buildBlocks(date, events, marks);
 
-  const habits = await habitsForDate(db, date);
+  const habitsOnly = await habitsForDate(db, date);
   const pillars = await getPillars(db);
+
+  const today = todayISO();
+  // Grace only on the REAL today: a pending morning shows the run it is about to extend,
+  // while a past day's record stays exactly what it was. (The screen only prints streaks
+  // on a live day anyway — this keeps the data honest wherever else it is read.)
+  const grace = date === today;
+  const streaks = await habitStreaksFor(db, habitsOnly, date, grace);
+  const habits = habitsOnly.map((h) => ({
+    ...h,
+    streak: streaks.get(h.id) ?? 0,
+  }));
+  const calorieStreak = await calorieStreakFor(db, date, grace);
+
+  // The day's one-off non-negotiables — items of this day's checklist AND its tally.
+  const oneOffs = await oneOffHabitsFor(db, date);
 
   // Read BEFORE the adherence maths, because both now feed it: the two floors are two
   // more items of the habit share, earned fractionally. The same values are returned on
@@ -635,11 +759,18 @@ export async function getDayView(
       ? num(health.rows[0]!.steps)
       : null;
 
-  // Non-negotiables join the rate, weighted equally with blocks — one item is one item.
+  // Non-negotiables join the rate, weighted equally with blocks — one item is one item,
+  // and a one-off scheduled for this day is one more of them. /api/adherence computes the
+  // same tally for the strip; the two must never disagree about a day.
   const cfg = await getAdherenceConfig(db);
   const adherence = adherenceFor(
     blocks,
-    habitTallyFor(date, habits.length, habits.filter((h) => h.done).length),
+    habitTallyFor(
+      date,
+      habits.length + oneOffs.length,
+      habits.filter((h) => h.done).length +
+        oneOffs.filter((o) => o.done).length,
+    ),
     { steps, calories: cal.total },
   );
 
@@ -678,10 +809,12 @@ export async function getDayView(
     calories: cal.total,
     calorieEntries: cal.entries,
     title: titles.get(date) ?? null,
-    // todayISO() rather than `date`: where a task SITS depends on the real today, not on
+    // `today` rather than `date`: where a task SITS depends on the real today, not on
     // the day being looked at. Passing `date` here would make a carrying task appear on
     // every future day anyone opened — the exact bug tasks.test.ts pins down.
-    tasks: await dayTasksFor(db, date, todayISO()),
+    tasks: await dayTasksFor(db, date, today),
+    oneOffs,
+    calorieStreak,
     pillars,
   };
 }
@@ -1018,7 +1151,7 @@ export async function logDays(
             UNION SELECT date FROM gym_sessions WHERE date <= ?
             UNION SELECT date FROM skill_time  WHERE date <= ?
             UNION SELECT e.date FROM habit_entries e JOIN habits h ON h.id = e.habit_id
-                   WHERE h.system_key = 'outreach' AND e.note IS NOT NULL AND e.date <= ?
+                   WHERE h.system_key IN ('outreach','reading') AND e.note IS NOT NULL AND e.date <= ?
             UNION SELECT date FROM block_marks
                    WHERE state = 'drifted' AND reason IS NOT NULL AND reason <> '' AND date <= ?
           ) ORDER BY date DESC LIMIT ?`,
@@ -1049,9 +1182,12 @@ export async function logDays(
       ...inSpan,
     }),
     db.execute({
-      sql: `SELECT e.id, e.date, e.note FROM habit_entries e
+      // Both DOCUMENT habits in one read — outreach and reading write the same shape
+      // (habit_entries.note), and the system_key travels so the loop below can file each
+      // under its own kind rather than guessing from the words.
+      sql: `SELECT e.id, e.date, e.note, h.system_key AS skey FROM habit_entries e
               JOIN habits h ON h.id = e.habit_id
-             WHERE h.system_key = 'outreach' AND e.note IS NOT NULL
+             WHERE h.system_key IN ('outreach','reading') AND e.note IS NOT NULL
                AND e.date BETWEEN ? AND ?`,
       ...inSpan,
     }),
@@ -1110,13 +1246,14 @@ export async function logDays(
   for (const r of outreach.rows) {
     if (!keep.has(String(r.date))) continue;
     const note = r.note == null ? null : String(r.note);
+    const kind = String(r.skey) === "reading" ? "reading" : "outreach";
     out.push({
-      kind: "outreach",
+      kind,
       id: num(r.id),
       date: String(r.date),
       title: firstLine(note),
       body: note,
-      meta: "outreach",
+      meta: kind,
     });
   }
   for (const r of drift.rows) {

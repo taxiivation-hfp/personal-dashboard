@@ -472,3 +472,28 @@ CREATE TABLE IF NOT EXISTS day_tasks (
 );
 CREATE INDEX IF NOT EXISTS idx_day_tasks_due ON day_tasks(due);
 CREATE INDEX IF NOT EXISTS idx_day_tasks_done_on ON day_tasks(done_on);
+
+-- A NON-NEGOTIABLE FOR ONE DAY — "Tomorrow, specifically", the owner's ruling 2026-08-21.
+--
+-- Not a habit (no weekday rule — it exists on exactly one date) and not a day_task (it
+-- never carries, and unlike a task it IS scored: it joins its day's habit tally, one more
+-- item of the even HABIT_SHARE split, counted in queries.getDayView and /api/adherence).
+--
+-- `date` is the one day it applies. The engine refuses to create one for today or the
+-- past — an item added to a day already being lived would grow that day's denominator
+-- mid-day, and (done+floors)/items can FALL when items grows, which is the one thing the
+-- climbing figure must never do. Added the evening before, it is part of the denominator
+-- the morning knows, exactly like the standing list.
+--
+-- Unticked after its day, it is simply an unearned share — the day ended where it got to.
+-- It stays tickable from that day's own screen (catching up), which is why `done` is a
+-- flag on the row rather than a habit_entries row: there is no habit for an entry to
+-- reference.
+CREATE TABLE IF NOT EXISTS one_off_habits (
+  id         INTEGER PRIMARY KEY,
+  date       TEXT NOT NULL CHECK (date GLOB '????-??-??'),
+  title      TEXT NOT NULL,
+  done       INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_one_off_habits_date ON one_off_habits(date);

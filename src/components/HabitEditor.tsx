@@ -3,27 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { addDays, todayISO } from "@/lib/dates";
-import type { HabitView, PillarKey } from "@/lib/queries";
+import { weekdayBit } from "@/lib/engine";
+import type { HabitView } from "@/lib/queries";
 
 const DAYS = ["M", "T", "W", "T", "F", "S", "S"]; // bit0=Mon … bit6=Sun
 const ALL = 127;
 
-/** The categories tomorrow's rows may be re-filed under. "None" keeps the accent tick. */
-const PILLAR_CHOICES: { key: PillarKey | ""; label: string }[] = [
-  { key: "", label: "None" },
-  { key: "social_capital", label: "Social" },
-  { key: "physical", label: "Physical" },
-  { key: "portfolio", label: "Portfolio" },
-];
-
-/** One row of tomorrow's checklist, as /api/habits/override reads it: the default, and
- *  whatever the owner has dressed it as for that one day. */
-type TomorrowHabit = {
+/** A one-off non-negotiable still ahead, as /api/habits/one-off returns it. */
+type OneOff = {
   id: number;
-  name: string;
-  pillar: PillarKey | null;
-  input: "check" | "number";
-  override: { name: string | null; pillar: PillarKey | null } | null;
+  date: string;
+  title: string;
 };
 
 /** An open one-off task, as /api/tasks returns it. */
@@ -34,13 +24,28 @@ type OpenTask = {
   carried: number;
 };
 
+/** "2026-08-23" -> "Sat 23 Aug", for the rare one-off sitting past tomorrow. Noon, never
+ *  midnight — a bare ISO date parses as UTC and lands on the day before west of
+ *  Greenwich. */
+const shortDay = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+
 export default function HabitEditor({ initial }: { initial: HabitView[] }) {
   const [habits, setHabits] = useState(initial);
   const [name, setName] = useState("");
-  /** Tomorrow's list with its overrides. null until the fetch lands. */
-  const [tomorrow, setTomorrow] = useState<TomorrowHabit[] | null>(null);
   const today = todayISO();
   const tomorrowDate = addDays(today, 1);
+  /** One-off non-negotiables still ahead. null until the fetch lands. */
+  const [oneOffs, setOneOffs] = useState<OneOff[] | null>(null);
+  const [oneOffTitle, setOneOffTitle] = useState("");
+  /** A one-off write that was refused, in the server's own words — said quietly in
+   *  muted ink and cleared by the next write that lands. The DELETE route 409s on
+   *  purpose ("the caller hears it rather than a silent ok"), so this caller hears it. */
+  const [oneOffError, setOneOffError] = useState<string | null>(null);
   /** Open one-off tasks. null until the fetch lands. */
   const [tasks, setTasks] = useState<OpenTask[] | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
@@ -52,6 +57,13 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
       .then((r) => r.json())
       .then((d) => !d.error && setTasks(d.tasks ?? []))
       .catch(() => setTasks([]));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/habits/one-off")
+      .then((r) => r.json())
+      .then((d) => !d.error && setOneOffs(d.oneOffs ?? []))
+      .catch(() => setOneOffs([]));
   }, []);
 
   /** Every task write hands back the open list, so one round trip does both jobs. */
@@ -75,51 +87,48 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
     });
   }
 
-  const loadTomorrow = () => {
-    fetch(`/api/habits/override?date=${tomorrowDate}`)
-      .then((r) => r.json())
-      .then((d) => !d.error && setTomorrow(d.habits ?? []))
-      .catch(() => setTomorrow([]));
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(loadTomorrow, [tomorrowDate]);
-
-  /** Write one habit's dressing for tomorrow. Name and pillar travel together — the
-   *  upsert replaces the whole override, so the current value of BOTH is always sent. */
-  async function override(
-    h: TomorrowHabit,
-    patch: { name?: string | null; pillar?: PillarKey | "" | null },
-  ) {
-    const nextName =
-      patch.name !== undefined ? patch.name : (h.override?.name ?? null);
-    const nextPillar =
-      patch.pillar !== undefined
-        ? patch.pillar || null
-        : (h.override?.pillar ?? null);
-    await fetch("/api/habits/override", {
-      method: "POST",
+  /** Same round-trip shape for the one-offs — every write returns the upcoming list.
+   *  True on success, so a caller can decide what to give up (the typed title, say)
+   *  only once the write has actually landed. */
+  async function oneOffCall(
+    init: RequestInit,
+    url = "/api/habits/one-off",
+  ): Promise<boolean> {
+    const d = await fetch(url, {
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        date: tomorrowDate,
-        habit_id: h.id,
-        // A value equal to the default is not an override — sending null keeps the row
-        // honest, so "reset" never prints beside a day that is just the default. (One
-        // consequence: a habit whose default HAS a pillar cannot be overridden to none
-        // for a day — the override table reads null as "no opinion", and a fourth state
-        // to say "explicitly nothing" is not worth a column until it is ever wanted.)
-        name: nextName && nextName !== h.name ? nextName : null,
-        pillar: nextPillar && nextPillar !== h.pillar ? nextPillar : null,
-      }),
-    }).catch(() => {});
-    loadTomorrow();
+      ...init,
+    })
+      .then((r) => r.json())
+      .catch(() => ({ error: "could not reach the server" }));
+    if (d.error) {
+      // Refused or unreachable — say so, and RE-READ the list rather than leave it
+      // stale: the commonest refusal is a row whose day arrived while this page sat
+      // open, and that row now belongs to Today's checklist, not to this planning list.
+      setOneOffError(
+        typeof d.error === "string" ? d.error : "that didn't save",
+      );
+      fetch("/api/habits/one-off")
+        .then((r) => r.json())
+        .then((x) => !x.error && setOneOffs(x.oneOffs ?? []))
+        .catch(() => {});
+      return false;
+    }
+    setOneOffError(null);
+    setOneOffs(d.oneOffs ?? []);
+    return true;
   }
 
-  async function resetOverride(h: TomorrowHabit) {
-    await fetch(
-      `/api/habits/override?date=${tomorrowDate}&habit_id=${h.id}`,
-      { method: "DELETE" },
-    ).catch(() => {});
-    loadTomorrow();
+  async function addOneOff() {
+    const t = oneOffTitle.trim();
+    if (!t) return;
+    // No date travels: this section is named after the one day it writes to, and the
+    // route defaults to tomorrow. The field clears only once the write has landed —
+    // clearing first would discard the owner's words on a refusal.
+    const ok = await oneOffCall({
+      method: "POST",
+      body: JSON.stringify({ title: t }),
+    });
+    if (ok) setOneOffTitle("");
   }
 
   async function reload() {
@@ -154,6 +163,11 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
     // Zero days would make it invisible everywhere with no way back from Today.
     patch({ id: h.id, days_mask: next === 0 ? h.days_mask : next });
   }
+
+  /** Tomorrow's standing checklist, read from the roster already on this screen — shown
+   *  so the addition below is made against what the day already holds. */
+  const tomorrowBit = weekdayBit(tomorrowDate);
+  const standingTomorrow = habits.filter((h) => h.days_mask & tomorrowBit);
 
   return (
     <main className="mx-auto w-full max-w-[46rem] px-6 pb-24 pt-12 sm:px-8">
@@ -254,104 +268,120 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
         </button>
       </div>
 
-      {/* TOMORROW, SPECIFICALLY. The defaults above stay the every-day truth; this dresses
-          single rows differently for ONE day — a different wording, a different pillar —
-          and the day after, everything is back to the default with nothing to undo. It is
-          the planning move the day-title makes, extended to the checklist: tomorrow is the
-          day you can still shape, so tomorrow is the one day this screen lets you shape. */}
+      {/* TOMORROW, SPECIFICALLY — reshaped by the owner's ruling, 2026-08-21. This used to
+          dress the STANDING rows differently for one day (a different name, a different
+          pillar); that edit surface is gone. What tomorrow takes now is an ADDITION: a
+          one-off non-negotiable, one more item of tomorrow's checklist and its adherence
+          tally, gone from the roster the day after. The standing list is printed read-only
+          so the addition is made against what the day already holds — here you add to
+          tomorrow, you never edit it.
+
+          Tomorrow and never today, and the engine enforces it: adherence divides by items
+          scheduled, so an item joining a day already being lived could make the climbing
+          figure FALL. Added tonight, it is part of what tomorrow morning already knows. */}
       <section className="mt-12">
         <div className="section-head">
           <h2 className="text-small font-semibold">Tomorrow, specifically</h2>
           <span className="text-micro text-[var(--color-muted)]">
-            one day only · back to the defaults after
+            one day only · counts toward tomorrow&apos;s adherence
           </span>
         </div>
 
-        {tomorrow == null && (
-          <p className="pt-3 text-small text-[var(--color-muted)]">Loading…</p>
-        )}
+        <p className="mt-3 max-w-[60ch] text-small leading-relaxed text-[var(--color-muted)]">
+          A non-negotiable for tomorrow alone. It joins tomorrow&apos;s
+          checklist as an equal item and is gone the day after — unlike a task
+          below, it never carries, and it is scored.
+        </p>
 
-        {tomorrow != null && tomorrow.length === 0 && (
-          <p className="pt-3 text-small text-[var(--color-muted)]">
-            Nothing is scheduled for tomorrow.
+        <div className="mt-4 flex items-end gap-4">
+          <input
+            value={oneOffTitle}
+            onChange={(e) => setOneOffTitle(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addOneOff()}
+            maxLength={120}
+            placeholder="Add one for tomorrow…"
+            className="min-w-0 flex-1 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 font-serif text-body outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+          />
+          <button
+            onClick={addOneOff}
+            disabled={!oneOffTitle.trim()}
+            className="shrink-0 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+
+        {/* A refused write, in the server's own words — muted, no red, no blame. */}
+        {oneOffError && (
+          <p className="pt-2 text-micro leading-relaxed text-[var(--color-muted)]">
+            {oneOffError}
           </p>
         )}
 
-        {tomorrow != null && tomorrow.length > 0 && (
-          <ul className="mt-1 divide-y divide-[var(--color-line)]">
-            {tomorrow.map((h) => {
-              const overridden = h.override != null;
-              return (
-                <li
-                  key={h.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3"
+        {oneOffs == null && (
+          <p className="pt-4 text-small text-[var(--color-muted)]">Loading…</p>
+        )}
+
+        {oneOffs != null && (
+          <ul className="mt-5 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+            {/* The standing items first, as plain facts — no fields, no selects. The word
+                "standing" is what says why there is no remove beside them: the roster
+                above is where the every-day list is shaped. */}
+            {standingTomorrow.map((h) => (
+              <li
+                key={`s${h.id}`}
+                className="flex items-center justify-between gap-3 py-3"
+              >
+                <span className="min-w-0 flex-1 font-serif text-body text-[var(--color-muted)]">
+                  {h.name}
+                </span>
+                <span className="shrink-0 text-micro text-[var(--color-muted)]">
+                  standing
+                </span>
+              </li>
+            ))}
+            {oneOffs.map((o) => (
+              <li key={o.id} className="flex items-center gap-3 py-3">
+                <span className="min-w-0 flex-1 font-serif text-body">
+                  {o.title}
+                </span>
+                {/* Only when it is NOT tomorrow's — the section is named after the day
+                    it writes to, so tomorrow needs no caption and any straggler does. */}
+                {o.date !== tomorrowDate && (
+                  <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                    {shortDay(o.date)}
+                  </span>
+                )}
+                <button
+                  onClick={() =>
+                    oneOffCall(
+                      { method: "DELETE" },
+                      `/api/habits/one-off?id=${o.id}`,
+                    )
+                  }
+                  className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
                 >
-                  {/* What tomorrow will SAY. Defaults to the override when set, else the
-                      every-day name — and writing the default back clears the override
-                      rather than storing a copy of it. */}
-                  <input
-                    key={`${h.id}-${h.override?.name ?? h.name}`}
-                    defaultValue={h.override?.name ?? h.name}
-                    onBlur={(e) => {
-                      const v = e.target.value.trim();
-                      if (v && v !== (h.override?.name ?? h.name))
-                        override(h, { name: v });
-                    }}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" && (e.target as HTMLInputElement).blur()
-                    }
-                    aria-label={`Tomorrow's wording for ${h.name}`}
-                    className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)]"
-                  />
-
-                  {/* The category, as the app's own word for it — a select, because four
-                      known choices are a setting, not writing. */}
-                  <select
-                    value={h.override?.pillar ?? h.pillar ?? ""}
-                    onChange={(e) =>
-                      override(h, {
-                        pillar: e.target.value as PillarKey | "",
-                      })
-                    }
-                    aria-label={`Tomorrow's pillar for ${h.name}`}
-                    className="shrink-0 border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-small outline-none transition-colors focus:border-[var(--color-accent)]"
-                  >
-                    {PILLAR_CHOICES.map((p) => (
-                      <option key={p.key} value={p.key}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* Only when something IS different — a reset beside an unchanged row
-                      would imply there was something to undo. */}
-                  {overridden ? (
-                    <button
-                      onClick={() => resetOverride(h)}
-                      className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                    >
-                      reset
-                    </button>
-                  ) : (
-                    <span className="shrink-0 text-micro text-[var(--color-muted)]">
-                      default
-                    </span>
-                  )}
-                </li>
-              );
-            })}
+                  remove
+                </button>
+              </li>
+            ))}
+            {standingTomorrow.length === 0 && oneOffs.length === 0 && (
+              <li className="py-3 text-small text-[var(--color-muted)]">
+                Nothing is on tomorrow&apos;s list yet.
+              </li>
+            )}
           </ul>
         )}
       </section>
 
       {/* ONE-OFF TASKS — the other half of "just tomorrow".
 
-          The section above dresses a STANDING non-negotiable differently for one day. This
-          adds something that exists on one day only and was never part of the standing list
-          at all: "book the physio", "email the supervisor". If it is not ticked it carries
-          forward until it is, so nothing has to be re-added and nothing quietly disappears.
+          The section above adds a SCORED item to one day's checklist. This adds something
+          that exists on one day only and was never part of any list at all: "book the
+          physio", "email the supervisor". If it is not ticked it carries forward until it
+          is, so nothing has to be re-added and nothing quietly disappears.
 
-          It is UNSCORED, and the note says so. The checklist's 30 points are split evenly
+          It is UNSCORED, and the note says so. The checklist's habit share is split evenly
           between the non-negotiables SCHEDULED for a day — a fixed denominator known each
           morning. A backlog joining it would make every other item worth less for reasons
           nothing you did today caused, which is the same argument that keeps the gym off
@@ -369,6 +399,7 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
             value={taskTitle}
             onChange={(e) => setTaskTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addTask()}
+            maxLength={120}
             placeholder="Add a task…"
             className="min-w-[12rem] flex-1 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 font-serif text-body outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
           />

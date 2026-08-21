@@ -29,6 +29,7 @@ test("within a day the journal leads and drift reasons trail", () => {
   // it. If this order ever inverts, the scroll opens every day on an explanation.
   const day = groupByDay([
     e({ kind: "drift", title: "Mandarin" }),
+    e({ kind: "reading", title: "Deep Work, ch. 2" }),
     e({ kind: "skill", title: "Piano" }),
     e({ kind: "journal", title: "A long Tuesday" }),
     e({ kind: "gym", title: "Push" }),
@@ -36,7 +37,7 @@ test("within a day the journal leads and drift reasons trail", () => {
   ])[0];
   assert.deepEqual(
     day.entries.map((x) => x.kind),
-    ["journal", "gym", "skill", "outreach", "drift"],
+    ["journal", "gym", "skill", "outreach", "reading", "drift"],
   );
 });
 

@@ -150,7 +150,7 @@ export async function setHabit(
 }
 
 /**
- * The DOCUMENT behind a non-negotiable — outreach, today.
+ * The DOCUMENT behind a non-negotiable — outreach and reading, today.
  *
  * SAVING IS LOGGING, exactly as it is for a workout or a skill session: writing the note
  * ticks the habit in the same statement, so there is no second "did it" toggle to forget.
@@ -159,7 +159,22 @@ export async function setHabit(
  * CLEARING THE NOTE DOES NOT UNTICK. The two are different acts — a tick with nothing
  * written is a day you did it and said nothing about it, which is a perfectly good tick, and
  * deleting a sentence you no longer like must not quietly retract the day. Unticking is what
- * setHabit is for.
+ * setHabit is for — reached from inside the same dialog now that the row's one control
+ * opens it, and nowhere else.
+ *
+ * `value` is A QUANTITY LOGGED WITH THE DOCUMENT — pages read, today. Three shapes on
+ * purpose, because two different callers must not disturb each other's writes:
+ *
+ *   undefined   not a quantity habit, or the caller has no opinion — the existing value
+ *               is left standing (raised to 1 if it was somehow lower). A note edit must
+ *               never eat a number.
+ *   null        the quantity was cleared: back to a bare tick (value 1). The tick stands,
+ *               same rule as the note.
+ *   a number    set it. Guarded to a sane range like setHabitValue — a stray keystroke
+ *               must not become a 70,000-page day in a record you later trust.
+ *
+ * KNOWN AND ACCEPTED: value 1 is ambiguous between "a bare tick" and "one page". The
+ * floor being ten pages, a one-page day is a curiosity, not a record worth a schema.
  *
  * One row per (habit, date) by the table's own UNIQUE constraint, which is the same per-day
  * shape the outreach metric counts in — see HabitView.note.
@@ -169,17 +184,36 @@ export async function setHabitNote(
   habitId: number,
   date: string,
   note: string | null,
+  value?: number | null,
 ): Promise<void> {
   const text = note == null || !note.trim() ? null : note.trim();
+  if (value === undefined) {
+    await db.execute({
+      sql: `INSERT INTO habit_entries (habit_id,date,value,note) VALUES (?,?,1,?)
+            ON CONFLICT(habit_id,date) DO UPDATE SET
+              note = excluded.note,
+              -- The tick is only ever RAISED here, never lowered: a row that already exists
+              -- was already a yes, and rewriting its note is not a statement about whether the
+              -- day happened.
+              value = MAX(habit_entries.value, 1)`,
+      args: [habitId, date, text],
+    });
+    return;
+  }
+  // Rounded FIRST, then floored at 1 — guard-then-round let 0.4 through as a stored 0,
+  // and a row that EXISTS with value 0 splits the readers: `done` counts entry-exists
+  // while the strip's tick read filters value > 0, so the hero and the strip would
+  // disagree about the same day. Nothing this function writes may be less than a tick.
+  const v =
+    value != null && Number.isFinite(value)
+      ? Math.min(10_000, Math.max(1, Math.round(value)))
+      : 1;
   await db.execute({
-    sql: `INSERT INTO habit_entries (habit_id,date,value,note) VALUES (?,?,1,?)
+    sql: `INSERT INTO habit_entries (habit_id,date,value,note) VALUES (?,?,?,?)
           ON CONFLICT(habit_id,date) DO UPDATE SET
             note = excluded.note,
-            -- The tick is only ever RAISED here, never lowered: a row that already exists
-            -- was already a yes, and rewriting its note is not a statement about whether the
-            -- day happened.
-            value = MAX(habit_entries.value, 1)`,
-    args: [habitId, date, text],
+            value = excluded.value`,
+    args: [habitId, date, v, text],
   });
 }
 
@@ -274,50 +308,69 @@ export async function deleteHabit(db: Client, id: number): Promise<void> {
   });
 }
 
+// HABIT OVERRIDES — the write path is GONE, by the owner's ruling (2026-08-21): "Tomorrow,
+// specifically" stopped being a place to edit the standing non-negotiables and became a
+// place to ADD a one-off one (below). The habit_overrides table and habitsForDate's
+// COALESCE read both stay, so every day that was dressed while the feature lived still
+// reads back wearing what it wore.
+
+// ---------------------------------------------------------------- one-off non-negotiables
+
 /**
- * Dress a habit differently for ONE date — a different name, a different pillar, or
- * both. The default row is never touched: this is an overlay, and clearing it (both
- * fields null, or clearHabitOverride) returns the day to the default with nothing to
- * undo. Upserted per (date, habit), so re-editing revises rather than stacks.
+ * A non-negotiable for ONE day — "Tomorrow, specifically". It joins its day's checklist
+ * beside the standing items and earns an equal share of HABIT_SHARE; see one_off_habits
+ * in the schema.
+ *
+ * THE DATE MUST BE AHEAD OF THE REAL TODAY, and this guard is the rule that makes the
+ * feature safe rather than a formality: adherence divides by items scheduled, so an item
+ * added to a day already being lived would grow the denominator mid-day and the figure
+ * could FALL — the one thing the climbing number must never do. Added the evening before,
+ * it is part of what the morning already knows, exactly like the standing list.
  */
-export async function setHabitOverride(
+export async function createOneOffHabit(
   db: Client,
-  date: string,
-  habitId: number,
-  o: { name?: string | null; pillarKey?: string | null },
+  o: { title: string; date: string },
+): Promise<number> {
+  const title = o.title.trim();
+  if (!title) throw new Error("a one-off non-negotiable needs a title");
+  if (o.date <= todayISO())
+    throw new Error("a one-off non-negotiable is added for a day ahead");
+  const r = await db.execute({
+    sql: "INSERT INTO one_off_habits (title, date) VALUES (?,?)",
+    args: [title, o.date],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+/** Tick or untick a one-off. Binary, exactly like the standing checklist — no states, no
+ *  reasons. The row already knows its day, so no date travels. */
+export async function setOneOffHabitDone(
+  db: Client,
+  id: number,
+  done: boolean,
 ): Promise<void> {
-  const name = o.name?.trim() || null;
-  let pillarId: number | null = null;
-  if (o.pillarKey) {
-    const p = await db.execute({
-      sql: "SELECT id FROM pillars WHERE key=?",
-      args: [o.pillarKey],
-    });
-    if (!p.rows.length) throw new Error("unknown pillar");
-    pillarId = Number(p.rows[0]!.id);
-  }
-  // Both fields empty is not an override — it is the default wearing a row for no
-  // reason, and a row that changes nothing still prints "tomorrow only" in the UI.
-  if (name == null && pillarId == null) {
-    await clearHabitOverride(db, date, habitId);
-    return;
-  }
   await db.execute({
-    sql: `INSERT INTO habit_overrides (date,habit_id,name,pillar_id) VALUES (?,?,?,?)
-          ON CONFLICT(date,habit_id) DO UPDATE SET name=excluded.name, pillar_id=excluded.pillar_id`,
-    args: [date, habitId, name, pillarId],
+    sql: "UPDATE one_off_habits SET done=? WHERE id=?",
+    args: [done ? 1 : 0, id],
   });
 }
 
-export async function clearHabitOverride(
+/**
+ * Remove a one-off — WHILE IT IS STILL A PLAN, and only then. Once its day arrives it is
+ * part of that day's denominator; pulling it back out would rewrite a lived day's record,
+ * and deleting a TICKED item can even lower a day's figure ((done-1)/(items-1) < done/items).
+ * Returns false when nothing matched — a past-day row, or a stale id — so the caller can
+ * say so rather than pretend.
+ */
+export async function deleteOneOffHabit(
   db: Client,
-  date: string,
-  habitId: number,
-): Promise<void> {
-  await db.execute({
-    sql: "DELETE FROM habit_overrides WHERE date=? AND habit_id=?",
-    args: [date, habitId],
+  id: number,
+): Promise<boolean> {
+  const r = await db.execute({
+    sql: "DELETE FROM one_off_habits WHERE id=? AND date > ?",
+    args: [id, todayISO()],
   });
+  return r.rowsAffected > 0;
 }
 
 // ---------------------------------------------------------------- journal

@@ -24,6 +24,7 @@ export default function CalorieInput({
   today,
   calories,
   entries,
+  streak = 0,
   onChanged,
 }: {
   date: string;
@@ -32,6 +33,9 @@ export default function CalorieInput({
   today?: string;
   calories: number | null;
   entries: CalorieEntry[];
+  /** Consecutive days the LOG reached 2,000 — logging the day, deliberately not the
+   *  2,500 eating floor (see streaks.ts). 0 draws nothing: a zero here would scold. */
+  streak?: number;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -49,6 +53,18 @@ export default function CalorieInput({
       >
         Calories
       </span>
+
+      {/* The LOG streak — a plain count, a fact and never a mechanic, drawn exactly as
+          the habit rows draw theirs. Nothing at zero, because a zero here scolds. */}
+      {streak > 0 && (
+        <span
+          className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]"
+          title={`logged ${streak} day${streak === 1 ? "" : "s"} in a row`}
+          aria-label={`logged ${streak} day${streak === 1 ? "" : "s"} in a row`}
+        >
+          {streak}d
+        </span>
+      )}
 
       {/* The total against its floor, as the way in. A bordered pill rather than bare
           type, so it reads as a control — the bare number here looked like a reading and

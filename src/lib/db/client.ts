@@ -201,7 +201,7 @@ async function ensure(c: Client): Promise<Client> {
         `INSERT INTO habits (pillar_id,name,target_value,source,sort_order,active,system_key,input,unit) VALUES
            ((SELECT id FROM pillars WHERE key='portfolio'),'Journal',1,'manual',1,1,'journal','check',NULL),
            ((SELECT id FROM pillars WHERE key='physical'),'Tidy room',1,'manual',2,1,NULL,'check',NULL),
-           ((SELECT id FROM pillars WHERE key='portfolio'),'Read 10 pages',1,'manual',3,1,NULL,'check',NULL),
+           ((SELECT id FROM pillars WHERE key='portfolio'),'Read 10 pages',1,'manual',3,1,'reading','check',NULL),
            ((SELECT id FROM pillars WHERE key='physical'),'Sleep by set time',1,'manual',4,1,NULL,'check',NULL),
            ((SELECT id FROM pillars WHERE key='portfolio'),'Mandarin 15 min',1,'manual',5,1,NULL,'check',NULL),
            ((SELECT id FROM pillars WHERE key='social_capital'),'One outreach message',1,'manual',6,1,'outreach','check',NULL),
@@ -248,6 +248,35 @@ async function ensure(c: Client): Promise<Client> {
     );
     await c.execute(
       "INSERT INTO app_meta (key,value) VALUES ('system_keys_v1','1')",
+    );
+  }
+
+  // READING BECAME A LOGGER — the owner's ruling, 2026-08-21: the reading row opens a
+  // document (pages read + what it left you with), the same surface outreach writes on.
+  // That needs a stable identity, and name-matching is exactly what system_key exists to
+  // replace — so the key is stamped once, by canonical name, and LATCHED: a later rename
+  // or a deliberate un-keying is never overruled on the next boot. Mirrors the
+  // system_keys_v1 block above; on a database where the row was renamed first, the stamp
+  // simply misses and the row stays a plain tick, which is the honest fallback.
+  const readingKeyed = await c.execute(
+    "SELECT 1 FROM app_meta WHERE key='system_keys_v2'",
+  );
+  if (!readingKeyed.rows.length) {
+    // AT MOST ONE ROW, the ACTIVE one — and this is load-bearing, not tidy. Unlike the
+    // v1 stamps, this runs on databases where idx_habits_system_key (UNIQUE) already
+    // exists, and deleteHabit is soft: a retired 'Read 10 pages' plus a re-created one
+    // are both name-matched with NULL keys, and a bare UPDATE stamping both would abort
+    // on the index — ensure() throws, the latch is never written, and EVERY boot fails
+    // the same way. Restricting to the single active row also keeps the fallback honest:
+    // a renamed or retired row simply stays a plain tick.
+    await c.execute(
+      `UPDATE habits SET system_key='reading'
+        WHERE id = (SELECT id FROM habits
+                     WHERE name='Read 10 pages' AND system_key IS NULL AND active=1
+                     ORDER BY id LIMIT 1)`,
+    );
+    await c.execute(
+      "INSERT INTO app_meta (key,value) VALUES ('system_keys_v2','1')",
     );
   }
 

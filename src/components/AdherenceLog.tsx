@@ -34,6 +34,9 @@ type Payload = {
   date: string;
   blocks: Block[];
   habits: HabitView[];
+  /** One-off non-negotiables — items of this day's tally exactly like the standing ones,
+   *  so a sheet that omitted them would explain a different denominator than the figure's. */
+  oneOffs?: { id: number; title: string; done: boolean }[];
   steps: number | null;
   calories: number | null;
   adherence: { pct: number | null } | null;
@@ -129,6 +132,10 @@ export default function AdherenceLog({
   const habits = data?.habits ?? [];
   const ticked = habits.filter((h) => h.done);
   const unticked = habits.filter((h) => !h.done);
+
+  const oneOffs = data?.oneOffs ?? [];
+  const oneOffsDone = oneOffs.filter((o) => o.done);
+  const oneOffsNot = oneOffs.filter((o) => !o.done);
 
   /**
    * THE TWO FLOORS — two more items of the habit share, earned fractionally. The credit
@@ -236,6 +243,14 @@ export default function AdherenceLog({
               {ticked.map((h) => (
                 <Row key={`h${h.id}`} title={h.name} tone="var(--color-adhered)" />
               ))}
+              {oneOffsDone.map((o) => (
+                <Row
+                  key={`o${o.id}`}
+                  title={o.title}
+                  note="one-off"
+                  tone="var(--color-adhered)"
+                />
+              ))}
               {floorsMet.map((f) => (
                 <Row
                   key={f.name}
@@ -257,6 +272,7 @@ export default function AdherenceLog({
               {adhered.length +
                 partial.length +
                 ticked.length +
+                oneOffsDone.length +
                 floorsMet.length +
                 floorsPartial.length ===
                 0 && (
@@ -297,6 +313,9 @@ export default function AdherenceLog({
               {unticked.map((h) => (
                 <Row key={`u${h.id}`} title={h.name} />
               ))}
+              {oneOffsNot.map((o) => (
+                <Row key={`uo${o.id}`} title={o.title} note="one-off" />
+              ))}
               {floorsPartial.map((f) => (
                 <Row
                   key={`rest${f.name}`}
@@ -310,6 +329,7 @@ export default function AdherenceLog({
               {missed.length +
                 partial.length +
                 unticked.length +
+                oneOffsNot.length +
                 floorsPartial.length +
                 floorsNone.length ===
                 0 && (

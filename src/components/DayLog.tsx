@@ -59,6 +59,9 @@ const KIND_PILLAR: Record<Exclude<LogKind, "drift">, PillarKey> = {
   gym: "physical",
   skill: "portfolio",
   outreach: "social_capital",
+  // Reading is a Portfolio habit — its row lives under that pillar on the checklist, so
+  // its tab wears the same hue here.
+  reading: "portfolio",
 };
 
 /** Pillar key -> the owner's chosen colour, or null for the default. Fetched once from
@@ -71,6 +74,7 @@ const KIND_LABEL: Record<LogKind, string> = {
   gym: "session",
   skill: "session",
   outreach: "outreach",
+  reading: "reading",
   drift: "drifted",
 };
 

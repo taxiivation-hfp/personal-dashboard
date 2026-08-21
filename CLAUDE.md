@@ -95,10 +95,14 @@ ratio of done-to-due:
 | Share | Earned by |
 |---|---|
 | **50** | blocked hours worked ÷ blocked hours in the day |
-| **50** | non-negotiables ticked ÷ (non-negotiables scheduled + THE TWO FLOORS), split evenly |
+| **50** | non-negotiables ticked ÷ (non-negotiables scheduled + one-offs + THE TWO FLOORS), split evenly |
 
 So one hour of an eight-hour day is `1/8 × 50`, and with five habits scheduled a
-non-negotiable is one of SEVEN items — 50/7 each.
+non-negotiable is one of SEVEN items — 50/7 each. A ONE-OFF non-negotiable scheduled for
+the day (see its own section) is one more equal item; it can only ever be added for a day
+AHEAD, so the denominator is still a thing the morning knew. `adherenceFor` itself is
+unchanged — the tally is assembled in `getDayView` and `/api/adherence`, BOTH of which
+must count the one-offs or the strip and the hero disagree about a day.
 
 **STEPS AND CALORIES ARE TWO MORE ITEMS OF THE HABIT SHARE, EARNED FRACTIONALLY** — the
 owner's ruling, 2026-08-17; they used to feed adherence nothing at all. Each pays
@@ -188,18 +192,83 @@ whom under-eating is the failure and there is no upper bound worth drawing. Its 
 DASHED until met — "not yet" rather than "failed", since most of a day is legitimately
 spent below the line. In the PRODUCTIVITY score, below the floor still scores nothing —
 a points total you can half-hit is a target by another name; adherence pays the reached
-fraction of the floor for the same reason it pays the worked fraction of a block.
+fraction of the floor for the same reason it pays the worked fraction of a block. The
+calorie row's STREAK counts a third threshold, `CALORIE_STREAK_FLOOR` (2,000 in
+streaks.ts) — "did you log the day", deliberately not "did you eat enough"; see the
+streaks paragraph in the non-negotiables section.
 
-**A non-negotiable may carry a DOCUMENT** — outreach, today. `habit_entries.note`, one per
-day by that table's own UNIQUE constraint, which is the shape the metric already counts in:
-outreach is `perDayCapped: true`, so a second message on a Tuesday is the same Tuesday. What
-is counted is consistency at the floor, never volume past it.
+**A non-negotiable may carry a DOCUMENT** — outreach and reading, today. `habit_entries.note`,
+one per day by that table's own UNIQUE constraint, which is the shape the metric already
+counts in: outreach is `perDayCapped: true`, so a second message on a Tuesday is the same
+Tuesday. What is counted is consistency at the floor, never volume past it.
 
-Writing it TICKS the day in the same upsert — saving is logging, no second control to forget.
-**Clearing the note does not untick**: deleting a sentence you no longer like must not
-retract the day, and the box is what retracts it. It sits BESIDE the tick rather than
-replacing it, so a day you did it and have nothing to say is still one tap. The Journal row
-deliberately has no such note — a page IS the document, and a note about it is a second diary.
+**A DOCUMENT ROW IS ONE CONTROL** — the owner's ruling, 2026-08-21, replacing the
+tick-box-plus-side-button pair. Tapping the row opens the logger (`NoteLog`), like every
+other logging surface here; the roster of which rows do this is `DOC_HABITS` in Today.tsx,
+keyed by `system_key` so a rename changes nothing. Three rules follow, all deliberate:
+
+- Writing TICKS the day in the same upsert — saving is logging, no second control to
+  forget. And **"Log it" over an empty page IS the tick**: the button never gates on
+  words, because a day you did it with nothing to say must still cost one honest tap.
+- **Unticking lives INSIDE the dialog**, behind the app's own two-step (never a native
+  `confirm()`), because the box that used to retract a day is gone. It deletes the row,
+  words and all, and says so before it does.
+- **Clearing the note still does not untick** — deleting a sentence you no longer like
+  must not quietly retract the day. Two different retractions, named apart.
+
+**READING LOGS PAGES AS WELL AS WORDS.** The reading dialog carries a "Pages read" number
+beside the textarea; it lands in `habit_entries.value` next to the note (see
+`engine.setHabitNote`'s three-shape `value` contract: undefined leaves it, null clears to
+a bare tick, a number sets it — a note edit must never eat a number). KNOWN AND ACCEPTED:
+value 1 is ambiguous between "a bare tick" and "one page"; with a ten-page floor that is a
+curiosity, not a schema. The row's identity is `system_key='reading'`, stamped by the
+latched `system_keys_v2` block in client.ts. Reading notes join the WRITTEN LOG as their
+own kind, exactly as outreach notes do.
+
+The Journal row deliberately has no note of its own — a page IS the document, and a note
+about it is a second diary.
+
+**EVERY CHECKLIST ROW CARRIES ITS OWN STREAK** — the owner's ruling, 2026-08-21. A plain
+count of consecutive done days, the same standing the app-wide streak has: a fact, never a
+mechanic — no flames, no badges, and **a streak of 0 draws NOTHING**, because a row that
+greets an off week with "0" is a row that scolds, and a list that scolds stops being
+ticked honestly. The walk lives in `src/lib/streaks.ts` (pure, tested): days the item is
+not scheduled neither count nor break (a Sundays-only item keeps its run through the
+week), and the live today gets GRACE — unticked at 2pm is "not yet", never a break.
+Streaks are HIDDEN off today, for the app-wide streak's own reason: the days you step back
+to are precisely the unmarked ones. **Calories streak on `CALORIE_STREAK_FLOOR` (2,000),
+deliberately below the 2,500 floor** — the streak asks "did you log the day", not "did you
+eat enough"; a streak pinned to the eating floor would give an honest under-day a reason
+not to be logged. Journal's streak rides its own habit entries, which page saves already
+tick. Steps has no streak: a streak on a phone battery is not a streak on a person.
+
+### One-off non-negotiables — "Tomorrow, specifically"
+
+The `/habits` section of that name used to EDIT the standing list for one day (a
+different name, a different pillar, via `habit_overrides`). The owner's ruling,
+2026-08-21: that was the wrong verb — **tomorrow takes ADDITIONS, never edits**. The
+override write path, its API route and its editor UI are gone; the `habit_overrides`
+table and `habitsForDate`'s COALESCE read stay, so days dressed while the feature lived
+still read back as they were worn.
+
+What replaced it: `one_off_habits` — a non-negotiable for ONE day. It appears on that
+day's checklist beside the standing items (accent tick, "one-off" suffix), joins the
+habit tally as one more equal item, and is gone from the roster the day after. NOT a
+task and not a habit: it never carries, has no weekday rule, and IS scored.
+
+- **Only for a day AHEAD — the rule that makes it safe.** `engine.createOneOffHabit`
+  refuses today and the past: adherence divides by items scheduled, so an item joining a
+  live day would grow the denominator mid-day and the climbing figure could FALL. Added
+  tonight, it is part of what tomorrow morning already knows.
+- **Unticked after its day, it is an unearned share** — the day ended where it got to. It
+  stays tickable from that day's own screen (catching up); `done` is a flag on the row
+  because there is no habit for a habit_entry to reference.
+- **Removable only while it is still a plan** (`date > today`, enforced in the engine):
+  a lived day's denominator is part of its record, and deleting a ticked item would
+  lower a day's figure after the fact.
+- **It feeds adherence and NOTHING else** — not the productivity score (the owner's ask,
+  stated literally: "counts towards tomorrow's adherence"), not the rings, not the
+  streaks. `/api/adherence` passes only the STANDING tick count to `scoreDay`.
 
 A non-negotiable may take a **number** instead of a tick (`habits.input = 'number'`, with
 `habits.unit`). Daily weight uses it. The value lives in `habit_entries.value`, which is
@@ -239,6 +308,10 @@ task, a phone opened at 2am rolling the day early. Reading a task twice cannot m
 - The table is `day_tasks`. It is NOT the legacy `tasks` table, which is the pre-redesign
   board and now holds only the old gym history that `migrate.mjs` rescued into
   `gym_sessions`.
+- **Its SCORED sibling is the one-off non-negotiable** (see that section): same "one thing
+  for one day" shape, opposite contract — a one-off never carries and counts toward its
+  day's adherence, a task carries and counts toward nothing. Do not merge them; the
+  denominator argument above is exactly why the carrying one must stay unscored.
 
 ## Pillar rings — sufficiency, never score
 
@@ -572,9 +645,11 @@ drift reasons nowhere at all. `src/lib/dayLog.ts` (pure, tested) merges them by 
   the end.
 - **IT OWNS NOTHING.** A reader, with no editing: a journal page opens in the journal, where a
   page can actually be rewritten. Two places that can change one row eventually disagree.
-- Entry order within a day is fixed in one place: journal, gym, skill, outreach, drift. The
-  journal leads because it is about the day as a whole; a drift reason is a footnote to one
-  block of it.
+- Entry order within a day is fixed in one place: journal, gym, skill, outreach, reading,
+  drift. The journal leads because it is about the day as a whole; a drift reason is a
+  footnote to one block of it. Reading joined when its row became a logger — what a book
+  left behind is written record, and a log that showed half the documents is one you stop
+  trusting.
 
 ## /stats — the record, and the only place history lives
 
