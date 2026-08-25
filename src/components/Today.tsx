@@ -1000,34 +1000,39 @@ export default function Today({
                         {h.name}
                       </label>
                     )}
-                    {/* The run, before the field — a fact about the row, not about the
-                        number being typed. Only on a live day: the days you step back to
-                        are precisely the unmarked ones, the same reason the app-wide
-                        streak hides off today. */}
-                    {back === 0 && <StreakFlame count={h.streak} />}
-                    {/* A value written on a line, not typed into a chip. The underline is
-                        the field; it darkens on focus rather than growing a box. */}
-                    <span className="flex shrink-0 items-baseline gap-1">
-                      <input
-                        id={`h${h.id}`}
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        inputMode="decimal"
-                        placeholder="—"
-                        defaultValue={h.value ?? ""}
-                        onBlur={(e) => setHabitNumber(h.id, e.target.value)}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" &&
-                          (e.target as HTMLInputElement).blur()
-                        }
-                        className={NUM_FIELD}
-                      />
-                      {h.unit && (
-                        <span className="text-micro text-[var(--color-muted)]">
-                          {h.unit}
-                        </span>
-                      )}
+                    {/* The run STACKS above the field, the Steps row's arrangement — not
+                        inline beside the label. This row carries a fixed-width control on
+                        its right, and in a ~160px checklist column an inline flame left
+                        the label's min-w-0 box narrower than its own word: a single word
+                        cannot wrap, so "Weight" overflowed its span and the flame painted
+                        over the glyphs. Only on a live day: the days you step back to are
+                        precisely the unmarked ones. */}
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      {back === 0 && <StreakFlame count={h.streak} />}
+                      {/* A value written on a line, not typed into a chip. The underline
+                          is the field; it darkens on focus rather than growing a box. */}
+                      <span className="flex items-baseline gap-1">
+                        <input
+                          id={`h${h.id}`}
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          inputMode="decimal"
+                          placeholder="—"
+                          defaultValue={h.value ?? ""}
+                          onBlur={(e) => setHabitNumber(h.id, e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" &&
+                            (e.target as HTMLInputElement).blur()
+                          }
+                          className={NUM_FIELD}
+                        />
+                        {h.unit && (
+                          <span className="text-micro text-[var(--color-muted)]">
+                            {h.unit}
+                          </span>
+                        )}
+                      </span>
                     </span>
                   </div>
                 </li>
@@ -1065,8 +1070,12 @@ export default function Today({
                     className="-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
                   >
                     <HabitBox done={h.done} tone={habitTone(h.pillar)} />
+                    {/* break-words: a name is usually several words and wraps on its own,
+                        but a single word wider than the label's min-w-0 box would OVERFLOW
+                        it and collide with the flame — the live-site bug the weight and
+                        calorie rows hit. Wrapping mid-word is the honest fallback. */}
                     <span
-                      className={`min-w-0 flex-1 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                      className={`min-w-0 flex-1 break-words font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
                     >
                       {h.name}
                     </span>

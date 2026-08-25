@@ -55,29 +55,34 @@ export default function CalorieInput({
         Calories
       </span>
 
-      {/* The LOG streak, drawn exactly as the habit rows draw theirs — one shared flame,
-          so this row cannot drift from the list it sits in. Nothing at zero. */}
-      <StreakFlame count={streak} />
+      {/* The LOG streak STACKS above the pill, the Steps row's arrangement — inline
+          beside the label it squeezed the min-w-0 word below its own width, and a single
+          word cannot wrap, so "Calories" overflowed its span with the flame painted over
+          the glyphs. One shared flame, so this row cannot drift from the list it sits in.
+          Nothing at zero. */}
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <StreakFlame count={streak} />
 
-      {/* The total against its floor, as the way in. A bordered pill rather than bare
-          type, so it reads as a control — the bare number here looked like a reading and
-          hid the fact that anything could be done about it. Tabular so it doesn't jitter
-          as the day climbs. */}
-      <button
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        aria-label="Open the food log"
-        className="shrink-0 rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-small tabular-nums transition-colors hover:bg-[var(--color-panel)]"
-      >
-        {calories == null ? (
-          <span className="text-[var(--color-muted)]">—</span>
-        ) : (
-          calories
-        )}
-        <span className="text-micro text-[var(--color-muted)]">
-          /{CALORIE_FLOOR}
-        </span>
-      </button>
+        {/* The total against its floor, as the way in. A bordered pill rather than bare
+            type, so it reads as a control — the bare number here looked like a reading
+            and hid the fact that anything could be done about it. Tabular so it doesn't
+            jitter as the day climbs. */}
+        <button
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-label="Open the food log"
+          className="rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-small tabular-nums transition-colors hover:bg-[var(--color-panel)]"
+        >
+          {calories == null ? (
+            <span className="text-[var(--color-muted)]">—</span>
+          ) : (
+            calories
+          )}
+          <span className="text-micro text-[var(--color-muted)]">
+            /{CALORIE_FLOOR}
+          </span>
+        </button>
+      </span>
 
       {/* Mounted only while open, so its history fetch never runs behind a closed row. */}
       {open && (
