@@ -333,6 +333,32 @@ CREATE TABLE IF NOT EXISTS journal_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_journal_date ON journal_entries(date);
 
+-- THE HANDWRITTEN PAGE IS A SCROLL OF SHEETS — the owner's ruling, 2026-08-25. See the
+-- long comment at the top of src/lib/sheets.ts for the whole argument.
+--
+-- Sheet 0 stays in journal_entries.image/width/height, where every page always lived, so
+-- every existing page is already a one-sheet scroll and NOTHING MIGRATES. Sheets 1.. are
+-- rows here, one PNG each, keyed (entry_id, seq). A sheet per row rather than one growing
+-- image is engineering, not design: Vercel caps a request body, a browser caps a canvas's
+-- area, and only the sheets that were touched need to be written back.
+--
+-- CONTIGUOUS BY CONSTRUCTION. The total is 1 + COUNT(*) here, and engine.saveJournalSheet
+-- refuses a seq past that — a gap would be a scroll with a sheet missing from the middle,
+-- which no reader could draw honestly. The count is therefore the only thing a reader
+-- needs to ask for; it never has to inspect which seqs exist.
+--
+-- ON DELETE CASCADE is a safety net, not the contract: deleteJournalEntry deletes these
+-- rows explicitly inside its transaction, because a table that only stays consistent while
+-- a pragma happens to be on is a table that will one day be found inconsistent.
+CREATE TABLE IF NOT EXISTS journal_sheets (
+  entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+  seq      INTEGER NOT NULL CHECK (seq >= 1),
+  image    TEXT NOT NULL,
+  width    INTEGER,
+  height   INTEGER,
+  PRIMARY KEY (entry_id, seq)
+);
+
 -- Phase 3: health data pushed from the phone (iOS Shortcuts -> POST /api/health).
 -- One row per day, UPSERT on date, so re-posting the same day is idempotent and a
 -- later push simply revises the numbers rather than duplicating them.

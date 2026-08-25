@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import JournalCanvas from "./JournalCanvas";
+import JournalDrawing from "./JournalDrawing";
 import JournalText from "./JournalText";
 import Sheet from "./Sheet";
 import type { JournalPage } from "@/lib/queries";
+import { saveDrawing, type SheetImage } from "@/lib/journalSave";
+import { fetchSender } from "@/lib/journalSend";
 
 /**
  * ONE PAGE, OPEN — and the way through to the ones either side of it.
@@ -39,6 +42,9 @@ type Loaded = {
   date: string;
   kind: string;
   body: string | null;
+  /** How many A4 sheets the scroll runs to — ≥1 for a drawing, 0 for a typed page. The
+   *  reader draws them all and the canvas loads them all as its base; see sheets.ts. */
+  sheets: number;
 };
 
 export default function JournalReader({
@@ -74,14 +80,36 @@ export default function JournalReader({
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   /**
-   * Bumped after a drawing is saved, and appended to the image URL.
+   * The cache-buster appended to every sheet URL — UNIQUE PER MOUNT, and moved on after a
+   * save.
    *
-   * `[id]/image` is served with `cache-control: private, max-age=3600`, which is right for
-   * a page that almost never changes and exactly wrong for the moment one just did — the
-   * browser would answer the reload out of its own cache and show the page as it was
-   * before the pen touched it.
+   * `[id]/sheet/[seq]` is served with `cache-control: private, max-age=3600`, which is
+   * right for a page that almost never changes and exactly wrong for the moment one just
+   * did — the browser would answer the reload out of its own cache and show the page as it
+   * was before the pen touched it. It is also part of the canvas's `base`, so it is what
+   * makes the editor reload its sheets.
+   *
+   * It is a timestamp and not a counter because THE READER IS UNMOUNTED ON CLOSE. A counter
+   * started at 0 on every mount, so a page saved, closed and reopened minutes later asked
+   * for `?v=0` again — the URL the browser had cached an hour for, holding the sheet as it
+   * was BEFORE that save. The reader showed the old ink, and worse, the canvas loaded it as
+   * its base, drew the next line over it and PUT the flattened result back: the first
+   * sitting's strokes gone from the only copy. (The PUT goes to `/sheet/0` with no query,
+   * a different cache key, so the browser's own invalidation never reached the stale
+   * entry.) A value no earlier mount could have used is what makes a reopen a fetch.
+   *
+   * See `refresh` for WHEN it moves: after any write that may have changed the record,
+   * including one that stopped halfway.
    */
-  const [rev, setRev] = useState(0);
+  const [rev, setRev] = useState(() => Date.now());
+  /**
+   * "The record may not be what `page` and `rev` say." Set when a write begins and cleared
+   * when a re-read lands; while it is set, leaving the editor or re-entering it re-reads
+   * first. A ref, not state: it is consulted in handlers and must never itself re-render.
+   */
+  const staleRef = useRef(false);
+  /** The page this reader is on, for an async re-read to check it still is. */
+  const idRef = useRef(id);
 
   /** Re-read the list this reader owns. Only when it owns one: given a list, the screen
    *  behind is the authority and reloads it through `onChanged`. */
@@ -107,6 +135,8 @@ export default function JournalReader({
   // the PREVIOUS page's words under the new page's date.
   useEffect(() => {
     let alive = true;
+    idRef.current = id;
+    staleRef.current = false;
     setPage(null);
     setEditing(false);
     setConfirming(false);
@@ -141,9 +171,37 @@ export default function JournalReader({
     return () => window.removeEventListener("keydown", onKey);
   }, [editing, busy, older, newer, onId]);
 
+  /**
+   * RE-READ THE PAGE FROM THE RECORD, and move `rev` on so every sheet is fetched anew.
+   *
+   * Rather than patch the copy in hand: the row is the record, and a screen that shows what
+   * it SENT rather than what was stored is a screen that can be wrong and look right. For a
+   * drawing the re-read is also where the `sheets` count comes from, and a reader holding
+   * the old count draws the scroll a sheet short — or, far worse, hands the editor a base a
+   * sheet short (see `saveSheets`).
+   *
+   * Quiet on failure: `staleRef` stays set, and the next way into or out of the editor
+   * tries again. A page that cannot be re-read right now is usually a connection that just
+   * dropped, and the sitting's ink must not be lost to a message about that.
+   */
+  async function refresh() {
+    const forId = id;
+    try {
+      const fresh = await fetch(`/api/journal/${forId}`).then((r) => r.json());
+      // Leafed away while this was in flight: the answer belongs to a page no longer open.
+      if (fresh.error || idRef.current !== forId) return;
+      setPage(fresh);
+      setRev(Date.now());
+      staleRef.current = false;
+    } catch {
+      // Still stale; said by the flag, not by a message.
+    }
+  }
+
   async function patch(payload: Record<string, unknown>) {
     setBusy(true);
     setError(null);
+    staleRef.current = true;
     try {
       const res = await fetch(`/api/journal/${id}`, {
         method: "PATCH",
@@ -152,12 +210,7 @@ export default function JournalReader({
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "could not save");
-      // Re-read rather than patch the copy in hand: the row is the record, and a screen
-      // that shows what it SENT rather than what was stored is a screen that can be wrong
-      // and look right.
-      const fresh = await fetch(`/api/journal/${id}`).then((r) => r.json());
-      if (!fresh.error) setPage(fresh);
-      setRev((n) => n + 1);
+      await refresh();
       setEditing(false);
       reloadList();
       onChanged();
@@ -166,6 +219,69 @@ export default function JournalReader({
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * ADDING TO A HANDWRITTEN PAGE: the sheets the canvas hands over, PUT one by one.
+   *
+   * `saveDrawing` owns the sequence (see journalSave.ts); this is the reader's half of the
+   * bargain — what to do when the sequence finishes, and what to do when it stops.
+   *
+   * ON FAILURE THE ERROR IS RETHROWN, AND NOT SHOWN HERE. The canvas marks sheets as saved
+   * only when this promise resolves, so a rejection is what keeps its ink dirty and its
+   * sheets unsaved — the next Save re-sends exactly what did not land. Swallowing the error
+   * would tell the canvas the page was on the record when part of it was not. The canvas
+   * also SHOWS the rejection, beside its Save button; setting `error` here as well put the
+   * same sentence at the top and the bottom of one dialog, announced twice. `patch` keeps
+   * its own message because the typed page has no line of its own.
+   *
+   * A SAVE THAT STOPPED HALFWAY HAS STILL CHANGED THE RECORD. The sequence is sheet by
+   * sheet, so sheets 0 and 1 can be on the record when sheet 2 is refused, and this reader
+   * would go on holding the old count and the old `rev`. Retrying in place is fine — the
+   * canvas re-PUTs everything dirty, and re-writing a landed sheet is the same sheet again
+   * — but CLOSING was not: the reading branch drew the old count with the cached old
+   * bytes, and "Add to it" handed the editor that same short, stale base. The editor then
+   * grew a BLANK sheet where the record already held an inked one, or drew the next line
+   * over a sheet 0 missing the strokes the last save had landed, and the next Save flattened
+   * that over the row: handwriting the record already had, gone without a word. So a write
+   * marks the reader stale (`staleRef`), and leaving or re-entering the editor re-reads and
+   * moves `rev` first. Deliberately NOT mid-sitting: the reload is deferred to the moment
+   * the editor is left rather than done in this catch, because a re-read on the spot needs
+   * the connection that most likely just dropped, and a `rev` moved while the sheets cannot
+   * be fetched would wall the canvas ("could not be loaded") over ink that a retry a minute
+   * later would have saved.
+   */
+  async function saveSheets(sheets: SheetImage[]) {
+    if (!page) return;
+    setBusy(true);
+    setError(null);
+    staleRef.current = true;
+    try {
+      await saveDrawing({ id, date: page.date }, sheets, fetchSender);
+      await refresh();
+      setEditing(false);
+      reloadList();
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Into and out of the editor, re-reading first wherever a write may have left the
+   *  reader behind the record — see `saveSheets`. */
+  async function openEditor() {
+    if (staleRef.current) {
+      setBusy(true);
+      await refresh();
+      setBusy(false);
+    }
+    setEditing(true);
+  }
+
+  function closeEditor() {
+    if (busy) return;
+    setEditing(false);
+    if (staleRef.current) void refresh();
   }
 
   async function remove() {
@@ -204,6 +320,8 @@ export default function JournalReader({
         // message into a state this branch could not draw: Save re-enabled itself, the
         // status line went back to "Ready to save.", and nothing on screen said the write
         // had been refused. A write that fails silently is worse than one that fails.
+        // The TYPED page's line only: a refused sheet is reported by the canvas itself,
+        // beside its Save button, and `saveSheets` leaves `error` alone (see there).
         <div className="flex h-full min-h-0 flex-col">
           {error && (
             <p role="alert" className="mb-2 shrink-0 text-small font-semibold">
@@ -216,14 +334,16 @@ export default function JournalReader({
                 editing
                 initial={page.body ?? ""}
                 onSave={(body) => patch({ body })}
-                onCancel={() => !busy && setEditing(false)}
+                onCancel={closeEditor}
                 busy={busy}
               />
             ) : (
+              // The whole scroll goes under the pen: every sheet the record holds, with
+              // `rev` so a page saved a moment ago is fetched rather than remembered.
               <JournalCanvas
-                base={`/api/journal/${id}/image?v=${rev}`}
-                onSave={(image, width, height) => patch({ image, width, height })}
-                onCancel={() => !busy && setEditing(false)}
+                base={{ id, sheets: page.sheets, rev }}
+                onSave={saveSheets}
+                onCancel={closeEditor}
                 busy={busy}
               />
             )}
@@ -298,7 +418,7 @@ export default function JournalReader({
                 Delete
               </button>
               <button
-                onClick={() => setEditing(true)}
+                onClick={openEditor}
                 disabled={!page || busy}
                 className="rounded-lg bg-[var(--color-accent)] px-3.5 py-1.5 text-micro text-white transition-opacity hover:opacity-90 disabled:opacity-40"
               >
@@ -352,20 +472,17 @@ export default function JournalReader({
               </Sheet>
             )}
             {page && !isText && (
-              // The PNG carries its own ruling, so the sheet under it draws none — see
-              // Sheet's `rules` prop. Full width of the page, never cropped: a thumbnail
-              // may cover, a reader may not.
-              <Sheet
-                rules={false}
+              // The whole scroll, every sheet of it, at the page's full width and never
+              // cropped: a thumbnail may cover, a reader may not. JournalDrawing is the one
+              // place that knows a page is several images, so this and the record's spread
+              // cannot draw a scroll two different ways.
+              <JournalDrawing
+                id={id}
+                sheets={page.sheets}
+                rev={rev}
+                alt={`Handwritten page from ${page.date}`}
                 className="w-full max-w-[34rem] rounded-xl border border-[var(--color-line)]"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/journal/${id}/image?v=${rev}`}
-                  alt={`Handwritten page from ${page.date}`}
-                  className="block h-full w-full object-contain"
-                />
-              </Sheet>
+              />
             )}
             {!page && !error && (
               <p className="py-16 text-small text-[var(--color-muted)]">

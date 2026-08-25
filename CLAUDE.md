@@ -958,11 +958,12 @@ arguments all still hold; they simply live in the modules that implement them.
 
 ## In scope
 
-- Journal: a page is either a **stylus drawing saved as an image** or **typed text**, both
-  on the same ruled **A4 portrait (1:1.414)** sheet. `kind` is the discriminator
-  everywhere — a text entry stores `image = ''`, so never test emptiness to tell them
-  apart. No transcription in either direction, no theme extraction, no vision. Deleting a
-  page asks first.
+- Journal: a page is either **handwriting — a SCROLL of ruled A4 sheets, each saved as an
+  image, written with a STYLUS ONLY (a finger scrolls)** — or **typed text** on one ruled
+  **A4 portrait (1:1.414)** sheet. See "The handwritten page is a scroll of sheets" below.
+  `kind` is the discriminator everywhere — a text entry stores `image = ''`, so never test
+  emptiness to tell them apart. No transcription in either direction, no theme extraction,
+  no vision, **no PDF**. Deleting a page asks first.
 - Calories: a **running total for the day, entered as you go** — 400 in the morning and 800
   later reads 1200. Stored as a log so a mistyped entry is removed rather than retyped, and
   the total is derived on read. Still no food database, no barcode, no API.
@@ -991,12 +992,16 @@ since a page already existing is what ticked it.
 - **A typed page reopens with its words**, on the same surface it was written on. Save
   instead of Save page; a second screen for correcting a sentence would be a second place
   the journal lives.
-- **A handwritten page reopens with its ink UNDER THE PEN.** Only a flat PNG was ever
-  stored, so there are no strokes to pop: Undo and Clear take back what you add NOW, and the
-  note above the canvas says so rather than leaving it to a tap that does nothing. The base
-  is drawn FITTED, never stretched — pages saved before the A4 rule are whatever shape the
-  dialog happened to be, and filling the canvas with one would squash the owner's own hand
-  and then flatten the squash in permanently on the next save.
+- **A handwritten page reopens with its ink UNDER THE PEN** — every sheet of it, loaded
+  as the canvas's base (`base={{ id, sheets, rev }}`, see the scroll section below). Only
+  flat PNGs are ever stored, so there are no strokes to pop: Undo and Clear take back what
+  you add NOW. The reason lives in `JournalCanvas`'s header comment and not on the screen
+  (TEXT IS DATA) — the status line says only "Pen writes · finger scrolls". Neither they
+  nor Save act while a stroke is still down: the live stroke is already in the sitting
+  list, and popping or flattening it mid-move would leave ink on screen that is in no
+  list. A base sheet is drawn FITTED, never stretched — pages saved before the A4
+  rule are whatever shape the dialog happened to be, and filling the canvas with one would
+  squash the owner's own hand and then flatten the squash in permanently on the next save.
 - **`/journal` is a LIST, not a shelf.** The unit is a page: the page in miniature, the day
   it belongs to, and the line it opens with. The opening line is what tells two Tuesdays
   apart and a thumbnail cannot carry it — which is why a contact sheet was the wrong shape
@@ -1019,9 +1024,11 @@ of paper and a handwritten one was a page. A thumbnail is a small PAGE, not a pa
 lines. The canvas derives its own ruling from canvas width by the same two numbers, so a page
 ruled in a PNG matches one ruled in CSS at any size on any display.
 
-**The reading sheet GROWS**; the writing and thumbnail sheets are fixed A4 and clip, because
-that is what running out of paper looks like. A fixed reader with an inner scrollbar would
-have slid the words across their own rules. `--paper` is a real physical colour and not a
+**The reading sheet GROWS**; the TYPED writing sheet and the thumbnail are fixed A4 and clip,
+because that is what running out of paper looks like. A fixed reader with an inner scrollbar
+would have slid the words across their own rules. **The HANDWRITING surface grows too, but
+by whole sheets** — one A4 canvas per sheet, appended as the ink reaches down (see the scroll
+section below); the typed sheet is unchanged. `--paper` is a real physical colour and not a
 surface token: a page in a beige app is still paper.
 
 **No rules under a drawing** — the PNG carries its own, and a second set would be two pages
@@ -1040,11 +1047,99 @@ a full-size page cropped to a stamp. The cost is that a thumbnail's words are te
 than words, so **wherever a thumbnail is a CHOICE, the opening line is printed beside it** —
 the archive and the day's chooser both do. A page must never be identified by 3px type.
 
-**Saving a drawing is gated on the saved page having arrived.** A canvas that looks like it
-is adding to a page and is really holding a blank one is the only control in this app that
-can destroy something irreplaceable: Save flattens what is on screen and PATCHes it over the
-row. So `JournalCanvas` tracks whether its base image loaded, refuses to save until it has,
-and says which of "fetching", "ready" and "could not be loaded" is true.
+**Saving a drawing is gated on the saved page having arrived — EVERY sheet of it.** A canvas
+that looks like it is adding to a page and is really holding a blank one is the only control
+in this app that can destroy something irreplaceable: Save flattens what is on screen and
+PUTs it over the sheet's row. So `JournalCanvas` tracks each base sheet as loading, ready or
+failed, refuses to save until all of them are ready, and says which is true.
+
+### The handwritten page is a scroll of sheets
+
+The owner's ruling, 2026-08-25, in three parts. The geometry and the growth rule live in
+`src/lib/sheets.ts` (pure, tested); the save sequence in `src/lib/journalSave.ts` (pure,
+tested, transport injected — `fetchSender` in `journalSend.ts` is the one the app uses).
+
+**1. WRITING IS STYLUS-ONLY; A FINGER SCROLLS.** `pointerType === 'pen'` draws (and a mouse,
+since a desktop has no stylus); a touch is never captured and never prevented, so the
+browser scrolls the page with it. The device is a Galaxy Tab S6 Lite with an S Pen, on Chrome
+for Android — where a stylus ALSO travels the touch pipeline, so `touch-action: pan-y` on the
+scroller would let the browser take a vertical pen stroke as a scroll and cancel the pointer.
+What stops that is a non-passive `touchstart` listener on the column that calls
+`preventDefault()` while a pen is down: `pointerdown` fires before `touchstart` for the
+same contact, so the pen has already said it is down by the time the touch arrives. The same
+guard keeps a palm that lands mid-stroke off the scroller (the scroller also flips to
+`touch-action: none` while a stroke is down, belt and braces). Not yet tested on the tablet —
+only with a mouse in Chrome on Windows; the pen and palm paths are reasoned from the Pointer
+Events order, and the first thing to check on the device is that a vertical pen stroke draws
+rather than scrolls. Nothing on screen explains this beyond the status line's "Pen writes ·
+finger scrolls": TEXT IS DATA.
+
+**2. THE PAGE IS AN ENDLESS SCROLL.** It was one fixed A4 canvas, and a page that ran past
+its eighteenth line ran out of paper. The owner writes through the day and comes back to a
+half-written page at night, so the page GROWS: one A4 sheet to start, and one more appended
+whenever the lowest ink on the LAST sheet passes `GROW_AT` (two thirds) of its height — paper
+has to be there before the pen arrives, or the last lines of every sheet are written against
+a wall. Sheets are never removed. On screen it is ONE continuous ruled scroll: no seam, no
+gap, no border between sheets, in the editor and in every reader. `JournalDrawing.tsx` is the
+one component that knows a page is several images; the journal reader and the record's spread
+both use it, so a scroll cannot be drawn two ways. Thumbnails stay `[id]/image` — the top of
+the page, which is what a page looks like on a shelf.
+
+**3. NO PDF. The record IS the scroll**, kept as PNG sheets. Sheet 0 stays in
+`journal_entries.image` — so every page ever written is already a valid one-sheet scroll and
+nothing migrates — and sheets 1.. are rows of `journal_sheets`, keyed `(entry_id, seq)`,
+CONTIGUOUS by construction: `saveJournalSheet` refuses a seq past `1 + count` (a gap) and
+refuses a text page outright. A page's sheet count is `1 + COUNT(journal_sheets)`, served as
+`sheets` on `GET /api/journal/[id]` and on the log's entries; `GET/PUT
+/api/journal/[id]/sheet/[seq]` is one sheet's bytes. An export could be built from these
+rows one day; none is built now, because the owner's use is reopening half-written pages
+and adding to them, and a PDF is a thing you stop writing on.
+
+The split into sheets is ENGINEERING, not design, and the reasons are worth keeping:
+
+- **Vercel caps a request body at ~4.5 MB**, and the journal routes at 4 MB. One ever-taller
+  PNG would stop saving a few screens down, silently and permanently; a sheet at a time never
+  will.
+- **A browser caps a canvas's area, and a phone caps it low.** A sheet is one A4 at
+  `min(devicePixelRatio, MAX_DPR)` — 2x — which is always under the limit, however long the
+  page gets.
+- **Only the sheets you TOUCHED are written back** (`sheetsToSave`). Adding a line to the
+  bottom of a ten-sheet page sends one sheet, not ten.
+
+**The save is SEQUENTIAL and a half-save is recoverable, never duplicated.** `saveDrawing`
+POSTs sheet 0 to create a new page (the same request a one-sheet page always made) and PUTs
+the rest against the id it got back; a page being added to PUTs every sheet, sheet 0
+included. In order, never in parallel: the engine refuses gaps, and a failure must leave a
+contiguous prefix on the record. When it stops it throws `SaveError { id, saved }` — for
+EVERY failure, the transport rejecting included: a network drop is `fetch` throwing, and a
+raw TypeError escaping the loop took the created id with it, so the retry POSTed a second
+page for the day. Both parents REthrow it to the canvas, which marks sheets saved only on a
+resolved promise — so the ink stays dirty and the next Save re-sends exactly what did not
+land. `JournalPanel` keeps the id of a half-created page as `draftId` so that retry is PUTs
+against the page that exists, never a second POST and a second page for the day; it is
+reset whenever the drawing dialog opens or closes, because a new sitting is a new page.
+
+**A half-save has still CHANGED THE RECORD, and the reader must not forget that.**
+`JournalReader` marks itself stale when a write begins (`staleRef`) and clears it only when
+a re-read of the page lands; leaving the editor and re-entering it both re-read first while
+it is set. Retrying in place after a partial save is fine — the canvas re-PUTs everything
+dirty — but closing used to leave the reader holding the old sheet count and the old `rev`,
+so "Add to it" handed the editor a base a sheet short: it grew a BLANK sheet where the
+record already held an inked one, and the next Save flattened that over it. The re-read is
+deliberately deferred to the moment the editor is left rather than done in the catch: it
+needs the connection that most likely just dropped, and a `rev` moved while the sheets
+cannot be fetched would wall the canvas over ink a retry a minute later would have saved.
+
+`rev` — part of the canvas's `base` and every sheet URL's cache-buster — is a TIMESTAMP,
+unique per mount, never a counter from 0. The reader is unmounted on close and the sheet
+route is served `private, max-age=3600`, so a counter meant a page saved, closed and
+reopened asked for `?v=0` again and got the PRE-save sheet from the browser's cache — shown
+as the page, and loaded as the canvas's base, so the next line was flattened over the old
+ink and PUT back over the only copy. (The PUT's URL carries no query, so the browser's own
+invalidation never reaches the cached `?v=` entry.) A failed sheet save is reported ONCE, by
+the canvas beside its Save button; the reader's own `error` line is the typed page's.
+
+**Typed pages are untouched.** One sheet, one textarea, `PATCH` as before.
 
 ## Steps — the one figure this app does not write
 

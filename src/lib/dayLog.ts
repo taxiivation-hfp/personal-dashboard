@@ -48,6 +48,14 @@ export type LogEntry = {
    * when the wording changes.
    */
   meta: string | null;
+  /**
+   * How many A4 sheets a handwritten page runs to — a drawing is a SCROLL of sheets since
+   * 2026-08-25 (see sheets.ts), and a reader that draws only the first would show a page
+   * cut off at the eighteenth line. `null` for a typed page, which has no sheets; absent on
+   * every non-journal entry, and absent on a journal entry from a source that never asked.
+   * Optional so that nothing already holding a LogEntry has to learn about paper.
+   */
+  sheets?: number | null;
 };
 
 export type LogDay = { date: string; entries: LogEntry[] };

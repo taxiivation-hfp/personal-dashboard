@@ -1204,7 +1204,13 @@ export async function logDays(
   const inSpan = { args: [lo, hi] };
   const [journal, gym, skill, outreach, drift] = await Promise.all([
     db.execute({
-      sql: "SELECT id, date, kind, body FROM journal_entries WHERE date BETWEEN ? AND ?",
+      // The sheet count rides along so the spread can draw the whole scroll rather than
+      // its first sheet. A correlated COUNT per page, not a JOIN: a page with no later
+      // sheets must still be one row here, and a LEFT JOIN + GROUP BY would be more SQL
+      // to say the same thing.
+      sql: `SELECT id, date, kind, body,
+                   (SELECT COUNT(*) FROM journal_sheets s WHERE s.entry_id = j.id) AS extra
+              FROM journal_entries j WHERE date BETWEEN ? AND ?`,
       ...inSpan,
     }),
     db.execute({
@@ -1249,6 +1255,10 @@ export async function logDays(
       title: isText ? firstLine(r.body == null ? null : String(r.body)) : null,
       body: isText && r.body != null ? String(r.body) : null,
       meta: isText ? null : "drawing",
+      // Sheet 0 is the row itself, so a drawing is always at least one sheet; a typed page
+      // is null rather than 0 because it has no paper to count. Same arithmetic as
+      // engine.journalSheetCount — restated in SQL here to avoid a round trip per page.
+      sheets: isText ? null : 1 + num(r.extra),
     });
   }
   for (const r of gym.rows) {

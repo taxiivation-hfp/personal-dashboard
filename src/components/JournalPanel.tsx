@@ -6,6 +6,8 @@ import JournalReader from "./JournalReader";
 import JournalText from "./JournalText";
 import Sheet from "./Sheet";
 import type { JournalView } from "@/lib/queries";
+import { SaveError, saveDrawing, type SheetImage } from "@/lib/journalSave";
+import { fetchSender } from "@/lib/journalSend";
 
 /**
  * THE WAY IN, and nothing else visible.
@@ -51,6 +53,18 @@ export default function JournalPanel({
   const [error, setError] = useState<string | null>(null);
   /** Which page is open in the reader, by id. */
   const [reading, setReading] = useState<number | null>(null);
+  /**
+   * The id of a NEW handwritten page whose save stopped halfway.
+   *
+   * A scroll is saved a sheet at a time (see journalSave.ts): the POST that creates the
+   * page carries sheet 0, and every later sheet is a PUT against the id it returned. If a
+   * PUT fails the page already EXISTS, and a retry that POSTed again would write a second
+   * page for the day with the same first sheet. So the id the sequence got as far as is
+   * kept here, and the next Save in the same sitting is a retry against it — PUTs only,
+   * never a second POST. Null until a save half-lands; reset whenever the drawing dialog
+   * opens, because a new sitting is a new page.
+   */
+  const [draftId, setDraftId] = useState<number | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const chooserRef = useRef<HTMLDialogElement>(null);
 
@@ -66,6 +80,10 @@ export default function JournalPanel({
 
   const choose = (m: Mode) => {
     onPromptHandled?.();
+    // A fresh sitting at the canvas is a fresh page. A draft id left over from a save that
+    // stopped halfway belongs to the page that stop created — which is on the day's list
+    // now, and is added to through the reader, not through here.
+    if (m === "draw") setDraftId(null);
     setMode(m);
   };
 
@@ -91,6 +109,41 @@ export default function JournalPanel({
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * A NEW HANDWRITTEN PAGE: the sheets the canvas hands over, written in sequence.
+   *
+   * `saveDrawing` owns the order — POST sheet 0 to create the page, PUT the rest against
+   * its id — and throws a `SaveError` carrying the id when it stops partway. That id is
+   * the whole reason this is not a one-line `post`: it is remembered as `draftId` so the
+   * next Save resumes against the page that exists rather than creating a second one, and
+   * the day is told the list has changed, since a page is on it now even though the save
+   * did not finish.
+   *
+   * THE ERROR IS RETHROWN. The canvas marks sheets as saved only when this resolves, so a
+   * rejection is what keeps its ink dirty — the retry re-sends exactly what did not land.
+   * Resolving here on a failure would tell it the page was on the record when part of it
+   * was not.
+   */
+  async function saveSheets(sheets: SheetImage[]) {
+    setBusy(true);
+    setError(null);
+    try {
+      await saveDrawing({ id: draftId, date }, sheets, fetchSender);
+      setDraftId(null);
+      setMode(null);
+      onChanged();
+    } catch (e) {
+      if (e instanceof SaveError && e.id != null) {
+        setDraftId(e.id);
+        onChanged();
+      }
+      setError(e instanceof Error ? e.message : "could not save");
+      throw e;
     } finally {
       setBusy(false);
     }
@@ -218,7 +271,12 @@ export default function JournalPanel({
           plane, so the lift is true rather than decoration. */}
       <dialog
         ref={dialogRef}
-        onClose={() => setMode(null)}
+        onClose={() => {
+          setMode(null);
+          // Closing over a half-saved page leaves that page on the record as it got to;
+          // the next opening is a new page and must not resume against this one.
+          setDraftId(null);
+        }}
         onCancel={(e) => {
           if (busy) e.preventDefault();
         }}
@@ -227,9 +285,7 @@ export default function JournalPanel({
         {mode === "draw" && (
           <JournalCanvas
             live={live}
-            onSave={(image, width, height) =>
-              post({ kind: "drawing", image, width, height })
-            }
+            onSave={saveSheets}
             onCancel={() => !busy && setMode(null)}
             busy={busy}
           />

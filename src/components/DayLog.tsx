@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import JournalDrawing from "./JournalDrawing";
 import Sheet from "./Sheet";
 import { toneColor } from "./PillarRing";
 import type { PillarKey } from "@/lib/rings";
@@ -436,17 +437,17 @@ function DayReader({
                     </Link>
                   </div>
                   {drawing ? (
-                    <Sheet
-                      rules={false}
+                    // Every sheet of the scroll, the same way the journal's own reader
+                    // draws it. `sheets` is absent from a source that never asked and
+                    // null on a typed page; a drawing always has at least its first sheet,
+                    // and a journal entry always carries its row id — the `?? 0` only
+                    // satisfies the type of an entry that cannot be a page.
+                    <JournalDrawing
+                      id={p.id ?? 0}
+                      sheets={p.sheets ?? 1}
+                      alt={`Handwritten page from ${day.date}`}
                       className="w-full max-w-[30rem] rounded-xl border border-[var(--color-line)]"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/journal/${p.id}/image`}
-                        alt={`Handwritten page from ${day.date}`}
-                        className="block h-full w-full object-contain"
-                      />
-                    </Sheet>
+                    />
                   ) : (
                     <Sheet
                       a4={false}

@@ -1,5 +1,9 @@
 import { getDb } from "@/lib/db/client";
-import { deleteJournalEntry, updateJournalEntry } from "@/lib/engine";
+import {
+  deleteJournalEntry,
+  journalSheetCount,
+  updateJournalEntry,
+} from "@/lib/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +56,10 @@ export async function GET(
       body: row.body == null ? null : String(row.body),
       width: row.width == null ? null : Number(row.width),
       height: row.height == null ? null : Number(row.height),
+      // How many sheets the scroll runs to (see sheets.ts): ≥1 for a drawing, 0 for words.
+      // The reader fetches `[id]/sheet/{seq}` for each; the count is all it needs, since
+      // sheets are contiguous by construction.
+      sheets: await journalSheetCount(db, id),
     });
   } catch (e) {
     return Response.json(

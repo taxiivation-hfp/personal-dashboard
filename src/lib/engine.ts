@@ -459,10 +459,12 @@ export async function updateJournalEntry(
       return false;
     }
     const kind = String(r.rows[0].kind ?? "drawing");
-    if (kind !== patch.kind) {
-      await tx.rollback();
+    // Thrown, not rolled back and then thrown: the catch below rolls back ONCE. The local
+    // sqlite3 client throws TRANSACTION_CLOSED on a second rollback, and that error — not
+    // this one — is what the route would report. (Turso's hrana client returns silently
+    // from the second call, which is why the pattern never showed in production.)
+    if (kind !== patch.kind)
       throw new Error(`page ${id} is a ${kind} page, not ${patch.kind}`);
-    }
 
     if (patch.kind === "text") {
       await tx.execute({
@@ -470,9 +472,108 @@ export async function updateJournalEntry(
         args: [patch.body, id],
       });
     } else {
+      // This IS sheet 0's write path — the same columns saveJournalSheet(…, 0, …) writes.
+      // Later sheets (journal_sheets) are untouched: rewriting the first sheet of a scroll
+      // says nothing about the rest of it.
       await tx.execute({
         sql: "UPDATE journal_entries SET image=?, width=?, height=? WHERE id=?",
         args: [patch.image, patch.width ?? null, patch.height ?? null, id],
+      });
+    }
+    await tx.commit();
+    return true;
+  } catch (e) {
+    await tx.rollback();
+    throw e;
+  }
+}
+
+/**
+ * How many sheets a page has: 1 + the rows in journal_sheets for a drawing, 0 for a text
+ * page. Sheets are contiguous by construction (saveJournalSheet refuses a gap), so the
+ * COUNT is the whole answer and no reader needs to know which seqs exist.
+ *
+ * Takes a db OR an open transaction, because the writer below needs the same figure inside
+ * its own transaction and a second copy of a one-line rule is still a second copy.
+ * Returns 0 for a missing row as well — "no sheets" is true of a page that does not exist,
+ * and every caller that cares about existence has already asked.
+ */
+export async function journalSheetCount(
+  db: Exec,
+  id: number,
+): Promise<number> {
+  const r = await db.execute({
+    sql: `SELECT j.kind, (SELECT COUNT(*) FROM journal_sheets s WHERE s.entry_id = j.id) AS extra
+            FROM journal_entries j WHERE j.id=?`,
+    args: [id],
+  });
+  if (!r.rows.length) return 0;
+  if (String(r.rows[0].kind ?? "drawing") === "text") return 0;
+  return 1 + num(r.rows[0].extra);
+}
+
+/**
+ * Write ONE SHEET of a handwritten page — the scroll's unit of saving (see sheets.ts).
+ *
+ * Sheet 0 is the row itself: `journal_entries.image/width/height`, the same columns
+ * updateJournalEntry's drawing branch writes, so a one-sheet page saved either way is the
+ * same record. Sheets 1.. upsert into journal_sheets on (entry_id, seq), which is what lets
+ * the canvas re-send only the sheets it touched and leave the rest of a long page alone.
+ *
+ * Three refusals, all thrown rather than returned, because each is a caller bug and not a
+ * state of the record:
+ *  - a TEXT page: it has no sheets, and writing one would leave a PNG in a row nothing
+ *    reads as a drawing — the same rule updateJournalEntry enforces about `kind`.
+ *  - seq < 0: no such sheet.
+ *  - seq > 1 + existing: a GAP. The scroll is contiguous by construction, and the client
+ *    saves sequentially precisely so this can never be reached by a correct caller.
+ *
+ * Returns false when there is no such page, so the route can 404 rather than report a
+ * write that touched nothing. No habit tick: the page already exists, so the day is already
+ * ticked, and adding a sheet cannot be the thing that ticks it.
+ */
+export async function saveJournalSheet(
+  db: Client,
+  id: number,
+  seq: number,
+  sheet: { image: string; width?: number | null; height?: number | null },
+): Promise<boolean> {
+  if (!Number.isInteger(seq) || seq < 0)
+    throw new Error(`sheet ${seq} is not a sheet`);
+  const tx = await db.transaction("write");
+  try {
+    const r = await tx.execute({
+      sql: "SELECT kind FROM journal_entries WHERE id=?",
+      args: [id],
+    });
+    if (!r.rows.length) {
+      await tx.rollback();
+      return false;
+    }
+    // Both refusals THROW and leave the rollback to the catch below, which runs it once.
+    // Rolling back here and again in the catch is not harmless: the local sqlite3 client
+    // throws TRANSACTION_CLOSED on the second call, and that error — not this one — is
+    // what the route would see, turning a 409 with a reason into a 500 without one.
+    // (Turso's hrana client returns silently, which is why the pattern never showed in
+    // production.) The route tells the two apart by their wording; keep it.
+    if (String(r.rows[0].kind ?? "drawing") === "text")
+      throw new Error(`page ${id} is a text page and has no sheets`);
+    const count = await journalSheetCount(tx, id);
+    if (seq > count)
+      throw new Error(
+        `sheet ${seq} would leave a gap: page ${id} has ${count} sheet${count === 1 ? "" : "s"}`,
+      );
+
+    if (seq === 0) {
+      await tx.execute({
+        sql: "UPDATE journal_entries SET image=?, width=?, height=? WHERE id=?",
+        args: [sheet.image, sheet.width ?? null, sheet.height ?? null, id],
+      });
+    } else {
+      await tx.execute({
+        sql: `INSERT INTO journal_sheets (entry_id, seq, image, width, height) VALUES (?,?,?,?,?)
+              ON CONFLICT(entry_id, seq) DO UPDATE SET image=excluded.image, width=excluded.width, height=excluded.height`,
+        args: [id, seq, sheet.image, sheet.width ?? null, sheet.height ?? null],
       });
     }
     await tx.commit();
@@ -498,6 +599,14 @@ export async function deleteJournalEntry(
       return;
     }
     const date = String(e.rows[0].date);
+    // The page's later sheets go first and explicitly. The schema's ON DELETE CASCADE would
+    // do this too while foreign_keys is on — but a pragma is a session setting, not a
+    // promise, and a scroll's sheets outliving its page would be handwriting nothing can
+    // reach. Ordered before the parent so the FK never has to be relied on at all.
+    await tx.execute({
+      sql: "DELETE FROM journal_sheets WHERE entry_id=?",
+      args: [id],
+    });
     await tx.execute({
       sql: "DELETE FROM journal_entries WHERE id=?",
       args: [id],
