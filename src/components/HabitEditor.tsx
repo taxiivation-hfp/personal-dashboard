@@ -6,8 +6,10 @@ import { addDays, todayISO } from "@/lib/dates";
 import { weekdayBit } from "@/lib/engine";
 import type { HabitView } from "@/lib/queries";
 
-const DAYS = ["M", "T", "W", "T", "F", "S", "S"]; // bit0=Mon … bit6=Sun
-const ALL = 127;
+// THE WEEKDAY PICKER IS GONE — the owner's ruling, 2026-08-24. Standing non-negotiables
+// are everyday things now; a thing needed on one specific day is a one-off below. The
+// days_mask column and habitsForDate's mask read both stay, so any habit masked while the
+// picker lived keeps its days — it just can't be re-masked from here.
 
 /** A one-off non-negotiable still ahead, as /api/habits/one-off returns it. */
 type OneOff = {
@@ -37,6 +39,9 @@ const shortDay = (iso: string) =>
 export default function HabitEditor({ initial }: { initial: HabitView[] }) {
   const [habits, setHabits] = useState(initial);
   const [name, setName] = useState("");
+  /** The row whose remove is ARMED — the app's own two-step, never a native confirm().
+   *  Removal is a soft delete with no way back from the UI, so one tap is not enough. */
+  const [removing, setRemoving] = useState<number | null>(null);
   const today = todayISO();
   const tomorrowDate = addDays(today, 1);
   /** One-off non-negotiables still ahead. null until the fetch lands. */
@@ -140,10 +145,12 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
     const n = name.trim();
     if (!n) return;
     setName("");
+    // No days_mask travels — the route defaults every new habit to every day, which is
+    // the only kind the roster takes now.
     await fetch("/api/habits", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: n, days_mask: ALL }),
+      body: JSON.stringify({ name: n }),
     });
     reload();
   }
@@ -155,13 +162,6 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
       body: JSON.stringify(body),
     });
     reload();
-  }
-
-  function toggleDay(h: HabitView, i: number) {
-    const bit = 1 << i;
-    const next = h.days_mask & bit ? h.days_mask & ~bit : h.days_mask | bit;
-    // Zero days would make it invisible everywhere with no way back from Today.
-    patch({ id: h.id, days_mask: next === 0 ? h.days_mask : next });
   }
 
   /** Tomorrow's standing checklist, read from the roster already on this screen — shown
@@ -188,61 +188,50 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
           </Link>
       </header>
 
-      <p className="mt-3 max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
-        Small, binary, and separate from your blocks. No states and no reasons
-        here — that&apos;s the point of the contrast. Pick which days each one
-        applies to.
-      </p>
-
-      {/* A ruled list, not a stack of cards. The whole promise of this screen is that these
-          are small plain things; a rounded panel around each one dressed a checklist up as a
-          dashboard and made four items look like four features. */}
+      {/* A ruled list, not a stack of cards. One line per habit now that the weekday
+          pills are gone — rename in place, remove behind the app's own two-step. */}
       <ul className="mt-8 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
         {habits.map((h) => (
-          <li key={h.id} className="py-4">
+          <li key={h.id} className="py-3">
             <div className="flex items-center justify-between gap-3">
-              {/* The owner named it, so the field keeps the serif. The rule under it appears
-                  on focus only — a resting underline on every row would read as a form to be
-                  filled in rather than a list to be glanced at. */}
+              {/* The owner named it, so the field keeps the serif. Keyed by the name as
+                  well as the id — the task rows' idiom — so a server-side rename re-seeds
+                  this uncontrolled field instead of leaving stale words under a cursor. */}
               <input
+                key={`${h.id}-${h.name}`}
                 defaultValue={h.name}
                 onBlur={(e) =>
                   e.target.value.trim() &&
                   e.target.value !== h.name &&
                   patch({ id: h.id, name: e.target.value })
                 }
+                onKeyDown={(e) =>
+                  e.key === "Enter" && (e.target as HTMLInputElement).blur()
+                }
                 className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)]"
                 aria-label={`Rename ${h.name}`}
               />
+              {/* Removal is soft (active=0) but there is no way back from this screen,
+                  so it takes two taps: the first arms it, the second does it. Leaving
+                  the row disarms. Never a native confirm(). */}
               <button
-                onClick={() => patch({ id: h.id, remove: true })}
-                className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                onClick={() => {
+                  if (removing === h.id) {
+                    setRemoving(null);
+                    patch({ id: h.id, remove: true });
+                  } else {
+                    setRemoving(h.id);
+                  }
+                }}
+                onBlur={() => setRemoving((r) => (r === h.id ? null : r))}
+                className={`shrink-0 text-micro underline-offset-4 transition-colors hover:underline ${
+                  removing === h.id
+                    ? "font-semibold text-[var(--color-ink)]"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                }`}
               >
-                remove
+                {removing === h.id ? "remove? tap again" : "remove"}
               </button>
-            </div>
-            {/* Filled vs outlined, not dark vs pale: an off day has to look deliberately
-                empty rather than switched off or unavailable, since most items legitimately
-                run on a few days. Shape carries the state; the accent only confirms it. */}
-            <div className="mt-3 flex gap-1.5">
-              {DAYS.map((d, i) => {
-                const on = Boolean(h.days_mask & (1 << i));
-                return (
-                  <button
-                    key={i}
-                    onClick={() => toggleDay(h, i)}
-                    aria-label={`${d} ${on ? "on" : "off"}`}
-                    aria-pressed={on}
-                    className={`h-7 w-7 rounded-full border text-micro transition-colors ${
-                      on
-                        ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
-                        : "border-[var(--color-line-strong)] text-[var(--color-muted)]"
-                    }`}
-                  >
-                    {d}
-                  </button>
-                );
-              })}
             </div>
           </li>
         ))}
@@ -282,16 +271,8 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
       <section className="mt-12">
         <div className="section-head">
           <h2 className="text-small font-semibold">Tomorrow, specifically</h2>
-          <span className="text-micro text-[var(--color-muted)]">
-            one day only · counts toward tomorrow&apos;s adherence
-          </span>
+          <span className="text-micro text-[var(--color-muted)]">scored</span>
         </div>
-
-        <p className="mt-3 max-w-[60ch] text-small leading-relaxed text-[var(--color-muted)]">
-          A non-negotiable for tomorrow alone. It joins tomorrow&apos;s
-          checklist as an equal item and is gone the day after — unlike a task
-          below, it never carries, and it is scored.
-        </p>
 
         <div className="mt-4 flex items-end gap-4">
           <input
@@ -389,8 +370,10 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
       <section className="mt-12">
         <div className="section-head">
           <h2 className="text-small font-semibold">Tasks</h2>
+          {/* The flag that keeps this list honest beside the scored one above — the one
+              caption the text ruling spares, because its absence would mislead. */}
           <span className="text-micro text-[var(--color-muted)]">
-            one day only · carries over until done · not scored
+            not scored
           </span>
         </div>
 
@@ -428,8 +411,7 @@ export default function HabitEditor({ initial }: { initial: HabitView[] }) {
 
         {tasks != null && tasks.length === 0 && (
           <p className="pt-4 text-small leading-relaxed text-[var(--color-muted)]">
-            Nothing outstanding. A task added here shows up on Today on the day
-            it is for, and stays there until you tick it.
+            Nothing outstanding.
           </p>
         )}
 

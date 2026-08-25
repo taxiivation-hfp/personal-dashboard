@@ -254,7 +254,6 @@ export default function CalorieLog({
         >
           {view.total ?? 0}/{CALORIE_FLOOR}
         </span>
-        <span>— a floor to reach, never a ceiling to stay under.</span>
       </label>
 
       <div className="mt-4 lg:grid lg:grid-cols-[1.35fr_1fr]">

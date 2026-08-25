@@ -23,6 +23,7 @@ export type LogKind =
   | "skill"
   | "outreach"
   | "reading"
+  | "ascnd"
   | "drift";
 
 export type LogEntry = {
@@ -56,10 +57,10 @@ export type LogDay = { date: string; entries: LogEntry[] };
  *
  * The journal leads because it is the only entry that is about the day AS A WHOLE — the
  * others are about a thing that happened during it. Sessions follow in the order the body
- * did them; the two document habits after them, outreach before reading because that is
- * the checklist's own order. Drift reasons come last because they are the smallest and the
- * most incidental: a line explaining why an afternoon went elsewhere is a footnote to a
- * day, not its opening.
+ * did them; the document habits after them, in the checklist's own order (outreach,
+ * reading, then ASC.ND — the 2026-08-24 addition, seeded after the others). Drift reasons
+ * come last because they are the smallest and the most incidental: a line explaining why
+ * an afternoon went elsewhere is a footnote to a day, not its opening.
  *
  * This is the ONLY place that order is decided. A screen sorting these itself would be a
  * second opinion about the same day.
@@ -70,7 +71,8 @@ const ORDER: Record<LogKind, number> = {
   skill: 2,
   outreach: 3,
   reading: 4,
-  drift: 5,
+  ascnd: 5,
+  drift: 6,
 };
 
 /**

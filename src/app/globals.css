@@ -528,6 +528,36 @@ b,
     stroke-dashoffset var(--dur-data) var(--ease-out);
 }
 
+/* THE STREAK FLAME — the owner's ruling, 2026-08-24, and a SANCTIONED EXCEPTION to the
+ * no-glows rule ("disregard all previous MD files that say no glows or shadows", stated
+ * for this feature). The pill behind a streak carries a slight tint and a soft glow, both
+ * in the flame's own hue: --streak-h, set inline by StreakFlame.tsx from streakHue() —
+ * a continuous walk from light yellow (50) at day 1 to purple (280) at day 30.
+ *
+ * The emoji is recoloured by hue-rotate from its native orange (~35deg), so the glyph,
+ * the tint, the glow and the count are always four readings of ONE hue. The count's ink
+ * is the same hue driven dark enough to read on the beige surfaces.
+ *
+ * The exception stays this narrow: streak pills only. Nothing that you MARK may catch
+ * light (see The One Lamp Rule above), and this pill is a fact you read, not a control
+ * you operate. */
+.streak-flame {
+  --streak-h: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  background: hsl(var(--streak-h) 80% 55% / 0.13);
+  box-shadow: 0 0 9px hsl(var(--streak-h) 85% 55% / 0.4);
+  color: hsl(var(--streak-h) 60% 30%);
+}
+.streak-flame-mark {
+  font-size: 0.7rem;
+  line-height: 1;
+  filter: hue-rotate(calc((var(--streak-h) - 35) * 1deg)) saturate(1.25);
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }

@@ -466,9 +466,7 @@ export default function SessionHistory({ today }: { today: string }) {
 
         {all != null && !searching && shown.length === 0 && (
           <p className="max-w-[52ch] py-16 text-small leading-relaxed text-[var(--color-muted)]">
-            Nothing logged{filter ? ` under ${LABEL[filter]}` : ""} yet. Sessions
-            you write down here can be dated to any day — the log is for
-            catching up as much as for keeping up.
+            Nothing logged{filter ? ` under ${LABEL[filter]}` : ""} yet.
           </p>
         )}
 

@@ -280,6 +280,34 @@ async function ensure(c: Client): Promise<Client> {
     );
   }
 
+  // THREE NEW NON-NEGOTIABLES — the owner's ask, 2026-08-24/25. "Calendar" and "Vitamins"
+  // are plain ticks; "ASC.ND" is a DOCUMENT habit (system_key 'ascnd'), the same logger
+  // surface outreach and reading open — DOC_HABITS in Today.tsx and the written-log
+  // queries both key on 'ascnd'. Latched like system_keys_v2 above: seeded once, so a
+  // later rename, re-pillar or removal is never overruled on the next boot. Guards inside
+  // the INSERTs make even the first run safe against rows the owner already created by
+  // hand.
+  const aug24 = await c.execute(
+    "SELECT 1 FROM app_meta WHERE key='habits_aug24_v1'",
+  );
+  if (!aug24.rows.length) {
+    await c.execute(`INSERT INTO habits (pillar_id,name,target_value,source,cadence,active,days_mask,system_key,input,unit,sort_order)
+       SELECT NULL,'Calendar',1,'manual','daily',1,127,NULL,'check',NULL,
+              (SELECT COALESCE(MAX(sort_order),0)+1 FROM habits)
+       WHERE NOT EXISTS (SELECT 1 FROM habits WHERE name='Calendar' AND active=1)`);
+    await c.execute(`INSERT INTO habits (pillar_id,name,target_value,source,cadence,active,days_mask,system_key,input,unit,sort_order)
+       SELECT (SELECT id FROM pillars WHERE key='physical'),'Vitamins',1,'manual','daily',1,127,NULL,'check',NULL,
+              (SELECT COALESCE(MAX(sort_order),0)+1 FROM habits)
+       WHERE NOT EXISTS (SELECT 1 FROM habits WHERE name='Vitamins' AND active=1)`);
+    await c.execute(`INSERT INTO habits (pillar_id,name,target_value,source,cadence,active,days_mask,system_key,input,unit,sort_order)
+       SELECT (SELECT id FROM pillars WHERE key='portfolio'),'ASC.ND',1,'manual','daily',1,127,'ascnd','check',NULL,
+              (SELECT COALESCE(MAX(sort_order),0)+1 FROM habits)
+       WHERE NOT EXISTS (SELECT 1 FROM habits WHERE system_key='ascnd')`);
+    await c.execute(
+      "INSERT INTO app_meta (key,value) VALUES ('habits_aug24_v1','1')",
+    );
+  }
+
   // Every skill belongs to Portfolio — the owner's ruling. See the skills_portfolio_v1
   // block in scripts/migrate.mjs for the reasoning; this is its mirror, so a dev database
   // that never runs db:migrate lands in the same place.

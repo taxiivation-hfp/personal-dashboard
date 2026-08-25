@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CALORIE_STREAK_FLOOR, streakEnding } from "./streaks.ts";
+import {
+  CALORIE_STREAK_FLOOR,
+  STREAK_HUE_DAYS,
+  STREAK_HUE_END,
+  STREAK_HUE_START,
+  streakEnding,
+  streakHue,
+} from "./streaks.ts";
 
 const days = (...d: string[]) => new Set(d);
 
@@ -91,4 +98,28 @@ test("the food-log floor sits below the eating floor, and stays put", () => {
   // The streak asks "did you log the day", not "did you eat enough" — pinning it to the
   // 2,500 eating floor would give an honest under-day a reason not to be logged.
   assert.equal(CALORIE_STREAK_FLOOR, 2000);
+});
+
+test("the flame starts light yellow and ends purple, clamped at both ends", () => {
+  assert.equal(streakHue(1), STREAK_HUE_START);
+  assert.equal(streakHue(STREAK_HUE_DAYS), STREAK_HUE_END);
+  // Below the first day and past the last, the walk holds rather than overshooting.
+  assert.equal(streakHue(0), STREAK_HUE_START);
+  assert.equal(streakHue(-3), STREAK_HUE_START);
+  assert.equal(streakHue(365), STREAK_HUE_END);
+});
+
+test("the flame's hue is continuous and only ever advances", () => {
+  for (let d = 1; d < STREAK_HUE_DAYS; d++) {
+    const step = streakHue(d + 1) - streakHue(d);
+    assert.ok(step > 0, `day ${d} -> ${d + 1} must advance`);
+    // Continuous: one even walk, no jumps — each day moves by exactly one 29th.
+    assert.ok(
+      Math.abs(step - (STREAK_HUE_END - STREAK_HUE_START) / (STREAK_HUE_DAYS - 1)) < 1e-9,
+    );
+  }
+});
+
+test("a hue that is not a number falls back to the start, never NaN", () => {
+  assert.equal(streakHue(NaN), STREAK_HUE_START);
 });

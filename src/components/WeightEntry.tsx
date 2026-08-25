@@ -300,9 +300,8 @@ export default function WeightEntry({
               hiding the truth, which is the one thing every chart on this page is built
               not to do. */}
           {listed.length > LIST_LIMIT && (
-            <p className="mt-2 text-micro text-[var(--color-muted)]">
-              the {LIST_LIMIT} most recent of {listed.length} readings · any
-              other day is reachable by date
+            <p className="mt-2 text-micro tabular-nums text-[var(--color-muted)]">
+              {LIST_LIMIT} of {listed.length} readings
             </p>
           )}
         </>

@@ -163,8 +163,15 @@ Consequences worth knowing, all of them intended:
 ## Non-negotiables
 
 Separate from blocks and deliberately simpler: a small plain checklist. **Binary — no
-states, no reasons.** The user writes and edits them, and they can be day-of-week
-dependent (e.g. laundry on Sundays).
+states, no reasons.** The user writes and edits them — rename in place, remove behind the
+app's own two-step, both on `/habits`.
+
+**THE WEEKDAY PICKER IS GONE** — the owner's ruling, 2026-08-24. A standing non-negotiable
+is an every-day thing; something needed on one specific day is a ONE-OFF (see "Tomorrow,
+specifically"), which already carries its own date. `habits.days_mask` and
+`habitsForDate`'s mask read both STAY — a habit masked while the picker lived keeps its
+days, and the streak walk still skips unscheduled days — but nothing writes the mask any
+more and new habits are always every-day (127).
 
 Gym is deliberately **not** one of these. The owner trains "any 4 of 5 weekdays" — a
 frequency, which `days_mask` cannot express. On the checklist it would be engineered to
@@ -197,10 +204,19 @@ calorie row's STREAK counts a third threshold, `CALORIE_STREAK_FLOOR` (2,000 in
 streaks.ts) — "did you log the day", deliberately not "did you eat enough"; see the
 streaks paragraph in the non-negotiables section.
 
-**A non-negotiable may carry a DOCUMENT** — outreach and reading, today. `habit_entries.note`,
-one per day by that table's own UNIQUE constraint, which is the shape the metric already
-counts in: outreach is `perDayCapped: true`, so a second message on a Tuesday is the same
-Tuesday. What is counted is consistency at the floor, never volume past it.
+**A non-negotiable may carry a DOCUMENT** — outreach, reading and ASC.ND, today.
+`habit_entries.note`, one per day by that table's own UNIQUE constraint, which is the
+shape the metric already counts in: outreach is `perDayCapped: true`, so a second message
+on a Tuesday is the same Tuesday. What is counted is consistency at the floor, never
+volume past it.
+
+**THREE HABITS JOINED ON 2026-08-24/25** — the owner's ask, seeded by the latched
+`habits_aug24_v1` block in client.ts: **Calendar** (plain tick, no pillar), **Vitamins**
+(plain tick, Physical) and **ASC.ND** (`system_key='ascnd'`, Portfolio) — a DOCUMENT habit
+on the outreach/reading model: its row opens `NoteLog`, saving is what ticks, and its
+notes join the written log as their own kind (`ascnd` in dayLog.ts, tab labelled
+"ASC.ND"). All three are ordinary rows otherwise — they join the habit tally, and they
+streak like everything else.
 
 **A DOCUMENT ROW IS ONE CONTROL** — the owner's ruling, 2026-08-21, replacing the
 tick-box-plus-side-button pair. Tapping the row opens the logger (`NoteLog`), like every
@@ -229,18 +245,32 @@ The Journal row deliberately has no note of its own — a page IS the document, 
 about it is a second diary.
 
 **EVERY CHECKLIST ROW CARRIES ITS OWN STREAK** — the owner's ruling, 2026-08-21. A plain
-count of consecutive done days, the same standing the app-wide streak has: a fact, never a
-mechanic — no flames, no badges, and **a streak of 0 draws NOTHING**, because a row that
-greets an off week with "0" is a row that scolds, and a list that scolds stops being
-ticked honestly. The walk lives in `src/lib/streaks.ts` (pure, tested): days the item is
-not scheduled neither count nor break (a Sundays-only item keeps its run through the
-week), and the live today gets GRACE — unticked at 2pm is "not yet", never a break.
-Streaks are HIDDEN off today, for the app-wide streak's own reason: the days you step back
-to are precisely the unmarked ones. **Calories streak on `CALORIE_STREAK_FLOOR` (2,000),
-deliberately below the 2,500 floor** — the streak asks "did you log the day", not "did you
-eat enough"; a streak pinned to the eating floor would give an honest under-day a reason
-not to be logged. Journal's streak rides its own habit entries, which page saves already
-tick. Steps has no streak: a streak on a phone battery is not a streak on a person.
+count of consecutive done days, the same standing the app-wide streak has. The walk lives
+in `src/lib/streaks.ts` (pure, tested): days the item is not scheduled neither count nor
+break (a legacy Sundays-only item keeps its run through the week), and the live today gets
+GRACE — unticked at 2pm is "not yet", never a break. Streaks are HIDDEN off today, for the
+app-wide streak's own reason: the days you step back to are precisely the unmarked ones.
+**Calories streak on `CALORIE_STREAK_FLOOR` (2,000), deliberately below the 2,500
+floor** — the streak asks "did you log the day", not "did you eat enough"; a streak pinned
+to the eating floor would give an honest under-day a reason not to be logged. Journal's
+streak rides its own habit entries, which page saves already tick.
+
+**THE STREAK WEARS A FLAME** — the owner's ruling, 2026-08-24, revising the earlier
+no-flames stance ("disregard all previous MD files that say no glows or shadows", stated
+for this feature). One shared component, `StreakFlame.tsx`: a 🔥 beside the count, its
+colour a CONTINUOUS hue walk from light yellow at day 1 to purple at day 30 —
+`streakHue()` in streaks.ts, the ONE home of that interpolation, test-pinned at both ends
+and clamped past them. The pill behind it takes a slight tint and a soft glow in the same
+hue (`.streak-flame` in globals.css — a sanctioned, deliberately narrow exception to the
+no-shadows rule: streak pills only; nothing you MARK may catch light). What survives the
+revision: **a streak of 0 still draws NOTHING** — a row that greets an off week with "0"
+scolds — and there is still no "don't break it" copy anywhere.
+
+**STEPS STREAK NOW TOO** — same ruling ("every non-negotiable should be streakable"),
+reversing "a streak on a phone battery is not a streak on a person". `DayView.stepsStreak`
+walks health_logs against `STEPS_FLOOR` (7,000) — the same floor the row's box ticks on,
+so the streak and the tick can never disagree about a day — with today's usual grace. The
+phone stays the only writer; a day it never pushed breaks the run like any unearned day.
 
 ### One-off non-negotiables — "Tomorrow, specifically"
 
@@ -367,7 +397,9 @@ truth, what counts is the cap.
   the only place that knows what weight 0 means. A ghost is never a lap: "no source yet" is
   a statement about the app and belongs on the ring where the metric would have been.
 
-  Translucent, **not glowing**. A glow is a shadow, and this app ships none.
+  Translucent, **not glowing**. A glow is a shadow, and the only glow this app ships is
+  the streak flame's pill (the owner's 2026-08-24 exception — see the non-negotiables
+  section); a ring lap gets none.
 - **Social events come from the CALENDAR, not a checklist.** Graphite (`colorId: "8"`)
   means a social event — Church, a night out, a farewell. They are already scheduled there,
   and a second place to record them is a second place to forget. Counted in `/api/rings`
@@ -548,6 +580,14 @@ asks first, in the app's own two-step — never a native `confirm()`, which in a
 PWA is a system sheet dropped on the page. Under the control sit the recent readings, each
 one a tap that selects its date, because reaching a bad reading used to mean recognising its
 date off the chart's axis and typing it in from memory.
+
+**THE WEIGHT DIALOG'S CHART DRAWS THE OBSERVED RANGE** — the owner's ruling, 2026-08-24,
+REVERSING the fixed 0–100kg axis it shipped with. Same 30-day window and same domain
+arithmetic as the record page's weight chart (DayChart's own observed min/max with its
+line padding, no floor/ceiling props), so the two share their Y endpoints and can never
+disagree about the same month. The STEPS dialog and the record's Steps card both also
+print the fortnight's SUM (`sum` over the last `WINDOW_DAYS`, null — not 0 — when the
+phone pushed on none of them): the same figure the ring counts, stated as data.
 
 `/sessions` lists BOTH logs — Strength / Cardio / **Skills** — because a skill session became
 the same object a workout is. Two pages would mean two searches, and a search that sees half
@@ -869,6 +909,16 @@ surface in the written log below.
 ## Visual language
 
 Light beige, premium, clean.
+
+**TEXT IS DATA — the owner's ruling, 2026-08-24.** The app shows the data and the
+controls that input it, and explains itself in the CODE, not on the screen. The explainer
+copy that used to sit under charts, figures and lists ("half the blocked hours worked…",
+"Drawn on the range actually observed…", the drill-down footers, the long empty states) is
+REMOVED, app-wide. What stays on screen: labels, units, counts, dates, window scopes
+("last 30 days"), button captions, error/confirm messages, and the one honesty flag
+("not scored" beside tasks). When adding a surface, do not add a sentence describing it —
+put the reasoning in a comment where the next reader of the code finds it. The removed
+arguments all still hold; they simply live in the modules that implement them.
 
 - Warm beige page background, off-white cards, **muted amber as the single accent**.
 - **Pillar hues are owner-editable at `/colours`, from a CURATED palette only.** Every

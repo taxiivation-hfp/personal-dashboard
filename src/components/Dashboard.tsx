@@ -309,6 +309,16 @@ export default function Dashboard({
     [trends],
   );
 
+  /** The fortnight's step total, from the series already loaded — the same last-14-days
+   *  sum the ring counts. null when the phone pushed on none of those days. */
+  const stepsSum14 = useMemo(() => {
+    const present = steps
+      .slice(-14)
+      .map((p) => p.value)
+      .filter((v): v is number => v != null);
+    return present.length ? present.reduce((a, b) => a + b, 0) : null;
+  }, [steps]);
+
   /**
    * The four figures across the top. Chosen so no two answer the same question:
    * today, this week, this fortnight, and the record so far.
@@ -491,41 +501,34 @@ export default function Dashboard({
                 learned to step back; the labels have to move with it or all four figures
                 are about a fortnight ago while claiming to be about now. `anchored` is one
                 suffix so they cannot drift apart. */}
+            {/* The fact lines under these figures are GONE — the 2026-08-24 text ruling:
+                the data and its window label carry the band, and the derivations live in
+                the drill-downs each figure already opens. */}
             <Figure
               label={onToday ? "adherence, last 7 days" : `adherence, 7 days ${anchored}`}
               value={viewedPct == null ? "—" : `${viewedPct}%`}
-              // EVEN HALVES. This said 70/30 for as long as the split was 70/30; the
-              // constants moved and the caption did not, so the record was explaining the
-              // hero figure with the wrong arithmetic.
-              fact="half the blocked hours worked, half the non-negotiables"
             />
             <Figure
               label={onToday ? "hours worked, last 7 days" : `hours worked, 7 days ${anchored}`}
               value={asTime(weekHours)}
-              fact="blocked time you marked adhered"
               onOpen={() => setHoursTotal(true)}
             />
-            {/* TWO FIGURES, not one with a split caption. They were summed under
-                "strength, cardio and misc together" — a caption naming a kind that no longer
-                exists, over a number that hid the split actually being read. Physical and
-                skills are different things done for different reasons; each gets its own
-                block, and each block IS the way into its own backlog. */}
+            {/* TWO FIGURES, not one with a split caption — physical and skills are
+                different things done for different reasons; each block IS the way into
+                its own backlog. */}
             <Figure
               label={onToday ? "physical, past fortnight" : `physical, fortnight ${anchored}`}
               value={facts ? String(facts.workoutSessions) : "—"}
-              fact="strength and cardio sessions"
               href="/sessions"
             />
             <Figure
               label={onToday ? "skills, past fortnight" : `skills, fortnight ${anchored}`}
               value={facts ? String(facts.skillSessions) : "—"}
-              fact="sessions across every skill"
               href="/sessions?kind=skill"
             />
             <Figure
               label={onToday ? "days logged in a row" : `days in a row ${anchored}`}
               value={streak == null ? "—" : String(streak)}
-              fact="a fact about the record, not a thing to keep"
             />
           </div>
 
@@ -536,7 +539,7 @@ export default function Dashboard({
             <div className="section-head">
               <h2 className="text-small font-semibold">The fortnight</h2>
               <span className="text-micro text-[var(--color-muted)]">
-                rolling 14 days · every ring caps at its own minimum
+                rolling 14 days
               </span>
             </div>
 
@@ -596,9 +599,6 @@ export default function Dashboard({
             <section className="mt-10">
               <div className="section-head">
                 <h2 className="text-small font-semibold">Every metric</h2>
-                <span className="text-micro text-[var(--color-muted)]">
-                  the bar stops at its minimum — the count never does
-                </span>
               </div>
               <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
                 {(rings ?? []).flatMap((p) =>
@@ -639,9 +639,6 @@ export default function Dashboard({
             <section className="mt-10">
               <div className="section-head">
                 <h2 className="text-small font-semibold">In flight</h2>
-                <span className="text-micro text-[var(--color-muted)]">
-                  goals and the tasks still open
-                </span>
               </div>
               {/* TWO COLUMNS, goals left and tasks right — the owner's ruling, and the two
                   are genuinely different objects rather than one list split for looks. A
@@ -659,8 +656,8 @@ export default function Dashboard({
                     className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
                   >
                     Set one
-                  </a>{" "}
-                  and its subgoals become the plan.
+                  </a>
+                  .
                 </p>
               ) : (
                 <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
@@ -703,9 +700,9 @@ export default function Dashboard({
                             next · <span className="text-[var(--color-ink)]">{next.title}</span>
                           </>
                         ) : g.subgoals.length === 0 ? (
-                          "no subgoals yet — add a few and this becomes a plan"
+                          "no subgoals yet"
                         ) : (
-                          "every step ticked · mark it done when you agree"
+                          "every step ticked"
                         )}
                       </p>
                     </li>
@@ -718,8 +715,7 @@ export default function Dashboard({
                 <p className="mb-1 text-micro text-[var(--color-muted)]">Tasks</p>
                 {openTasks.length === 0 ? (
                   <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                    Nothing outstanding. Tasks are added for a day and carry
-                    forward until ticked.
+                    Nothing outstanding.
                   </p>
                 ) : (
                   <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
@@ -758,18 +754,13 @@ export default function Dashboard({
             <section className="mt-10">
               <div className="section-head">
                 <h2 className="text-small font-semibold">Achieved</h2>
-                <span className="text-micro text-[var(--color-muted)]">
-                  goals you marked done, and every task finished
-                </span>
               </div>
               <div className="mt-3 grid gap-x-8 gap-y-8 xl:grid-cols-2">
               <div>
               <p className="mb-1 text-micro text-[var(--color-muted)]">Goals</p>
               {done.length === 0 ? (
                 <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                  Nothing marked done yet. A goal moves here when you say it is
-                  finished — never automatically at 100%, because deciding a thing
-                  is done is the owner&apos;s call and not a threshold&apos;s.
+                  Nothing marked done yet.
                 </p>
               ) : (
                 <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
@@ -803,8 +794,7 @@ export default function Dashboard({
                 <p className="mb-1 text-micro text-[var(--color-muted)]">Tasks</p>
                 {doneTasks.length === 0 ? (
                   <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                    No tasks ticked yet. A finished task stays here rather than
-                    disappearing — the same reason a finished goal does.
+                    No tasks ticked yet.
                   </p>
                 ) : (
                   <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
@@ -844,11 +834,11 @@ export default function Dashboard({
             </p>
           ) : (
             <div className="mt-10 grid gap-6 lg:grid-cols-2">
-              <Panel
-                title="Adherence"
-                tint={CARD_TINTS.adherence}
-                note="Did I do what I said I'd do. A sum of what was earned, so it only ever climbs through a day."
-              >
+              {/* The chart notes are GONE — the 2026-08-24 text ruling. Every decision a
+                  note used to state (the observed range, gaps drawing nothing, the floor
+                  line) is either visible on the chart itself or recorded in DayChart's
+                  own docblock for the next reader of the code. */}
+              <Panel title="Adherence" tint={CARD_TINTS.adherence}>
                 <DayChart
                   points={adherence}
                   form="bars"
@@ -859,11 +849,7 @@ export default function Dashboard({
                 />
               </Panel>
 
-              <Panel
-                title="Hours"
-                tint={CARD_TINTS.hours}
-                note="Time spent, never results produced — stacked in the colours those hours had in the calendar."
-              >
+              <Panel title="Hours" tint={CARD_TINTS.hours}>
                 <DayChart
                   points={hours}
                   form="stacked"
@@ -873,11 +859,7 @@ export default function Dashboard({
                 />
               </Panel>
 
-              <Panel
-                title="Weight"
-                tint={CARD_TINTS.weight}
-                note="Drawn on the range actually observed. A morning that went unweighed is a gap, not a zero."
-              >
+              <Panel title="Weight" tint={CARD_TINTS.weight}>
                 <DayChart
                   points={weight}
                   form="line"
@@ -894,11 +876,7 @@ export default function Dashboard({
                 />
               </Panel>
 
-              <Panel
-                title="Calories"
-                tint={CARD_TINTS.calories}
-                note="Bars from zero — a line would imply Tuesday's intake flowed into Wednesday's."
-              >
+              <Panel title="Calories" tint={CARD_TINTS.calories}>
                 <DayChart
                   points={calories}
                   form="bars"
@@ -934,7 +912,14 @@ export default function Dashboard({
                 <Panel
                   title="Steps"
                   tint={CARD_TINTS.steps}
-                  note="What the phone pushed. A day it never reported is a gap, not a day nobody walked — and the line at 7,000 is a floor to reach, never a ceiling."
+                  // The fortnight's SUM — the figure the ring counts, printed as data
+                  // (the owner's ask, 2026-08-24). null when the phone pushed on none of
+                  // the last 14 days: a fortnight nobody measured is not a zero.
+                  note={
+                    stepsSum14 == null
+                      ? undefined
+                      : `${stepsSum14.toLocaleString()} · last 14 days`
+                  }
                 >
                   <StepsChart points={steps} />
                 </Panel>
@@ -987,11 +972,10 @@ export default function Dashboard({
             />
           )}
 
-          <p className="mt-10 max-w-[62ch] border-t border-[var(--color-line)] pt-4 text-micro leading-relaxed text-[var(--color-muted)]">
-            {daysLogged} of the {days} days {anchored} have something marked on
-            them.
-            There is deliberately no average here, and no comparison with the
-            window before this one — those are judgements, and this is a record.
+          {/* The one closing line is DATA — the window's coverage. The philosophy
+              paragraph that followed it fell to the 2026-08-24 text ruling. */}
+          <p className="mt-10 border-t border-[var(--color-line)] pt-4 text-micro tabular-nums leading-relaxed text-[var(--color-muted)]">
+            {daysLogged} of {days} days marked
           </p>
           </>
           )}
@@ -1018,9 +1002,10 @@ function Figure({
 }: {
   label: string;
   value: string;
-  /** The line under the figure. A node rather than a string, so a figure whose derivation
-   *  has more than one destination can make each of them its own way through. */
-  fact: React.ReactNode;
+  /** The line under the figure — OPTIONAL since the 2026-08-24 text ruling, and unused
+   *  by the current band: the label and value carry it. Kept so a figure that one day
+   *  genuinely needs a qualifier still has a slot that renders correctly. */
+  fact?: React.ReactNode;
   /**
    * Open this figure's workings.
    *
@@ -1050,9 +1035,11 @@ function Figure({
       >
         {value}
       </p>
-      <p className="mt-1 text-micro leading-snug text-[var(--color-muted)]">
-        {fact}
-      </p>
+      {fact != null && (
+        <p className="mt-1 text-micro leading-snug text-[var(--color-muted)]">
+          {fact}
+        </p>
+      )}
     </>
   );
   /**
@@ -1099,7 +1086,9 @@ function Panel({
   children,
 }: {
   title: string;
-  note: string;
+  /** OPTIONAL since the 2026-08-24 text ruling, and now a DATA line where present (the
+   *  Steps card's fortnight sum) — never a sentence explaining the chart. */
+  note?: string;
   /** This card's ground, from CARD_TINTS. */
   tint?: string;
   children: React.ReactNode;
@@ -1111,10 +1100,12 @@ function Panel({
     >
       <div className="section-head">
         <h2 className="text-small font-semibold">{title}</h2>
+        {note != null && (
+          <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+            {note}
+          </span>
+        )}
       </div>
-      <p className="max-w-[62ch] pt-2 text-micro leading-relaxed text-[var(--color-muted)]">
-        {note}
-      </p>
       <div className="mt-4">{children}</div>
     </section>
   );

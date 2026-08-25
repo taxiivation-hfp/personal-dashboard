@@ -342,13 +342,9 @@ export default function AdherenceLog({
         </div>
       )}
 
-      <p className="mt-5 border-t border-[var(--color-line)] pt-3 text-micro leading-relaxed text-[var(--color-muted)]">
-        Adherence is an even split: half the blocked hours you worked, half the
-        non-negotiables — where the step and calorie floors count as two more
-        items, each earned in proportion to how much of its floor was reached.
-        It only ever climbs — nothing on the right was taken off anything, it
-        simply hasn&apos;t been added.
-      </p>
+      {/* The closing explainer paragraph fell to the 2026-08-24 text ruling — the two
+          columns ARE the workings, and the arithmetic they explain is documented in
+          adherence.ts for the next reader of the code. */}
     </dialog>
   );
 }

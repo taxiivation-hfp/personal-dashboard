@@ -116,9 +116,7 @@ export default function JournalArchive({ initial }: { initial: JournalPage[] }) 
         <div className="window bg-[var(--color-surface-1)] p-5 lg:p-8">
           {pages.length === 0 && (
             <p className="max-w-[52ch] text-body leading-relaxed text-[var(--color-muted)]">
-              No pages yet. Tonight&apos;s page is written from Today — the
-              Journal row of the checklist — and every page lands here, kept by
-              month.
+              No pages yet.
             </p>
           )}
 

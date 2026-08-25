@@ -65,13 +65,8 @@ export default function GoalEditor({
           so their deeper screen keeps its ground. */}
       <main className="mx-auto w-full max-w-[64rem] flex-1 px-6 pb-16 pt-6 sm:px-8">
         <div className="window bg-[var(--color-surface-3)] p-5 lg:p-8">
-      <p className="max-w-[60ch] text-body leading-relaxed text-[var(--color-muted)]">
-        Subgoals split a goal evenly unless you set a weight. Leave one blank
-        and it takes an equal share of whatever the others leave behind.
-        Progress comes from what you&apos;ve ticked — there&apos;s nothing to
-        set by hand.
-      </p>
-
+      {/* The weights explainer fell to the 2026-08-24 text ruling — the blank-means-auto
+          rule is documented in goals.ts for the next reader of the code. */}
       {/* Each goal a CARD — the record's card treatment. The old ruling here was hairlines
           over cards, made when cards meant floating tiles on bare page; inside a window the
           card is a smaller pane of the same glass, which is the family look the owner asked

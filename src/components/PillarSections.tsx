@@ -1448,9 +1448,7 @@ export default function PillarSections({
 
                     {!anyRecent && (
                       <p className="mt-3 text-micro leading-relaxed text-[var(--color-muted)]">
-                        Nothing logged in the last 14 days. Lifetime totals stay
-                        listed, so everything you&apos;ve put time into is still
-                        visible.
+                        Nothing logged in the last 14 days.
                       </p>
                     )}
                   </div>

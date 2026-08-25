@@ -15,7 +15,13 @@ import { rfc3339, todayISO } from "./dates";
 import type { CalEvent } from "./google";
 import { addDays, daysBetween } from "./dates";
 import { deriveWeights } from "./goals";
-import { METRICS, WINDOW_DAYS, type RawCount, type PillarKey } from "./rings";
+import {
+  METRICS,
+  STEPS_FLOOR,
+  WINDOW_DAYS,
+  type RawCount,
+  type PillarKey,
+} from "./rings";
 import { carriedDays, tasksFor, type DayTask } from "./tasks";
 import { CALORIE_STREAK_FLOOR, streakEnding } from "./streaks";
 import { workedFraction } from "./worked";
@@ -192,6 +198,14 @@ export type DayView = {
    * day. The LOG streak, deliberately not the 2,500 eating floor — see streaks.ts.
    */
   calorieStreak: number;
+  /**
+   * Consecutive days the phone's push reached STEPS_FLOOR (7,000), ending on this day.
+   * The owner's ruling, 2026-08-24 — every checklist row is streakable now, revising the
+   * earlier "a streak on a phone battery is not a streak on a person" stance. A day the
+   * phone never pushed breaks the run like any unearned day; today keeps the same grace
+   * every other streak gets.
+   */
+  stepsStreak: number;
   pillars: PillarView[];
 };
 
@@ -651,6 +665,25 @@ async function calorieStreakFor(
   });
 }
 
+/**
+ * The STEP streak: consecutive days the phone's push reached STEPS_FLOOR (7,000) — the
+ * same floor the row's box ticks on, so the streak and the tick can never disagree about
+ * one day. The phone stays the only writer; this is one more reader of health_logs.
+ */
+async function stepsStreakFor(
+  db: Client,
+  anchor: string,
+  grace: boolean,
+): Promise<number> {
+  const r = await db.execute({
+    sql: "SELECT date FROM health_logs WHERE date <= ? AND steps >= ?",
+    args: [anchor, STEPS_FLOOR],
+  });
+  return streakEnding(anchor, new Set(r.rows.map((x) => String(x.date))), {
+    grace,
+  });
+}
+
 /** A one-off non-negotiable, as its day's checklist needs it. See one_off_habits. */
 export type OneOffHabitView = {
   id: number;
@@ -739,6 +772,7 @@ export async function getDayView(
     streak: streaks.get(h.id) ?? 0,
   }));
   const calorieStreak = await calorieStreakFor(db, date, grace);
+  const stepsStreak = await stepsStreakFor(db, date, grace);
 
   // The day's one-off non-negotiables — items of this day's checklist AND its tally.
   const oneOffs = await oneOffHabitsFor(db, date);
@@ -815,6 +849,7 @@ export async function getDayView(
     tasks: await dayTasksFor(db, date, today),
     oneOffs,
     calorieStreak,
+    stepsStreak,
     pillars,
   };
 }
@@ -1151,7 +1186,7 @@ export async function logDays(
             UNION SELECT date FROM gym_sessions WHERE date <= ?
             UNION SELECT date FROM skill_time  WHERE date <= ?
             UNION SELECT e.date FROM habit_entries e JOIN habits h ON h.id = e.habit_id
-                   WHERE h.system_key IN ('outreach','reading') AND e.note IS NOT NULL AND e.date <= ?
+                   WHERE h.system_key IN ('outreach','reading','ascnd') AND e.note IS NOT NULL AND e.date <= ?
             UNION SELECT date FROM block_marks
                    WHERE state = 'drifted' AND reason IS NOT NULL AND reason <> '' AND date <= ?
           ) ORDER BY date DESC LIMIT ?`,
@@ -1182,12 +1217,12 @@ export async function logDays(
       ...inSpan,
     }),
     db.execute({
-      // Both DOCUMENT habits in one read — outreach and reading write the same shape
-      // (habit_entries.note), and the system_key travels so the loop below can file each
-      // under its own kind rather than guessing from the words.
+      // Every DOCUMENT habit in one read — outreach, reading and ASC.ND write the same
+      // shape (habit_entries.note), and the system_key travels so the loop below can file
+      // each under its own kind rather than guessing from the words.
       sql: `SELECT e.id, e.date, e.note, h.system_key AS skey FROM habit_entries e
               JOIN habits h ON h.id = e.habit_id
-             WHERE h.system_key IN ('outreach','reading') AND e.note IS NOT NULL
+             WHERE h.system_key IN ('outreach','reading','ascnd') AND e.note IS NOT NULL
                AND e.date BETWEEN ? AND ?`,
       ...inSpan,
     }),
@@ -1246,14 +1281,18 @@ export async function logDays(
   for (const r of outreach.rows) {
     if (!keep.has(String(r.date))) continue;
     const note = r.note == null ? null : String(r.note);
-    const kind = String(r.skey) === "reading" ? "reading" : "outreach";
+    const skey = String(r.skey);
+    const kind =
+      skey === "reading" ? "reading" : skey === "ascnd" ? "ascnd" : "outreach";
     out.push({
       kind,
       id: num(r.id),
       date: String(r.date),
       title: firstLine(note),
       body: note,
-      meta: kind,
+      // The qualifier is printed verbatim beside the title, so ASC.ND keeps its own
+      // casing rather than the kind key's.
+      meta: kind === "ascnd" ? "ASC.ND" : kind,
     });
   }
   for (const r of drift.rows) {

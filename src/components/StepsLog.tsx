@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import StepsChart from "./StepsChart";
 import type { ChartPoint } from "./DayChart";
+import { WINDOW_DAYS } from "@/lib/rings";
 
 /**
  * THE STEP TREND, behind the checklist row — the same dialog the weight and food logs
@@ -31,6 +32,19 @@ export default function StepsLog({
 }) {
   const [series, setSeries] = useState<ChartPoint[] | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
+
+  /** The fortnight's total — the last WINDOW_DAYS of the 30-day series, summed over the
+   *  days the phone actually pushed. null when it pushed on none of them: a fortnight
+   *  nobody measured is not a fortnight of zero steps. */
+  const sum14 = (() => {
+    if (series == null) return null;
+    const present = series
+      .slice(-WINDOW_DAYS)
+      .map((p) => p.value)
+      .filter((v): v is number => v != null);
+    if (!present.length) return null;
+    return present.reduce((a, b) => a + b, 0);
+  })();
 
   useEffect(() => {
     const d = dialogRef.current;
@@ -83,8 +97,19 @@ export default function StepsLog({
         </button>
       </div>
 
-      <p className="mt-2 text-micro text-[var(--color-muted)]">
-        last {TREND_DAYS} days · point at a day for the count
+      {/* The window, and the fortnight's SUM — the figure the ring counts, printed here
+          as data (the owner's ask, 2026-08-24). Null days add nothing, and a fortnight
+          the phone never reported prints no sum at all rather than a zero nobody said. */}
+      <p className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-micro text-[var(--color-muted)]">
+        <span>last {TREND_DAYS} days</span>
+        {sum14 != null && (
+          <span className="tabular-nums">
+            <span className="text-[var(--color-ink)]">
+              {sum14.toLocaleString()}
+            </span>{" "}
+            · last {WINDOW_DAYS} days
+          </span>
+        )}
       </p>
 
       <div className="mt-4">
@@ -94,7 +119,7 @@ export default function StepsLog({
           <StepsChart
             points={series}
             height={200}
-            emptyNote="Nothing pushed in the last month. The phone's Shortcut writes this — there is nothing to type here."
+            emptyNote="Nothing pushed in the last month."
           />
         )}
       </div>

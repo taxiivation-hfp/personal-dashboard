@@ -3,6 +3,7 @@
 import { useState } from "react";
 import HabitBox from "./HabitBox";
 import CalorieLog from "./CalorieLog";
+import StreakFlame from "./StreakFlame";
 import { CALORIE_FLOOR } from "@/lib/productivity";
 import type { CalorieEntry } from "@/lib/queries";
 
@@ -54,17 +55,9 @@ export default function CalorieInput({
         Calories
       </span>
 
-      {/* The LOG streak — a plain count, a fact and never a mechanic, drawn exactly as
-          the habit rows draw theirs. Nothing at zero, because a zero here scolds. */}
-      {streak > 0 && (
-        <span
-          className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]"
-          title={`logged ${streak} day${streak === 1 ? "" : "s"} in a row`}
-          aria-label={`logged ${streak} day${streak === 1 ? "" : "s"} in a row`}
-        >
-          {streak}d
-        </span>
-      )}
+      {/* The LOG streak, drawn exactly as the habit rows draw theirs — one shared flame,
+          so this row cannot drift from the list it sits in. Nothing at zero. */}
+      <StreakFlame count={streak} />
 
       {/* The total against its floor, as the way in. A bordered pill rather than bare
           type, so it reads as a control — the bare number here looked like a reading and

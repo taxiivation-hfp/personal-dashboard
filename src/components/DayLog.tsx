@@ -59,9 +59,10 @@ const KIND_PILLAR: Record<Exclude<LogKind, "drift">, PillarKey> = {
   gym: "physical",
   skill: "portfolio",
   outreach: "social_capital",
-  // Reading is a Portfolio habit — its row lives under that pillar on the checklist, so
-  // its tab wears the same hue here.
+  // Reading and ASC.ND are Portfolio habits — their rows live under that pillar on the
+  // checklist, so their tabs wear the same hue here.
   reading: "portfolio",
+  ascnd: "portfolio",
 };
 
 /** Pillar key -> the owner's chosen colour, or null for the default. Fetched once from
@@ -75,6 +76,7 @@ const KIND_LABEL: Record<LogKind, string> = {
   skill: "session",
   outreach: "outreach",
   reading: "reading",
+  ascnd: "ASC.ND",
   drift: "drifted",
 };
 
@@ -719,8 +721,8 @@ export default function DayLog({ date }: { date: string }) {
           {failed
             ? // A failed read is not an empty log, and saying "nothing written yet" over
               // a full one would be the record lying about itself.
-              "The log could not be read just now. It is still there — try again in a moment."
-            : "Nothing written yet. Journal pages, workouts, skill sessions and outreach all land here on the day you wrote them."}
+              "The log could not be read just now. Try again in a moment."
+            : "Nothing written yet."}
         </p>
       )}
 

@@ -24,6 +24,7 @@ import PillarSections from "./PillarSections";
 import Ring, { toneColor } from "./PillarRing";
 import { PhoneSwipe, type PhoneTab } from "./PhoneTabs";
 import NoteLog from "./NoteLog";
+import StreakFlame from "./StreakFlame";
 import ChapterName from "./ChapterName";
 import type { Workout } from "./WorkoutLog";
 import { addDays, daysBetween, prettyDate, todayISO } from "@/lib/dates";
@@ -177,25 +178,13 @@ const DOC_HABITS: Record<string, { placeholder: string; pagesLabel?: string }> =
       placeholder: "What did you read — and what did it leave you with?",
       pagesLabel: "Pages read",
     },
+    // ASC.ND — the owner's ask, 2026-08-24: a session logger on the outreach/reading
+    // model. Its notes join the written log as their own kind (see dayLog.ts).
+    ascnd: { placeholder: "What did you work on?" },
   };
 
-/**
- * A row's streak, printed as the quiet fact it is: tabular, muted, and NOTHING at zero —
- * a row that greets an off week with "0" is a row that scolds, and a list that scolds is
- * a list you stop ticking honestly. No flame, no badge, no "don't break it".
- */
-function StreakMark({ count }: { count: number }) {
-  if (count <= 0) return null;
-  return (
-    <span
-      className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]"
-      title={`${count} day${count === 1 ? "" : "s"} in a row`}
-      aria-label={`${count} day${count === 1 ? "" : "s"} in a row`}
-    >
-      {count}d
-    </span>
-  );
-}
+// StreakFlame (its own file, shared with CalorieInput) replaced the local StreakMark on
+// 2026-08-24 — the flame ruling. The zero-draws-nothing rule lives inside it.
 
 export default function Today({
   initial,
@@ -805,8 +794,8 @@ export default function Today({
           <p className="min-w-0 text-small leading-snug">
             <span className="font-semibold">Catching up.</span>{" "}
             <span className="text-[var(--color-muted)]">
-              Everything marked here lands on {prettyDate(data.date)} —{" "}
-              {back} day{back === 1 ? "" : "s"} back.
+              Marks land on {prettyDate(data.date)} · {back} day
+              {back === 1 ? "" : "s"} back.
             </span>
           </p>
           <button
@@ -1015,7 +1004,7 @@ export default function Today({
                         number being typed. Only on a live day: the days you step back to
                         are precisely the unmarked ones, the same reason the app-wide
                         streak hides off today. */}
-                    {back === 0 && <StreakMark count={h.streak} />}
+                    {back === 0 && <StreakFlame count={h.streak} />}
                     {/* A value written on a line, not typed into a chip. The underline is
                         the field; it darkens on focus rather than growing a box. */}
                     <span className="flex shrink-0 items-baseline gap-1">
@@ -1082,9 +1071,9 @@ export default function Today({
                       {h.name}
                     </span>
                     {/* The run, at the row's far edge. A fact, not a mechanic — see
-                        StreakMark — and only on a live day, for the app-wide streak's own
+                        StreakFlame — and only on a live day, for the app-wide streak's own
                         reason: the days you step back to are the unmarked ones. */}
-                    {back === 0 && <StreakMark count={h.streak} />}
+                    {back === 0 && <StreakFlame count={h.streak} />}
                   </button>
                 </li>
               ),
@@ -1158,6 +1147,13 @@ export default function Today({
                     thing: the number is the reading and the age is a fact ABOUT the reading,
                     which is a hierarchy and not two equal figures. */}
                 <span className="flex shrink-0 flex-col items-end gap-1">
+                  {/* The run of floor days — every checklist row streaks now, the owner's
+                      2026-08-24 ruling, revising the earlier no-steps-streak stance. It
+                      heads this stacked column rather than sitting beside the label: the
+                      count pill is the widest on the list, and in the two-column desktop
+                      checklist a flame beside the label truncated the word "Steps".
+                      Hidden off today with every other streak. */}
+                  {back === 0 && <StreakFlame count={data.stepsStreak} />}
                   {/* The count IS the way into the trend — the same move the Calories row
                       makes with its total. A number you can only read is a number you
                       cannot ask a question of, and the question a step count raises is
@@ -1245,7 +1241,7 @@ export default function Today({
           <div className="basis-full border-t border-[var(--color-line-strong)] pt-3">
             <div className="mb-1 flex items-baseline justify-between gap-3">
               <span className="text-micro text-[var(--color-muted)]">
-                tasks · carry over, not scored
+                tasks · not scored
               </span>
               <Link
                 href="/habits"
@@ -1316,29 +1312,19 @@ export default function Today({
           this screen. The strip is this screen's one chart, so it wears the chart's frame. */}
       <section className="record-card">
         <div className="mb-2.5 flex items-baseline justify-between gap-3">
-          {/* Two facts a reader cannot infer, and nothing else. "adherence" left this line
-              long ago — it prints its own number above its own bar, and naming it here
-              would be the third time. What is left is the columns' SCALE, which is
-              uncapped and therefore has to be stated, and the one thing about this chart
-              that is invisible: that a column will explain itself. */}
+          {/* The window alone — the 2026-08-24 text ruling stripped the how-to copy that
+              used to follow it; the data is the interface. */}
           <span className="text-micro text-[var(--color-muted)]">
-            seven days to today · hours to this week&apos;s high · tap a day for
-            its workings
+            seven days to today
           </span>
           {/* TODAY ONLY. The streak comes from the VIEWED day's DayView — getStreak counts
               the run ending on whatever day was asked for — and this card is anchored to
               today. Printed on a past day it would quietly swap today's run for a different
               one, and worse: the days you step back to are the ones with nothing marked on
               them yet, so the number you would see is almost always 0. A card captioned
-              "seven days to today" must not carry another day's fact.
-
-              A count, deliberately undramatised — no flame, no badge, no "don't break it".
-              A fact about the record, not a thing you can lose. */}
-          {back === 0 && data.streak > 0 && (
-            <span className="text-micro text-[var(--color-muted)]">
-              {data.streak} day{data.streak === 1 ? "" : "s"} logged in a row
-            </span>
-          )}
+              around today must not carry another day's fact. Wears the flame like every
+              other streak since the 2026-08-24 ruling. */}
+          {back === 0 && <StreakFlame count={data.streak} />}
         </div>
 
         {/* TAPPING A COLUMN OPENS ITS WORKINGS, not the day.
@@ -1560,8 +1546,7 @@ export default function Today({
             />
           ) : (
             <p className="max-w-[42ch] text-body text-[var(--color-muted)]">
-              Google Calendar isn&apos;t connected, so there are no blocks to
-              mark.{" "}
+              Google Calendar isn&apos;t connected.{" "}
               <a
                 href="/api/google/connect"
                 className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"

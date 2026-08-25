@@ -9,11 +9,11 @@ import WeightEntry from "./WeightEntry";
  * dialog the workout and food logs established: DayChart on top, the backfill entry under
  * it, exactly the pairing the record draws.
  *
- * ON A FIXED 0–100kg AXIS, and that is the owner's explicit ruling for this surface. The
- * record's chart draws weight on the range observed — the right call for reading a
- * month's drift, where a fixed axis flattens every real change to a hair. This dialog is
- * opened from the row where the number is TYPED, and the owner asked to see the reading
- * against the scale it is read off. Two surfaces, two questions, both charts honest.
+ * ON THE OBSERVED RANGE, exactly as the record's chart draws it — the owner's ruling,
+ * 2026-08-24, REVERSING the fixed 0–100kg axis this dialog shipped with. Same window
+ * (30 days), same domain arithmetic (DayChart's own observed min/max with its line
+ * padding), so the two charts share their Y endpoints and can never disagree about the
+ * same month.
  *
  * Still a record, not a verdict: no average, no target weight, no trend arrow. The chart
  * answers "what was it, when" — under a pointer, to the decimal.
@@ -92,7 +92,7 @@ export default function WeightLog({
       </div>
 
       <p className="mt-2 text-micro text-[var(--color-muted)]">
-        last {TREND_DAYS} days · point at a day for the reading
+        last {TREND_DAYS} days
       </p>
 
       <div className="mt-4">
@@ -103,11 +103,10 @@ export default function WeightLog({
             points={series}
             form="line"
             unit="kg"
-            // The fixed scale this dialog exists to show — see the header comment.
-            floor={0}
-            ceiling={100}
+            // No floor/ceiling: the observed range, the record page's own axis — the
+            // 2026-08-24 ruling. See the header comment.
             height={200}
-            emptyNote="No weights recorded in the last month. Type this morning's into the checklist, or add an old one below."
+            emptyNote="No weights recorded in the last month."
           />
         )}
       </div>

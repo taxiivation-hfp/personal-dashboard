@@ -137,14 +137,8 @@ export default function ProductivityLog({
         </button>
       </div>
 
-      <p className="mt-2 max-w-[52ch] text-micro leading-relaxed text-[var(--color-muted)]">
-        Hours spent, never results produced. A block worked badly and a block
-        worked brilliantly score the same — nothing about quality, or what got
-        finished, reaches this. Scheduled time is priced by the clock and its
-        calendar colour; a gym session is priced flat, because three hours under
-        a bar is not more productive than two.
-      </p>
-
+      {/* The intro paragraph fell to the 2026-08-24 text ruling — the ledger below is
+          the whole explanation, and the scoring rules live in productivity.ts. */}
       {error && (
         <p role="alert" className="mt-4 text-small font-semibold">
           {error}
@@ -156,8 +150,7 @@ export default function ProductivityLog({
 
       {data && !data.calendarConnected && (
         <p className="mt-4 max-w-[52ch] text-small leading-relaxed text-[var(--color-muted)]">
-          Google Calendar could not be reached, so this day has no score to show
-          — not a zero, an unknown.
+          Google Calendar could not be reached — no score to show.
         </p>
       )}
 
@@ -169,11 +162,10 @@ export default function ProductivityLog({
             <span className="font-serif text-heading tabular-nums">
               {s.points}
             </span>
-            <span className="min-w-0 flex-1 text-micro leading-snug text-[var(--color-muted)]">
-              points · {data.constants.perHour} an hour at full rate,{" "}
-              {data.constants.perSession} a gym session,{" "}
-              {data.constants.perHabit} a non-negotiable. No ceiling, so this is
-              only ever compared with the days beside it on the strip.
+            <span className="min-w-0 flex-1 text-micro tabular-nums leading-snug text-[var(--color-muted)]">
+              points · {data.constants.perHour}/h full rate ·{" "}
+              {data.constants.perSession}/session ·{" "}
+              {data.constants.perHabit}/tick
             </span>
           </div>
 
@@ -188,9 +180,7 @@ export default function ProductivityLog({
             </div>
             {time.length === 0 ? (
               <p className="max-w-[52ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                No blocked hours scored. Only blocks you marked{" "}
-                <span className="text-[var(--color-ink)]">adhered</span> count —
-                see what is below.
+                No blocked hours scored.
               </p>
             ) : (
               <ul className="divide-y divide-[var(--color-line)]">
@@ -234,8 +224,7 @@ export default function ProductivityLog({
             </div>
             {data.sessions.length === 0 ? (
               <p className="max-w-[52ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                No session logged. A gym block on the calendar earns nothing on
-                its own — the write-up is the record.
+                No session logged.
               </p>
             ) : (
               <ul className="divide-y divide-[var(--color-line)]">
@@ -253,7 +242,7 @@ export default function ProductivityLog({
                       {kind}
                     </span>
                     <span className="min-w-0 flex-1 text-micro tabular-nums text-[var(--color-muted)]">
-                      one session · flat, whatever its length
+                      one session · flat
                     </span>
                     <span className="shrink-0 text-small tabular-nums">
                       {data.constants.perSession}
@@ -313,9 +302,6 @@ export default function ProductivityLog({
             <div className="mt-5">
               <div className="section-head">
                 <h3 className="text-small font-semibold">Didn&apos;t count</h3>
-                <span className="text-micro text-[var(--color-muted)]">
-                  time that earned nothing
-                </span>
               </div>
               <ul className="divide-y divide-[var(--color-line)]">
                 {data.ignored.map((b, i) => (
