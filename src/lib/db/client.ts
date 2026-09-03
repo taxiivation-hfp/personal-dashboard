@@ -166,6 +166,45 @@ async function ensure(c: Client): Promise<Client> {
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
   )`);
 
+  // The timeline's three stores (2026-09-03) — same arrangement as chapters above: also
+  // in schema.sql, created here so every deployed database gets them on boot.
+  await c.execute(`CREATE TABLE IF NOT EXISTS timeline_notes (
+    month      TEXT PRIMARY KEY NOT NULL CHECK (month GLOB '????-??'),
+    text       TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )`);
+  await c.execute(`CREATE TABLE IF NOT EXISTS timeline_groups (
+    start      TEXT PRIMARY KEY NOT NULL CHECK (start GLOB '????-??'),
+    name       TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )`);
+  await c.execute(`CREATE TABLE IF NOT EXISTS timeline_positions (
+    goal_id    INTEGER PRIMARY KEY REFERENCES goals(id),
+    x          REAL NOT NULL,
+    y          REAL NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )`);
+  // The floating windows (goal and text) that superseded timeline_positions — see
+  // schema.sql. Any position row the old table holds is carried across as a goal window
+  // exactly once (the partial unique index refuses a second copy), and the old table is
+  // left as it is: preserve data, never drop.
+  await c.execute(`CREATE TABLE IF NOT EXISTS timeline_windows (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL CHECK (kind IN ('goal','text')),
+    goal_id    INTEGER REFERENCES goals(id),
+    text       TEXT NOT NULL DEFAULT '',
+    color      TEXT,
+    x          REAL NOT NULL,
+    y          REAL NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )`);
+  await c.execute(`CREATE UNIQUE INDEX IF NOT EXISTS timeline_windows_goal
+    ON timeline_windows(goal_id) WHERE goal_id IS NOT NULL`);
+  await c.execute(`INSERT INTO timeline_windows (kind, goal_id, x, y, updated_at)
+    SELECT 'goal', p.goal_id, p.x, p.y, p.updated_at FROM timeline_positions p
+     WHERE NOT EXISTS (SELECT 1 FROM timeline_windows w WHERE w.goal_id = p.goal_id)`);
+
   // Only after the back-fills — see the note in schema.sql.
   //
   // SESSIONS, not days. The unique index is DROPPED here rather than merely left unused,

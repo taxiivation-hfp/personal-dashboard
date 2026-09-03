@@ -1,20 +1,13 @@
-import { getDb } from "@/lib/db/client";
-import { allJournalPages } from "@/lib/queries";
-import JournalArchive from "@/components/JournalArchive";
-
-export const dynamic = "force-dynamic";
-
-// Its own tab title, same ruling as /goals: without one every screen is called "Today",
-// which is exactly wrong on the screen you open to look BACK.
-export const metadata = { title: "Journal" };
+import { redirect } from "next/navigation";
 
 /**
- * The journal's archive — every page, by month.
+ * THE JOURNAL PAGE IS GONE — the owner's ruling, 2026-09-03: the archive folded into the
+ * written log on the record, which already listed every page by month and now also opens
+ * them for rewriting. Two shelves for one set of pages meant two places to look.
  *
- * A route, not a shelf at the foot of Today: that screen is where tonight's page gets
- * written, and this is where the written ones live. Same acting/looking split as /stats.
+ * A redirect rather than a deletion, because this address is bookmarkable and linked from
+ * old sessions — removing a route must never strand a screen.
  */
-export default async function JournalPage() {
-  const db = await getDb();
-  return <JournalArchive initial={await allJournalPages(db)} />;
+export default function JournalPage() {
+  redirect("/stats?view=log");
 }

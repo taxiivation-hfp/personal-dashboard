@@ -245,14 +245,15 @@ export default function JournalPanel({
           </button>
         </div>
 
-        {/* The way back through the written ones — the archive lives at /journal, by
-            month. An <a>, not the router: the dialog must close, and a full navigation is
-            the cheapest correct way to guarantee it does. */}
+        {/* The way back through the written ones — the archive folded into the record's
+            LOG (the owner's ruling, 2026-09-03), which lists every page by month and now
+            opens them for rewriting. An <a>, not the router: the dialog must close, and a
+            full navigation is the cheapest correct way to guarantee it does. */}
         <a
-          href="/journal"
+          href="/stats?view=log"
           className="mt-4 inline-flex items-center gap-1.5 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
         >
-          past pages, by month
+          past pages, in the log
           <span aria-hidden>→</span>
         </a>
       </dialog>

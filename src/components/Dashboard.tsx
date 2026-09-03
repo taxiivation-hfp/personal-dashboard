@@ -126,6 +126,8 @@ export default function Dashboard({
   today,
   /** Rendered inside an expanding overlay rather than as a page — the close control differs. */
   onClose,
+  initialView,
+  logAnchor,
 }: {
   date: string;
   /** The real today. Every window here is anchored to `date`, which is the day the record
@@ -133,6 +135,12 @@ export default function Dashboard({
    *  date pickers the cards carry, which belong to the calendar and not to the screen. */
   today?: string;
   onClose?: () => void;
+  /** Which half opens first. `?view=log` on /stats — the journal's old front door lands on
+   *  the written half, and the tabs own it from there. */
+  initialView?: "stats" | "log";
+  /** Where the LOG's scroll starts — a timeline month lands here at that month's end. The
+   *  stats windows keep `date`; a month is a place in the log, not a new stats anchor. */
+  logAnchor?: string;
 }) {
   /**
    * WHICH HALF OF THE RECORD IS SHOWING.
@@ -147,7 +155,7 @@ export default function Dashboard({
    * the log: the log is a continuous scroll with no window to set, and a control that did
    * nothing would be the masthead lying about what it governs.
    */
-  const [view, setView] = useState<"stats" | "log">("stats");
+  const [view, setView] = useState<"stats" | "log">(initialView ?? "stats");
   /**
    * Which day's workings are open, and from which chart.
    *
@@ -483,7 +491,9 @@ export default function Dashboard({
               It replaces the body rather than sitting under it: two answers to two different
               questions, one at a time, which is what the masthead's tabs promise. The
               masthead itself stays, so switching back is always one tap away. */}
-          {view === "log" && <DayLog date={date} />}
+          {view === "log" && (
+            <DayLog date={logAnchor ?? date} today={today ?? date} />
+          )}
 
           {view === "stats" && (
           <>

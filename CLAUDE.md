@@ -683,8 +683,19 @@ drift reasons nowhere at all. `src/lib/dayLog.ts` (pure, tested) merges them by 
   rather than fourteen tiles saying you wrote nothing — the same ruling that makes a blank
   day draw nothing on the charts. Only an EMPTY page ends the scroll; a short page is not
   the end.
-- **IT OWNS NOTHING.** A reader, with no editing: a journal page opens in the journal, where a
-  page can actually be rewritten. Two places that can change one row eventually disagree.
+- **IT STILL OWNS NOTHING — BUT IT OPENS EVERYTHING.** The owner's ruling, 2026-09-03:
+  `/journal` is GONE (the route redirects here), and every entry in the day reader opens
+  ITS OWN dialog — a page in the journal reader (rewrite, add sheets, delete, leaf), a gym
+  session in the workout dialog, a skill session in its logger, a document habit in
+  NoteLog. The one-row-one-writer rule survives because those dialogs ARE the writers the
+  entries always had; the log stores no copy and invents no second write path. A DRIFT
+  stays read-only — its reason belongs to a calendar block, marked where the day is lived.
+  After a write the log re-reads the loaded span in place (`DayLog.reloadSpan`) rather
+  than resetting the scroll.
+- **The log is URL-addressable**: `/stats?view=log` opens the written half (the journal's
+  old front door redirects there), and `&month=YYYY-MM` anchors the scroll at that month's
+  end — the timeline's month bubbles land on it. The stats charts stay anchored to today;
+  a month is a place in the LOG, not a new stats anchor.
 - Entry order within a day is fixed in one place: journal, gym, skill, outreach, reading,
   drift. The journal leads because it is about the day as a whole; a drift reason is a
   footnote to one block of it. Reading joined when its row became a logger — what a book
@@ -760,6 +771,88 @@ and losing the second to gain the first trades navigation for atmosphere. Edited
 Today — the archive is what has already been written.
 
 **It feeds nothing**, exactly like the day's title below, and for the same reason.
+
+## The timeline — the year on one canvas, and the floating windows over it
+
+The owner's ask, 2026-09-03. A horizontal roadmap: every month from **July 2025** to a
+rolling **12 months ahead**, one circle each on one hairline, opening parked on the
+current month. Reached by the **TIMELINE** word beside the Calendar window's title;
+`/?view=timeline` reopens it settled (replaceState keeps the URL in step, same contract
+as `?date=`).
+
+**IT IS A PAN-AND-ZOOM CANVAS, NOT A SCROLLING STRIP** — the owner's revision the same
+day ("scrolling should let us zoom; it should be like a whole canvas"). One WORLD of
+fixed geometry (`src/lib/timeline.ts`: width from the month count, `WORLD_H` 1000, the
+line at `LINE_Y` 500) is drawn under one view `{x, y, s}`; the viewport is a window onto
+it. **The wheel ZOOMS about the cursor** (a sideways trackpad swipe pans; shift-wheel
+pans), **a drag on the ground PANS**, **two fingers PINCH**; − / TODAY / + at the top
+right step the zoom and jump home. The maths is pure and test-pinned — `zoomAbout` (the
+point under the cursor stays put), `clampView` (the world can be shoved about but never
+lost: its box always overlaps the viewport, with slack), `centreOn` — and the range is
+`MIN_SCALE` 0.3 to `MAX_SCALE` 2.5. The view lives in a ref and is written straight onto
+the world's transform, so a pan re-renders nothing. The wheel listener is a NATIVE
+non-passive one: React's `onWheel` is passive and cannot stop the page scrolling under
+the canvas. `touch-action: none` on the viewport for the same reason. The extension-
+driven browser could not synthesise a wheel event, so the wheel path was verified with a
+dispatched `WheelEvent` and the pinch path is reasoned from Pointer Events — **the first
+thing to check on the tablet is that two fingers pinch and one finger pans.**
+
+**THE GESTURE.** The three windows are SHOVED DOWN out of sight — they do not collapse or
+fade, they fall, gathering speed ("ease in, fast out", the owner's words: the departure
+curve, the one move that may accelerate) — and the timeline fades in on the page ground
+behind them. A small fixed bar at the foot, "RETURN TO DASHBOARD", reverses it. The state
+machine lives in Today.tsx (`tl`: closed → falling → open → prep → rising); the `prep`
+beat exists because the way back needs one painted frame with the windows still
+translated, or they snap home instead of travelling. Once fallen the row is
+`display:none` so 110vh of translated window never extends the page's scroll — which
+also discards the calendar column's scrollTop, so that column is re-keyed (`calEpoch`)
+on landing closed and re-centres itself on today.
+
+- **Months and groups are DERIVED** (`src/lib/timeline.ts`, pure, tested): Jul–Nov term,
+  Nov–Feb summer break, Feb–Jun term, Jun–Jul winter break, repeating. **Term numbers
+  INCREMENT** — Jul 2025 opened Term 3, Feb 2026 was Term 4, Jul 2026 Term 5, two a year
+  forever; break names repeat. Adjacent groups SHARE their boundary month's circle, and
+  the brackets (up from the start circle, across, down to the end circle) alternate
+  above/below the line so two meeting on one circle never collide. Terms up, breaks down.
+- **TWO TEXTS ARE STORED on the chapters model** (empty write deletes the row): a month's
+  note (`timeline_notes`) and a group's name (`timeline_groups`, keyed by the group's
+  CANONICAL start month — `TimelineGroup.key` — so the rolling edge clipping a bracket
+  never orphans its name). `/api/timeline`: GET + a `kind`-discriminated POST.
+- **THE FLOATING WINDOWS are `timeline_windows`** — the owner's revision, 2026-09-03,
+  replacing `timeline_positions` (which placed EVERY in-flight goal whether wanted or
+  not; it is kept, never dropped, and read once on boot into the new table). Two kinds
+  in one table, added by **+ GOAL** and **+ NOTE** at the top left, each landing at the
+  viewport's centre (nudged past anything already there):
+  - a **GOAL window** (`kind='goal'`, `goal_id`) — one of the board's own goals, placed
+    BY CHOICE. The picker lists in-flight goals not yet on the line. The row stores which
+    and where; the card reads title, progress and the next unticked subgoal from Today's
+    `goals` state, so no second copy of a goal exists anywhere. × forgets only the
+    placement — one tap, nothing is lost.
+  - a **TEXT window** (`kind='text'`, `text`, `color`) — a few of the owner's words
+    (`WINDOW_TEXT_MAX` 500: a sticky, not a page) with a tint. **Tap opens the editor**
+    (a tap is a release within `TAP_SLOP`; further is a drag); the draft commits when the
+    editor CLOSES — outside tap, Escape, or unmount — never on blur alone, because a
+    focused element removed from the DOM does not reliably blur. **The tint is from
+    `WINDOW_TINTS`, a CURATED set** — the pillar palette mixed 72% to white, keyed by
+    name so a hex retune moves every note, refused in the engine otherwise (the /colours
+    rule: no free hex picker). **Everything printed on a tint is INK**: muted grey fails
+    4.5:1 on any tint dark enough to read as a colour, so the editor's controls are ink
+    and the swatches carry no words. Removing asks first, in the app's own two-step,
+    because the words go with it; an empty window goes on one tap.
+  - **Positions are WORLD pixels** from a fixed origin at Jul 2025 and the world's top,
+    so nothing re-anchors as months roll in. Drag deltas are divided by the scale. The
+    write fires ONCE, on release. `/api/timeline/windows`: POST adds, PATCH moves /
+    rewrites / recolours (absent field = leave it; `color: null` = paper), DELETE
+    removes; every answer is the whole store.
+- **The month's circle and name open that month's LOG** (`/stats?view=log&month=`); the
+  note under them edits in place. Two targets, two verbs, deliberately separate elements.
+- **Escape inside any editor on the canvas stops propagating**, or the timeline's own
+  Escape (RETURN TO DASHBOARD, a window listener in Today.tsx) would fire on the same key.
+- **IT FEEDS NOTHING** — no figure on it enters adherence, the rings, the streak or the
+  score. It is a place to look at the year.
+
+Also that day's ruling: **the calendar column lists EVERY block** — the four-block cap
+and its "+n more" line are gone; a full day costs scroll rather than truth.
 
 ## The day's title
 
@@ -1002,10 +1095,12 @@ since a page already existing is what ticked it.
   list. A base sheet is drawn FITTED, never stretched — pages saved before the A4
   rule are whatever shape the dialog happened to be, and filling the canvas with one would
   squash the owner's own hand and then flatten the squash in permanently on the next save.
-- **`/journal` is a LIST, not a shelf.** The unit is a page: the page in miniature, the day
-  it belongs to, and the line it opens with. The opening line is what tells two Tuesdays
-  apart and a thumbnail cannot carry it — which is why a contact sheet was the wrong shape
-  here even though it photographs better. Months as chapters, newest first, both ways.
+- **`/journal` IS GONE — the archive folded into the written log**, the owner's ruling,
+  2026-09-03. The route redirects to `/stats?view=log`, JournalArchive.tsx is deleted, and
+  the log's day reader now opens `JournalReader` (which fetches the whole archive itself
+  when handed no list, so leafing still walks every page). Two shelves for one set of
+  pages meant two places to look. The chooser's "past pages" link on Today points at the
+  log now.
 - **Delete lives in the reader**, where the page is legible, instead of hanging off a
   thumbnail nobody could read. Still the app's own two-step, never a native `confirm()`.
 - **Leafing is BY DATE and the words say so** — `‹ older` / `newer ›`. `pages` runs newest
@@ -1227,7 +1322,17 @@ hardcoded localhost default. **Deployment config is not documentation; if the tr
 truth disagree, believe neither until you have checked the host.**
 
 - **Local dev is a FILE database** (`DATABASE_URL=file:./data/dashboard.db`); production is
-  **Turso**. They are two different databases and they do not sync. The gym backlog that
+  **Turso**. They are two different databases and they do not sync. **CHECK `.env.local`
+  BEFORE BELIEVING THIS**: on the owner's machine it was found (2026-09-03) setting
+  `DATABASE_URL` to the Turso URL, so `npm run dev` on port 3000 was writing to PRODUCTION
+  and "the local dev DB" was Turso. For an isolated server, override both from the shell —
+  `DATABASE_URL=file:./data/<name>.db NEXT_DIST_DIR=.next-build/<name> npx next dev -p 3001`
+  after `DATABASE_URL=file:./data/<name>.db node scripts/migrate.mjs` — because a shell
+  variable beats `.env.local` and `next.config.ts` reads `NEXT_DIST_DIR`. The dist dir MUST
+  be under a git-ignored path: Tailwind v4 scans every un-ignored file for class candidates,
+  and a dist dir it can see fills globals.css with garbage and breaks the CSS build for
+  EVERY dev server in the tree. Turbopack also refuses a `node_modules` junction that
+  points outside the project, so copying the tree elsewhere does not work. The gym backlog that
   `scripts/import-strength.mjs` imported lives in Turso — that importer refuses to
   `--commit` against a `file:` URL for exactly this reason. A local screen showing four
   sessions is not evidence that anything was lost.

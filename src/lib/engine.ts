@@ -12,6 +12,7 @@
 import type { Client } from "./db/client";
 import { addDays, todayISO } from "./dates";
 import { isPaletteHex } from "./rings";
+import { isWindowTint, WINDOW_TEXT_MAX } from "./timeline";
 import { FULLY_WORKED, normaliseFraction, type BlockState } from "./worked";
 
 type Tx = Awaited<ReturnType<Client["transaction"]>>;
@@ -1404,4 +1405,144 @@ export async function setChapter(
           ON CONFLICT(month) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`,
     args: [month, text.slice(0, 80), now()],
   });
+}
+
+/**
+ * A timeline month's note, or a timeline group's name — two stores, one contract, the
+ * chapter's own: an empty write DELETES the row, so "unwritten" has one representation
+ * and the derived default (the month bare, the term's generated name) simply shows again.
+ *
+ * They feed nothing. The timeline is a place to look, not a thing that scores.
+ */
+export async function setTimelineText(
+  db: Client,
+  kind: "note" | "group",
+  month: string,
+  text: string | null,
+): Promise<void> {
+  const table = kind === "note" ? "timeline_notes" : "timeline_groups";
+  const col = kind === "note" ? "text" : "name";
+  const key = kind === "note" ? "month" : "start";
+  const value = text == null ? "" : text.trim();
+  if (!value) {
+    await db.execute({ sql: `DELETE FROM ${table} WHERE ${key}=?`, args: [month] });
+    return;
+  }
+  await db.execute({
+    sql: `INSERT INTO ${table} (${key},${col},updated_at) VALUES (?,?,?)
+          ON CONFLICT(${key}) DO UPDATE SET ${col}=excluded.${col}, updated_at=excluded.updated_at`,
+    args: [month, value.slice(0, 120), now()],
+  });
+}
+
+/**
+ * THE FLOATING WINDOWS — a goal placed on the timeline, or a text note with a tint. The
+ * owner's revision, 2026-09-03, replacing setTimelinePosition (every goal was placed
+ * whether wanted or not; now a goal is on the timeline only while it has a window).
+ *
+ * Coordinates are the world's own pixels from a FIXED origin (Jul 2025), so nothing here
+ * ever needs re-anchoring as months roll in on the right. Clamped rather than refused: a
+ * drag that ends a pixel out of bounds is the owner placing a window, not an attack, and
+ * the render clamps again anyway.
+ *
+ * None of it feeds anything. The timeline is a place to look, not a thing that scores.
+ */
+const clampXY = (x: number, y: number): { x: number; y: number } => {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    throw new Error("position must be finite");
+  }
+  return {
+    x: Math.round(Math.max(0, Math.min(x, 1_000_000)) * 10) / 10,
+    y: Math.round(Math.max(0, Math.min(y, 100_000)) * 10) / 10,
+  };
+};
+
+/**
+ * A new window. A GOAL window needs a goal that exists and is not already placed — the
+ * partial unique index would refuse the second copy anyway, but with a worse message; a
+ * TEXT window opens empty, since the owner writes into it on screen. Returns the new id
+ * so the screen can address the window it just made.
+ */
+export async function addTimelineWindow(
+  db: Client,
+  w:
+    | { kind: "goal"; goalId: number; x: number; y: number }
+    | { kind: "text"; x: number; y: number },
+): Promise<number> {
+  const at = clampXY(w.x, w.y);
+  if (w.kind === "goal") {
+    const g = await db.execute({ sql: "SELECT 1 FROM goals WHERE id=?", args: [w.goalId] });
+    if (!g.rows.length) throw new Error("no such goal");
+    const dup = await db.execute({
+      sql: "SELECT 1 FROM timeline_windows WHERE goal_id=?",
+      args: [w.goalId],
+    });
+    if (dup.rows.length) throw new Error("that goal is already on the timeline");
+    const r = await db.execute({
+      sql: `INSERT INTO timeline_windows (kind,goal_id,x,y,created_at,updated_at)
+            VALUES ('goal',?,?,?,?,?)`,
+      args: [w.goalId, at.x, at.y, now(), now()],
+    });
+    return Number(r.lastInsertRowid);
+  }
+  const r = await db.execute({
+    sql: `INSERT INTO timeline_windows (kind,x,y,created_at,updated_at) VALUES ('text',?,?,?,?)`,
+    args: [at.x, at.y, now(), now()],
+  });
+  return Number(r.lastInsertRowid);
+}
+
+/**
+ * Move, rewrite or recolour a window. Three optional fields on one contract: undefined
+ * LEAVES a field — a move must never eat a note, and a recolour must never move a card.
+ * `color` takes a WINDOW_TINTS key or null (paper); anything else is refused, the same
+ * guard setPillarColor keeps. Text is trimmed and capped at WINDOW_TEXT_MAX — a sticky
+ * note, not a page — and an empty text is stored as '', not deleted: an empty window is
+ * still a window the owner put there, and removing one is its own, explicit verb.
+ */
+export async function updateTimelineWindow(
+  db: Client,
+  id: number,
+  patch: { x?: number; y?: number; text?: string; color?: string | null },
+): Promise<void> {
+  const cur = await db.execute({
+    sql: "SELECT x, y FROM timeline_windows WHERE id=?",
+    args: [id],
+  });
+  if (!cur.rows.length) throw new Error("no such window");
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+  if (patch.x !== undefined || patch.y !== undefined) {
+    const at = clampXY(
+      patch.x === undefined ? Number(cur.rows[0]!.x) : patch.x,
+      patch.y === undefined ? Number(cur.rows[0]!.y) : patch.y,
+    );
+    sets.push("x=?", "y=?");
+    args.push(at.x, at.y);
+  }
+  if (patch.text !== undefined) {
+    sets.push("text=?");
+    args.push(patch.text.trim().slice(0, WINDOW_TEXT_MAX));
+  }
+  if (patch.color !== undefined) {
+    if (patch.color !== null && !isWindowTint(patch.color)) {
+      throw new Error("colour must be one of the timeline tints");
+    }
+    sets.push("color=?");
+    args.push(patch.color);
+  }
+  if (!sets.length) return;
+  sets.push("updated_at=?");
+  args.push(now(), id);
+  await db.execute({
+    sql: `UPDATE timeline_windows SET ${sets.join(", ")} WHERE id=?`,
+    args,
+  });
+}
+
+/** Take a window off the timeline. For a goal window this forgets only the placement —
+ *  the goal itself is untouched; for a text window the words go with it, which is why the
+ *  screen asks first. */
+export async function removeTimelineWindow(db: Client, id: number): Promise<void> {
+  await db.execute({ sql: "DELETE FROM timeline_windows WHERE id=?", args: [id] });
 }

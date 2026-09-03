@@ -35,6 +35,31 @@ import { useEffect, useRef, useState } from "react";
  * the number lands in habit_entries.value beside the note, and clearing it leaves a bare
  * tick standing (see engine.setHabitNote).
  */
+
+/**
+ * The non-negotiables whose row IS a logger — one control, the owner's ruling 2026-08-21.
+ * Keyed by system_key so a rename changes nothing; `pagesLabel` turns on the quantity
+ * field. Lives HERE, beside the dialog it configures, because two surfaces open it now —
+ * Today's checklist and the written log's day reader — and two hand-copied rosters would
+ * be two placeholders drifting apart.
+ *
+ * The Journal row deliberately is NOT here: a page IS its document, and its row opens the
+ * page chooser instead.
+ */
+export const DOC_HABITS: Record<
+  string,
+  { placeholder: string; pagesLabel?: string }
+> = {
+  outreach: { placeholder: "Who did you reach out to, and what about?" },
+  reading: {
+    placeholder: "What did you read — and what did it leave you with?",
+    pagesLabel: "Pages read",
+  },
+  // ASC.ND — the owner's ask, 2026-08-24: a session logger on the outreach/reading
+  // model. Its notes join the written log as their own kind (see dayLog.ts).
+  ascnd: { placeholder: "What did you work on?" },
+};
+
 export default function NoteLog({
   name,
   date,

@@ -169,6 +169,62 @@ CREATE TABLE IF NOT EXISTS app_meta (
   value TEXT
 );
 
+-- THE TIMELINE'S THREE EDITABLE THINGS — the owner's ask, 2026-09-03. The months and the
+-- term/break grouping are DERIVED (src/lib/timeline.ts); what is stored is only what the
+-- owner wrote over the defaults, all three on the chapters model: empty deletes the row,
+-- so "unwritten" has exactly one representation, and none of it feeds anything.
+
+-- A month's small note under its circle.
+CREATE TABLE IF NOT EXISTS timeline_notes (
+  month      TEXT PRIMARY KEY NOT NULL CHECK (month GLOB '????-??'),
+  text       TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+-- A group's name, keyed by the group's CANONICAL start month (TimelineGroup.key) — stable
+-- while the rolling edge clips and regrows the bracket it names.
+CREATE TABLE IF NOT EXISTS timeline_groups (
+  start      TEXT PRIMARY KEY NOT NULL CHECK (start GLOB '????-??'),
+  name       TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+-- THE FLOATING WINDOWS over the line — the owner's revision, 2026-09-03. Two kinds in
+-- one table: a GOAL window (kind='goal', goal_id set — one of the board's own goals,
+-- placed here by choice; the row stores WHICH and WHERE, never a second copy of the
+-- goal) and a TEXT window (kind='text' — a few words with a tint from the curated
+-- WINDOW_TINTS in timeline.ts, keyed by name so retuning a hex moves every note).
+-- Positions are the world's own pixels: x from a fixed origin at Jul 2025, so nothing
+-- shifts as months roll in on the right; y from the world's top (WORLD_H is fixed).
+-- A goal appears on the timeline ONLY while it has a row here — adding a window is
+-- the choice, removing one forgets only the placement. Nothing here feeds anything.
+CREATE TABLE IF NOT EXISTS timeline_windows (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind       TEXT NOT NULL CHECK (kind IN ('goal','text')),
+  goal_id    INTEGER REFERENCES goals(id),
+  text       TEXT NOT NULL DEFAULT '',
+  color      TEXT,
+  x          REAL NOT NULL,
+  y          REAL NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+-- One window per goal. A partial index because SQLite's UNIQUE would let every NULL
+-- through anyway, and saying so is clearer than relying on it.
+CREATE UNIQUE INDEX IF NOT EXISTS timeline_windows_goal
+  ON timeline_windows(goal_id) WHERE goal_id IS NOT NULL;
+
+-- SUPERSEDED by timeline_windows, the same day it was written: it held only a goal's
+-- position, and every goal was placed whether or not the owner wanted it there. Kept
+-- (never dropped — preserve data) and read ONCE on boot by client.ts, which carries
+-- any row it finds into timeline_windows as a goal window. Nothing writes it now.
+CREATE TABLE IF NOT EXISTS timeline_positions (
+  goal_id    INTEGER PRIMARY KEY REFERENCES goals(id),
+  x          REAL NOT NULL,
+  y          REAL NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
 -- Subgoals. A goal's progress is the SUM OF COMPLETED SUBGOAL WEIGHTS — nothing is
 -- inferred from activity, and no count of finished items feeds it. Weights are
 -- fractions of the parent and are intended to sum to 1.0.

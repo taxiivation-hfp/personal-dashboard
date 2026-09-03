@@ -879,7 +879,10 @@ input[type="number"]::-webkit-inner-spin-button {
       flex-basis var(--dur-panel) var(--ease-in-out),
       min-width var(--dur-panel) var(--ease-in-out),
       padding var(--dur-panel) var(--ease-in-out),
-      border-width var(--dur-panel) var(--ease-in-out);
+      border-width var(--dur-panel) var(--ease-in-out),
+      /* the timeline gesture's RETURN leg — the fall's own rule overrides both value
+         and curve on the way down; see the timeline block below this media query */
+        transform 620ms var(--ease-out);
   }
 
   .panel-row[data-record] .panel {
@@ -926,6 +929,53 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
+/* THE TIMELINE GESTURE — the three windows SHOVED DOWN out of sight, the owner's ask.
+ *
+ * The fall is the departure curve written out longhand elsewhere in this file, and the
+ * owner asked for exactly its shape by name: "ease in, fast out" — the windows gather
+ * speed as they go, like something let go of. The token registry deliberately has no
+ * ease-in (it delays the first moment of an ARRIVAL); a departure is the one move that
+ * may gather speed, and this rule is the second of the two places that curve exists.
+ * Do not promote it to a token.
+ *
+ * The RETURN rides the base transition below — the house ease-out, because coming back
+ * is an arrival. transform only: the windows do not collapse, resize or fade, they are
+ * simply moved, which is also what keeps the whole gesture compositor-cheap.
+ *
+ * The phone's stacked windows fall the same way; its return transition lives in the
+ * accordion media block below, and the desktop's rides the `.panel` transition list in
+ * the desktop block above — one property added to each list rather than a base rule
+ * after them, because a later bare `.panel { transition: … }` would silently REPLACE
+ * the desktop list and kill the record's whole flex choreography. The row is
+ * display:none'd by Today.tsx once the fall lands (and through one painted frame of the
+ * way back — see its timeline state machine), so 110vh of translated window never
+ * extends the page's scroll height while the timeline is being read. */
+.panel-row[data-timeline] .panel {
+  transform: translateY(110vh);
+  transition: transform 620ms cubic-bezier(0.55, 0, 0.8, 0.4);
+}
+
+/* The ground the windows fall away from: the timeline, fading in behind them on the page
+ * ground itself — a layer, not a window, because the timeline IS the page once the three
+ * windows have left it. Fade in starts a beat after the fall so the eye follows the
+ * windows first; fade out is quicker and undelayed, the system responding outpacing the
+ * system presenting, as everywhere. */
+.tl-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 220ms var(--ease-out);
+}
+.tl-layer[data-shown] {
+  opacity: 1;
+  transition: opacity 320ms var(--ease-out) 180ms;
+}
+@starting-style {
+  .tl-layer[data-shown] {
+    opacity: 0;
+  }
+}
+
 /* THE PHONE: the three windows are a vertical ACCORDION. The open window shows ALL of
  * itself — the owner's ruling: no scrolling inside a window, the PAGE scrolls — so the
  * animation cannot be a flex split of a fixed column. It is the grid-rows move instead:
@@ -942,6 +992,12 @@ input[type="number"]::-webkit-inner-spin-button {
  * 63.9375rem, not 64: Tailwind's lg applies AT 64rem, and a shared boundary would let a
  * 1024px viewport match both worlds at once. */
 @media (max-width: 63.9375rem) {
+  /* The timeline gesture's return leg on the phone — the desktop's lives in its own
+     `.panel` transition list above. */
+  .panel {
+    transition: transform 620ms var(--ease-out);
+  }
+
   .pane-grid {
     display: grid;
     grid-template-rows: 0fr;
@@ -1123,12 +1179,17 @@ input[type="number"]::-webkit-inner-spin-button {
 
 @media (prefers-reduced-motion: reduce) {
   /* The layout still changes — that is the state, not the decoration — it is simply not
-     shown travelling. Nulling the transitions lands every panel on its resting share. */
+     shown travelling. Nulling the transitions lands every panel on its resting share.
+     The timeline rules are named as well as the bare .panel because their selectors
+     outweigh it — a fall that only most users were spared would not be reduced motion. */
   .panel,
+  .panel-row[data-timeline] .panel,
   .panel-fade,
   .panel-swap,
   .pane-enter,
-  .rail-label {
+  .rail-label,
+  .tl-layer,
+  .tl-layer[data-shown] {
     transition: none;
   }
 }

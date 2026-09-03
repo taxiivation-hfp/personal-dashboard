@@ -21,9 +21,10 @@ import Dashboard from "./Dashboard";
 import JournalPanel from "./JournalPanel";
 import CalendarColumn from "./CalendarColumn";
 import PillarSections from "./PillarSections";
+import Timeline from "./Timeline";
 import Ring, { toneColor } from "./PillarRing";
 import { PhoneSwipe, type PhoneTab } from "./PhoneTabs";
-import NoteLog from "./NoteLog";
+import NoteLog, { DOC_HABITS } from "./NoteLog";
 import StreakFlame from "./StreakFlame";
 import ChapterName from "./ChapterName";
 import type { Workout } from "./WorkoutLog";
@@ -109,6 +110,16 @@ const colScroll = "lg:h-full lg:overflow-y-auto lg:[scrollbar-gutter:stable]";
  */
 const RECORD_EXIT_MS = 180;
 
+/**
+ * The timeline gesture's two travels — the windows' fall and their return. Timeouts
+ * matched to the transitions in globals.css (`.panel-row[data-timeline]` and the base
+ * `.panel` transform), with the usual 20ms of slack so the hand-off never runs a frame
+ * before the move has finished. Timeouts, not transitionend: a hidden tab runs no
+ * transition, and the state machine must still settle.
+ */
+const TL_FALL_MS = 640;
+const TL_RISE_MS = 640;
+
 /** Hours to one decimal, with no trailing ".0" — "3.5 of 8h" reads; "3.50 of 8.00h" does not. */
 const round1 = (n: number) => String(Math.round(n * 10) / 10);
 
@@ -162,26 +173,8 @@ const STEPS_SETTLE_MS = 2_500;
 const NUM_FIELD =
   "w-[3rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-small tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]";
 
-/**
- * The non-negotiables whose row IS a logger — one control, the owner's ruling 2026-08-21.
- * Tapping the row opens the document; saving is what ticks, and unticking lives inside the
- * dialog. Keyed by system_key so a rename changes nothing. `pagesLabel` turns on the
- * quantity field — reading logs how much as well as what it left behind.
- *
- * The Journal row deliberately is NOT here: a page IS its document, and its row opens the
- * page chooser instead.
- */
-const DOC_HABITS: Record<string, { placeholder: string; pagesLabel?: string }> =
-  {
-    outreach: { placeholder: "Who did you reach out to, and what about?" },
-    reading: {
-      placeholder: "What did you read — and what did it leave you with?",
-      pagesLabel: "Pages read",
-    },
-    // ASC.ND — the owner's ask, 2026-08-24: a session logger on the outreach/reading
-    // model. Its notes join the written log as their own kind (see dayLog.ts).
-    ascnd: { placeholder: "What did you work on?" },
-  };
+// DOC_HABITS moved to NoteLog.tsx — the dialog it configures — when the written log's day
+// reader became a second surface that opens it. One roster, two ways in.
 
 // StreakFlame (its own file, shared with CalorieInput) replaced the local StreakMark on
 // 2026-08-24 — the flame ruling. The zero-draws-nothing rule lives inside it.
@@ -191,8 +184,12 @@ export default function Today({
   today: serverToday,
   goals: initialGoals,
   skills: initialSkills,
+  initialView,
 }: {
   initial: DayView;
+  /** `?view=timeline` on the front door — a reload while standing on the timeline must
+   *  land back on it, settled, with no animation to replay. */
+  initialView?: "timeline";
   /**
    * The REAL today, resolved on the server.
    *
@@ -382,6 +379,88 @@ export default function Today({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [recordOpen]);
+
+  /**
+   * THE TIMELINE, and the fall that reveals it — the owner's ask, 2026-09-03: the three
+   * windows are SHOVED DOWN out of sight (they do not collapse), the timeline fades in on
+   * the ground behind them, and a small bar at the foot reverses the whole thing.
+   *
+   * A four-beat machine rather than a boolean, because the way BACK needs a painted frame
+   * the way in does not:
+   *
+   *   closed → falling   the row carries data-timeline; every window travels 110vh down
+   *                      on the departure curve (gathering speed — the one move that may),
+   *                      while the timeline layer fades in behind it
+   *   falling → open     TL_FALL_MS later the row leaves the layout entirely (display:
+   *                      none), so 110vh of transformed window stops extending the page's
+   *                      scroll height underneath the timeline
+   *   open → prep        the return: the row is DISPLAYED again, still translated — one
+   *                      committed frame, because a transition can only travel from a
+   *                      state the browser has actually painted. A timeout, not a rAF:
+   *                      in a hidden tab rAF never fires, and the machine must still
+   *                      reach `closed` there (the transitions simply don't run, and
+   *                      every resting state is the visible one).
+   *   prep → rising      data-timeline comes off; the windows travel home on the house
+   *                      ease-out while the layer fades away, and TL_RISE_MS later the
+   *                      layer unmounts
+   *
+   * `?view=timeline` follows the state through replaceState — same contract as `?date=` —
+   * so a reload lands back on the timeline, settled, and Back leaves the screen rather
+   * than replaying the gesture.
+   */
+  const [tl, setTl] = useState<"closed" | "falling" | "open" | "prep" | "rising">(
+    initialView === "timeline" ? "open" : "closed",
+  );
+  /**
+   * Bumped as the gesture lands closed, and it is the CALENDAR COLUMN's key. display:none
+   * discards a scroll container's scrollTop, so the column came back from the timeline
+   * parked at its top instead of centred on today; a remount re-runs its fetch-and-centre,
+   * which is the column's own opening move rather than a second centring rule.
+   */
+  const [calEpoch, setCalEpoch] = useState(0);
+  useEffect(() => {
+    if (tl === "falling") {
+      const t = setTimeout(() => setTl("open"), TL_FALL_MS);
+      return () => clearTimeout(t);
+    }
+    if (tl === "prep") {
+      const t = setTimeout(() => setTl("rising"), 50);
+      return () => clearTimeout(t);
+    }
+    if (tl === "rising") {
+      const t = setTimeout(() => {
+        setTl("closed");
+        setCalEpoch((n) => n + 1);
+      }, TL_RISE_MS);
+      return () => clearTimeout(t);
+    }
+  }, [tl]);
+
+  const openTimeline = useCallback(() => {
+    setTl((s) => (s === "closed" ? "falling" : s));
+    const qs = new URLSearchParams();
+    if (viewing.current !== today) qs.set("date", viewing.current);
+    qs.set("view", "timeline");
+    window.history.replaceState(null, "", `/?${qs}`);
+  }, [today]);
+  const closeTimeline = useCallback(() => {
+    setTl((s) => (s === "open" ? "prep" : s));
+    window.history.replaceState(
+      null,
+      "",
+      viewing.current !== today ? `/?date=${viewing.current}` : "/",
+    );
+  }, [today]);
+
+  /** Escape returns to the dashboard — the timeline is a place you opened. */
+  useEffect(() => {
+    if (tl !== "open") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeTimeline();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tl, closeTimeline]);
 
   /**
    * THE DAY THE SCREEN IS CURRENTLY ASKING ABOUT, readable from inside a promise.
@@ -1737,8 +1816,14 @@ export default function Today({
           surface and fails, so no block-state chip belongs in the band. */}
       {/* The shell is a full-height flex column on DESKTOP only, where the columns fill
           what the masthead leaves. The phone scrolls as one page — the owner's ruling:
-          the open window shows all of itself and never scrolls inside. */}
-      <div className="lg:flex lg:h-dvh lg:flex-col">
+          the open window shows all of itself and never scrolls inside.
+          overflow-hidden WHILE THE TIMELINE GESTURE LIVES: three windows translated
+          110vh down would otherwise extend the page's scrollable overflow, and a
+          scrollbar appearing for content that is deliberately out of sight is the move
+          leaking. At rest the class is absent and nothing changes. */}
+      <div
+        className={`lg:flex lg:h-dvh lg:flex-col ${tl !== "closed" ? "overflow-hidden" : ""}`}
+      >
         <div className="shrink-0 border-b border-[var(--color-line-strong)] bg-[var(--color-bar)]">
           {/* The title is CENTRED on the page, not on the space left over beside the
               link — hence a three-column grid with an empty cell mirroring the link. A
@@ -1774,8 +1859,35 @@ export default function Today({
         </div>
 
         {/* pb-24 on the phone clears the fixed tab bar at the end of the page's own
-            scroll; the desktop column height machinery is all lg-scoped. */}
-        <div className="mx-auto w-full max-w-[92rem] px-4 pb-24 pt-4 sm:px-8 lg:min-h-0 lg:flex-1 lg:px-6 lg:pb-6 lg:pt-6">
+            scroll; the desktop column height machinery is all lg-scoped.
+            `relative` so the timeline layer can fill exactly this region — the space
+            under the masthead — and the min-height holds that region open on the phone
+            once the fallen row leaves the layout (display:none takes its height with
+            it; on desktop flex-1 already owns the height). */}
+        <div
+          className={`relative mx-auto w-full max-w-[92rem] px-4 pb-24 pt-4 sm:px-8 lg:min-h-0 lg:flex-1 lg:px-6 lg:pb-6 lg:pt-6 ${
+            tl !== "closed" ? "min-h-[calc(100dvh-9rem)]" : ""
+          }`}
+        >
+          {/* THE TIMELINE, on the page ground behind the windows. Mounted only while the
+              gesture lives, positioned BEFORE the row so the falling windows — positioned,
+              later in the document — paint over it on the way down. The return bar rides
+              inside the layer, fixed to the viewport's foot. */}
+          {tl !== "closed" && (
+            <div
+              className="tl-layer"
+              data-shown={tl === "falling" || tl === "open" ? "" : undefined}
+            >
+              <Timeline today={today} goals={goals} />
+              <button
+                type="button"
+                onClick={closeTimeline}
+                className="fixed bottom-5 left-1/2 z-[var(--z-sticky)] -translate-x-1/2 whitespace-nowrap rounded-full border border-[var(--color-line-strong)] bg-[var(--color-panel)] px-5 py-2 text-micro font-semibold tracking-[0.14em] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
+              >
+                RETURN TO DASHBOARD
+              </button>
+            </div>
+          )}
           {/* Source order is middle → left → right, which IS the stacked mobile order, so
             the phone needs no reordering and the day's work leads the document. Desktop
             only moves the columns spatially.
@@ -1793,10 +1905,18 @@ export default function Today({
             // Order is calendar → today → pillars in both worlds — one set of order
             // classes, no lg: fork. Height is desktop's concern only: the phone column
             // is as tall as its content, and the page scrolls it.
-            className="panel-row relative flex flex-col gap-3 lg:h-full lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-4"
+            className={`panel-row relative flex flex-col gap-3 lg:h-full lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-4 ${
+              tl === "open" ? "hidden" : ""
+            }`}
             data-record={recordGeom ? "" : undefined}
             // Beat one, both directions: intent and geometry disagree, so contents leave.
             data-exiting={recordOpen !== recordGeom ? "" : undefined}
+            // The fall. Present through `prep` as well — the return's one painted frame
+            // must still hold the windows translated, or they snap home instead of
+            // travelling (see the timeline state machine above).
+            data-timeline={
+              tl === "falling" || tl === "open" || tl === "prep" ? "" : undefined
+            }
           >
             {/* THE RAIL'S LABEL, and the way back out.
                 A CHILD OF THE ROW, not of the calendar window it sits over. That window is a
@@ -1858,7 +1978,14 @@ export default function Today({
                 </span>
               </button>
               <div className="panel-fade lg:h-full">
-                {pane("calendar", <CalendarColumn date={data.date} />)}
+                {pane(
+                  "calendar",
+                  <CalendarColumn
+                    key={calEpoch}
+                    date={data.date}
+                    onTimeline={openTimeline}
+                  />,
+                )}
               </div>
 
             </div>

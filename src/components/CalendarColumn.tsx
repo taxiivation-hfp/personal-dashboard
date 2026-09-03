@@ -122,7 +122,15 @@ function span(start: string | null, end: string | null): string | null {
  * days sit above and upcoming days below, matching how a day actually moves down
  * the column.
  */
-export default function CalendarColumn({ date }: { date: string }) {
+export default function CalendarColumn({
+  date,
+  onTimeline,
+}: {
+  date: string;
+  /** Raised by the TIMELINE word in the head — the whole-page move is the row's to make,
+   *  not this column's, exactly as the record expansion belongs to Today.tsx. */
+  onTimeline?: () => void;
+}) {
   const [days, setDays] = useState<Day[]>([]);
   /** The column itself — the foot of the walk up to whatever is scrolling. */
   const scope = useRef<HTMLElement | null>(null);
@@ -258,6 +266,18 @@ export default function CalendarColumn({ date }: { date: string }) {
         className="section-head lg:sticky lg:-top-6 lg:z-[var(--z-sticky)] lg:-mx-6 lg:-mt-6 lg:px-6 lg:pt-6 lg:[background:var(--fold)]"
       >
         <h2 className="text-small font-semibold">Calendar</h2>
+        {/* The way onto the timeline — a word, not a chip, so the head stays a heading.
+            Tracked-out caps because it is a place rather than an action, the same voice
+            the rail's DASHBOARD label speaks. */}
+        {onTimeline && (
+          <button
+            type="button"
+            onClick={onTimeline}
+            className="text-micro font-semibold tracking-[0.18em] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
+          >
+            TIMELINE
+          </button>
+        )}
       </div>
 
       {/* Nine rounded panels made nine identical objects out of nine different days, and a
@@ -309,7 +329,10 @@ export default function CalendarColumn({ date }: { date: string }) {
               <ul
                 className={`mt-2 flex flex-col gap-1 ${d.isToday ? "" : "text-[var(--color-muted)]"}`}
               >
-                {d.blocks.slice(0, 4).map((b, i) => {
+                {/* EVERY block, the owner's ruling — the cap-at-four and its "+n more"
+                    line are gone. The column is a scrollport on desktop and the page
+                    scrolls on the phone, so a full day costs scroll rather than truth. */}
+                {d.blocks.map((b, i) => {
                   const hue = projectedColour(b.colorId);
                   return (
                     <li key={i} className="page-margin items-baseline">
@@ -341,11 +364,6 @@ export default function CalendarColumn({ date }: { date: string }) {
                     </li>
                   );
                 })}
-                {d.blocks.length > 4 && (
-                  <li className="pl-[calc(var(--page-margin)+0.875rem)] text-micro text-[var(--color-muted)]">
-                    +{d.blocks.length - 4} more
-                  </li>
-                )}
               </ul>
             ) : (
               <p className="mt-2 pl-[calc(var(--page-margin)+0.875rem)] text-micro text-[var(--color-muted)]">

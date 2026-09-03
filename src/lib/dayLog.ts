@@ -56,6 +56,20 @@ export type LogEntry = {
    * Optional so that nothing already holding a LogEntry has to learn about paper.
    */
   sheets?: number | null;
+  /**
+   * The OWNING row, where the entry's own id is not address enough to edit it — the log
+   * became a writing surface on 2026-09-03 and these are what its dialogs post against.
+   * A skill session's `ref` is its skill_id (/api/skills/[ref]/time); a document habit's
+   * is its habit_id (/api/habits/log). Absent everywhere else: gym sessions and journal
+   * pages are addressed by their own id, and a drift stays a reader's footnote.
+   */
+  ref?: number | null;
+  /** The stored quantity on a document entry — reading's pages. NoteLog's three-shape
+   *  `value` contract needs the real number, not a guess from the words. */
+  value?: number | null;
+  /** What the owning thing is CALLED — the habit's name, for the dialog's heading. `meta`
+   *  stays the short qualifier the tabs print; a heading is a different job. */
+  label?: string | null;
 };
 
 export type LogDay = { date: string; entries: LogEntry[] };

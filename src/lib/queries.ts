@@ -1218,15 +1218,21 @@ export async function logDays(
       ...inSpan,
     }),
     db.execute({
-      sql: `SELECT t.id, t.date, t.note, s.name FROM skill_time t
+      // skill_id rides along as the entry's `ref` — the log's dialogs write to
+      // /api/skills/[id]/time, and a session headed only by its own row id cannot say
+      // which skill that id belongs to.
+      sql: `SELECT t.id, t.skill_id, t.date, t.note, s.name FROM skill_time t
               JOIN skills s ON s.id = t.skill_id WHERE t.date BETWEEN ? AND ?`,
       ...inSpan,
     }),
     db.execute({
       // Every DOCUMENT habit in one read — outreach, reading and ASC.ND write the same
       // shape (habit_entries.note), and the system_key travels so the loop below can file
-      // each under its own kind rather than guessing from the words.
-      sql: `SELECT e.id, e.date, e.note, h.system_key AS skey FROM habit_entries e
+      // each under its own kind rather than guessing from the words. The habit's id, name
+      // and stored value ride along for the log's NoteLog dialog — see LogEntry.ref.
+      sql: `SELECT e.id, e.date, e.note, e.value, h.id AS habit_id, h.name AS habit_name,
+                   h.system_key AS skey
+              FROM habit_entries e
               JOIN habits h ON h.id = e.habit_id
              WHERE h.system_key IN ('outreach','reading','ascnd') AND e.note IS NOT NULL
                AND e.date BETWEEN ? AND ?`,
@@ -1286,6 +1292,8 @@ export async function logDays(
       title: firstLine(note),
       body: note,
       meta: String(r.name),
+      ref: num(r.skill_id),
+      label: String(r.name),
     });
   }
   for (const r of outreach.rows) {
@@ -1303,6 +1311,9 @@ export async function logDays(
       // The qualifier is printed verbatim beside the title, so ASC.ND keeps its own
       // casing rather than the kind key's.
       meta: kind === "ascnd" ? "ASC.ND" : kind,
+      ref: num(r.habit_id),
+      value: r.value == null ? null : num(r.value),
+      label: String(r.habit_name),
     });
   }
   for (const r of drift.rows) {
@@ -1355,4 +1366,52 @@ export async function allChapters(db: Client): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const x of r.rows) out[String(x.month)] = String(x.name);
   return out;
+}
+
+/** Everything the timeline stores — the owner's text over the derived defaults, and the
+ *  floating windows. Whole, not by range: a few rows per month of the app's life. */
+export type TimelineData = {
+  /** 'YYYY-MM' -> the month's note. */
+  notes: Record<string, string>;
+  /** group canonical start 'YYYY-MM' -> its renamed label. */
+  groups: Record<string, string>;
+  /** The floating windows, oldest first — a goal placed on the line, or a tinted note. */
+  windows: TimelineWindow[];
+};
+
+/** One floating window. `goalId` is set only on a goal window; `text`/`color` are read
+ *  only on a text window, though every row carries them. */
+export type TimelineWindow = {
+  id: number;
+  kind: "goal" | "text";
+  goalId: number | null;
+  text: string;
+  /** A WINDOW_TINTS key, or null for paper. */
+  color: string | null;
+  x: number;
+  y: number;
+};
+
+export async function getTimeline(db: Client): Promise<TimelineData> {
+  const [n, g, w] = await Promise.all([
+    db.execute("SELECT month, text FROM timeline_notes"),
+    db.execute("SELECT start, name FROM timeline_groups"),
+    db.execute(
+      "SELECT id, kind, goal_id, text, color, x, y FROM timeline_windows ORDER BY id",
+    ),
+  ]);
+  const notes: Record<string, string> = {};
+  for (const x of n.rows) notes[String(x.month)] = String(x.text);
+  const groups: Record<string, string> = {};
+  for (const x of g.rows) groups[String(x.start)] = String(x.name);
+  const windows: TimelineWindow[] = w.rows.map((r) => ({
+    id: num(r.id),
+    kind: String(r.kind) === "goal" ? "goal" : "text",
+    goalId: r.goal_id == null ? null : num(r.goal_id),
+    text: String(r.text ?? ""),
+    color: r.color == null ? null : String(r.color),
+    x: Number(r.x),
+    y: Number(r.y),
+  }));
+  return { notes, groups, windows };
 }

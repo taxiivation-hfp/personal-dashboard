@@ -23,12 +23,16 @@ export default async function Page({
 }: {
   // `string[]` is not paranoia — `?date=a&date=b` is a shape Next really hands over, and
   // isISODate rejects it on the type as well as the value.
-  searchParams: Promise<{ date?: string | string[] }>;
+  searchParams: Promise<{ date?: string | string[]; view?: string | string[] }>;
 }) {
   const db = await getDb();
   const today = todayISO();
-  const asked = (await searchParams).date;
+  const sp = await searchParams;
+  const asked = sp.date;
   const date = isISODate(asked) && asked <= today ? asked : today;
+  // `?view=timeline` reopens the screen already standing on the timeline — the state is
+  // written back by replaceState as the gesture runs, same contract as `?date=`.
+  const view = sp.view === "timeline" ? ("timeline" as const) : undefined;
 
   const cal = await getCalendarForDate(date);
   const [data, goals, skills] = await Promise.all([
@@ -39,6 +43,12 @@ export default async function Page({
   ]);
   // Goals and skills now live in the right column — there is no separate route.
   return (
-    <Today initial={data} today={today} goals={goals} skills={skills} />
+    <Today
+      initial={data}
+      today={today}
+      goals={goals}
+      skills={skills}
+      initialView={view}
+    />
   );
 }

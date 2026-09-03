@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import Link from "next/link";
 import JournalDrawing from "./JournalDrawing";
+import JournalReader from "./JournalReader";
+import WorkoutLog from "./WorkoutLog";
+import SkillLog from "./SkillLog";
+import NoteLog, { DOC_HABITS } from "./NoteLog";
 import Sheet from "./Sheet";
 import { toneColor } from "./PillarRing";
-import type { PillarKey } from "@/lib/rings";
+import type { PillarKey, WorkoutKind } from "@/lib/rings";
 import type { LogDay, LogEntry, LogKind } from "@/lib/dayLog";
 
 /**
@@ -36,10 +39,14 @@ import type { LogDay, LogEntry, LogKind } from "@/lib/dayLog";
  * is, where last week's sessions sit beside the one being written. Here the side pane is
  * the day's attachments, bodies unfolded, because the overlay IS the expansion.
  *
- * IT OWNS NOTHING. Every entry belongs to the surface that created it and this is a reader —
- * no writing, no editing, no deleting. A journal page opens in the journal, which is where a
- * page can be rewritten. That keeps the app's one rule about duplicated records intact: two
- * places that can change one row eventually disagree about it.
+ * IT STILL OWNS NOTHING — but it OPENS everything. The owner's ruling, 2026-09-03: /journal
+ * folded into this log, and every entry in the day reader opens ITS OWN dialog — a page in
+ * the journal reader, a gym session in the workout dialog, a skill session in its logger, a
+ * document habit in NoteLog. The one-row-one-writer rule survives because those dialogs ARE
+ * the writers the entries always had: nothing here stores a copy or invents a second write
+ * path, this screen only summons the surface that already owns the row. A drift stays
+ * read-only — its reason belongs to a calendar block, which is marked where the day is
+ * lived, not in the record of it.
  *
  * Days holding nothing are omitted upstream (see dayLog.ts), so a quiet fortnight costs one
  * thin month rather than fourteen tiles saying you wrote nothing.
@@ -375,16 +382,36 @@ function DayTile({
  * than sitting beside an empty pane — the same ruling the old card made about a page with
  * nothing beside it, mirrored.
  *
- * READER ONLY. The one control that leaves is the link into the journal, where a page can
- * actually be rewritten.
+ * Every entry is also the WAY INTO its own editor — see the module docblock. This
+ * component only raises the ask; the dialogs live on DayLog, over this one.
  */
+
+/** Which entries can open an editor. Drift is read-only by design, and a legacy 'misc'
+ *  gym row is inert — nothing writes that kind any more, so nothing here may either. */
+const editable = (e: LogEntry): boolean =>
+  e.kind === "journal"
+    ? e.id != null
+    : e.kind === "gym"
+      ? e.id != null && (e.meta === "strength" || e.meta === "cardio")
+      : e.kind === "skill"
+        ? e.id != null && e.ref != null
+        : e.kind === "drift"
+          ? false
+          : e.ref != null;
+
 function DayReader({
   day,
   colors,
+  onOpenPage,
+  onOpenEntry,
   onClose,
 }: {
   day: LogDay;
   colors: PillarColors;
+  /** Open a journal page in the reader-editor. */
+  onOpenPage: (id: number) => void;
+  /** Open a non-journal entry in the dialog that owns its row. */
+  onOpenEntry: (e: LogEntry) => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -429,12 +456,18 @@ function DayReader({
                     <span className="text-micro text-[var(--color-muted)]">
                       {drawing ? "handwritten" : "typed"}
                     </span>
-                    <Link
-                      href="/journal"
-                      className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                    >
-                      open in journal →
-                    </Link>
+                    {/* The journal reader, HERE — the archive folded into this log, so
+                        the way to rewrite a page opens over the day instead of leaving
+                        for a route that no longer exists. */}
+                    {p.id != null && (
+                      <button
+                        onClick={() => onOpenPage(p.id!)}
+                        aria-haspopup="dialog"
+                        className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+                      >
+                        open →
+                      </button>
+                    )}
                   </div>
                   {drawing ? (
                     // Every sheet of the scroll, the same way the journal's own reader
@@ -476,8 +509,9 @@ function DayReader({
             <ul className="divide-y divide-[var(--color-line)]">
               {others.map((e) => {
                 const { rest, meaningful } = bodyOf(e);
-                return (
-                  <li key={`${e.kind}${e.id}`} className="py-3">
+                const live = editable(e);
+                const inner = (
+                  <>
                     <div className="flex items-center gap-2">
                       <AttachmentTab
                         e={e}
@@ -496,6 +530,24 @@ function DayReader({
                         <Body lines={rest} />
                       </div>
                     )}
+                  </>
+                );
+                // The ROW is the way into its editor — the sessions page's own idiom,
+                // where tapping a session opens the dialog that owns it. Drift stays a
+                // plain row: its reason is marked where the day is lived.
+                return (
+                  <li key={`${e.kind}${e.id}`}>
+                    {live ? (
+                      <button
+                        onClick={() => onOpenEntry(e)}
+                        aria-haspopup="dialog"
+                        className="-mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel-2)]"
+                      >
+                        {inner}
+                      </button>
+                    ) : (
+                      <div className="py-3">{inner}</div>
+                    )}
                   </li>
                 );
               })}
@@ -507,7 +559,15 @@ function DayReader({
   );
 }
 
-export default function DayLog({ date }: { date: string }) {
+export default function DayLog({
+  date,
+  today,
+}: {
+  date: string;
+  /** The real today — the far cap of the session dialogs' date pickers, which is not
+   *  always the log's anchor now that a timeline month can open the log in the past. */
+  today: string;
+}) {
   const [days, setDays] = useState<LogDay[]>([]);
   const [next, setNext] = useState<string | null>(date);
   const [done, setDone] = useState(false);
@@ -521,6 +581,10 @@ export default function DayLog({ date }: { date: string }) {
   /** The date whose tile was tapped, or null. The DAY is looked up from `days` on render,
    *  so a page arriving under an open reader cannot strand it on stale entries. */
   const [openDate, setOpenDate] = useState<string | null>(null);
+  /** A journal page open in the reader-editor, over the day. */
+  const [page, setPage] = useState<number | null>(null);
+  /** A non-journal entry open in the dialog that owns its row. */
+  const [entry, setEntry] = useState<LogEntry | null>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   /**
    * THE IN-FLIGHT GUARD, and it is a REF rather than the `busy` state beside it.
@@ -637,7 +701,35 @@ export default function DayLog({ date }: { date: string }) {
     setLoaded(false);
     setFailed(false);
     setOpenDate(null);
+    setPage(null);
+    setEntry(null);
   }, [date]);
+
+  /**
+   * RE-READ THE LOADED SPAN after one of the dialogs writes — the row is the record, and a
+   * reader holding what it SENT rather than what was stored can be wrong and look right.
+   *
+   * One fetch for as many days as are already on screen, not a reset to the first page:
+   * the API pages BY DAY, so asking for `days.length` days from the same anchor re-reads
+   * exactly the stretch the owner is standing in, and neither the scroll position nor the
+   * open day reader is torn down. Replaced wholesale rather than merged — an edit can move
+   * a session to another day, or delete a day's last entry, and a merge would keep the row
+   * the record no longer holds. Capped at the route's own MAX_PAGE; past sixty loaded days
+   * the tail re-arrives through the ordinary scroll, deduplicated as ever.
+   *
+   * Quiet on failure: the screen keeps what it has, and the next open re-reads again.
+   */
+  const reloadSpan = useCallback(async () => {
+    const mine = epoch.current;
+    const want = Math.min(Math.max(days.length, 1), 60);
+    const d = await fetch(`/api/log?before=${date}&limit=${want}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    if (d == null || epoch.current !== mine) return;
+    setDays((d.days ?? []) as LogDay[]);
+    setNext(d.nextBefore ?? null);
+    setDone(Boolean(d.done) || d.nextBefore == null);
+  }, [date, days.length]);
 
   useEffect(() => {
     if (!loaded && !busy && next === date) void more();
@@ -745,9 +837,157 @@ export default function DayLog({ date }: { date: string }) {
         <DayReader
           day={openDay}
           colors={pillarColors}
+          onOpenPage={setPage}
+          onOpenEntry={setEntry}
           onClose={() => setOpenDate(null)}
         />
       )}
+
+      {/* THE JOURNAL READER, over the day — the whole archive's reader, leafing and
+          rewriting included. Handed no list, it fetches the archive itself, so "older"
+          walks the whole journal rather than only this day's pages. Every write re-reads
+          the loaded span; the day reader underneath recomputes from `days` on render, so
+          it can never show a page the record no longer holds. */}
+      {page != null && (
+        <JournalReader
+          id={page}
+          onId={setPage}
+          onChanged={() => void reloadSpan()}
+          onClose={() => setPage(null)}
+        />
+      )}
+
+      {/* THE RIGHT DIALOG FOR THE ROW — the sessions page's own branching, restated over
+          the log. Each dialog is the surface that already owns the row; this screen still
+          stores nothing and invents no second write path. Keyed by the row, so opening
+          another entry re-seeds the text rather than relabelling it. */}
+      {entry?.kind === "gym" &&
+        entry.id != null &&
+        (entry.meta === "strength" || entry.meta === "cardio") && (
+          <WorkoutLog
+            key={`g${entry.id}`}
+            kind={entry.meta as WorkoutKind}
+            label={entry.meta === "strength" ? "Strength" : "Cardio"}
+            date={entry.date}
+            today={today}
+            workout={{
+              id: entry.id,
+              date: entry.date,
+              kind: entry.meta as WorkoutKind,
+              title: null,
+              note: entry.body,
+            }}
+            hue={toneColor("physical", pillarColors.physical ?? null)}
+            onSave={async (note, day) => {
+              await fetch("/api/gym", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  date: day,
+                  kind: entry.meta,
+                  note,
+                  id: entry.id,
+                }),
+              }).catch(() => {});
+              await reloadSpan();
+            }}
+            onDelete={async () => {
+              await fetch(`/api/gym?id=${entry.id}&date=${today}`, {
+                method: "DELETE",
+              }).catch(() => {});
+              await reloadSpan();
+            }}
+            onClose={() => setEntry(null)}
+          />
+        )}
+
+      {entry?.kind === "skill" && entry.id != null && entry.ref != null && (
+        <SkillLog
+          key={`s${entry.id}`}
+          name={entry.label ?? "Skill"}
+          date={entry.date}
+          today={today}
+          session={{ id: entry.id, date: entry.date, note: entry.body ?? "" }}
+          // Empty on purpose: the fortnight pane is a way BACK to other sessions, and
+          // here the log itself is that way back. It also keeps onPick unreachable.
+          recent={[]}
+          hue={toneColor("portfolio", pillarColors.portfolio ?? null)}
+          onSave={async (note, day) => {
+            await fetch(`/api/skills/${entry.ref}/time`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ id: entry.id, note, date: day }),
+            }).catch(() => {});
+            await reloadSpan();
+          }}
+          onDelete={async () => {
+            await fetch(
+              `/api/skills/${entry.ref}/time?session=${entry.id}&date=${today}`,
+              { method: "DELETE" },
+            ).catch(() => {});
+            await reloadSpan();
+          }}
+          onPick={() => {}}
+          onClose={() => setEntry(null)}
+        />
+      )}
+
+      {(entry?.kind === "outreach" ||
+        entry?.kind === "reading" ||
+        entry?.kind === "ascnd") &&
+        entry.ref != null &&
+        (() => {
+          const cfg = DOC_HABITS[entry.kind] ?? { placeholder: "What happened?" };
+          const pillar = KIND_PILLAR[entry.kind];
+          return (
+            <NoteLog
+              key={`n${entry.kind}${entry.date}`}
+              name={entry.label ?? KIND_LABEL[entry.kind]}
+              date={entry.date}
+              note={entry.body}
+              hue={toneColor(pillar, pillarColors[pillar] ?? null)}
+              // The entry exists, so the day is ticked — that is what put it in the log.
+              done
+              pages={cfg.pagesLabel ? entry.value : null}
+              pagesLabel={cfg.pagesLabel}
+              placeholder={cfg.placeholder}
+              onSave={async (note, pages) => {
+                const r = await fetch("/api/habits/log", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    habit_id: entry.ref,
+                    date: entry.date,
+                    note,
+                    ...(pages !== undefined ? { pages } : {}),
+                  }),
+                });
+                // Thrown so NoteLog stays open over a refused write — closing over a 4xx
+                // would discard the only copy of the words while looking like success.
+                if (!r.ok) {
+                  const b = await r.json().catch(() => null);
+                  throw new Error(
+                    typeof b?.error === "string" ? b.error : "could not save",
+                  );
+                }
+                await reloadSpan();
+              }}
+              onUntick={async () => {
+                await fetch("/api/habits/log", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    habit_id: entry.ref,
+                    date: entry.date,
+                    done: false,
+                  }),
+                }).catch(() => {});
+                await reloadSpan();
+              }}
+              onClose={() => setEntry(null)}
+            />
+          );
+        })()}
     </div>
   );
 }
