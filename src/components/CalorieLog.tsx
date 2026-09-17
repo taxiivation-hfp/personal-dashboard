@@ -195,8 +195,11 @@ export default function CalorieLog({
       className="w-[min(94vw,920px)] overflow-y-auto rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] p-5 text-[var(--color-ink)] lg:overflow-hidden"
     >
       <div className="section-head">
-        {/* Physical's hue, because the floor is the training floor — the same dot the
-            workout log wears, saying which pillar this document belongs to. */}
+        {/* Health's hue, because the floor is the training floor — the same dot the
+            workout log wears, saying which pillar this document belongs to.
+            DELIBERATELY THE TOKEN, not the owner's chosen hue: this is the log of a BODY,
+            not a checklist tick, and --color-physical IS Health's default. Spec §5 moves
+            only the Steps and Calories tick BOXES onto the resolved tone. */}
         <h2 className="flex min-w-0 items-center gap-2 text-small font-semibold">
           <span
             aria-hidden

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { floorCredit, type Block } from "@/lib/adherence";
-import { STEPS_FLOOR } from "@/lib/rings";
-import { CALORIE_FLOOR } from "@/lib/productivity";
+// Both floors come from rings.ts now — CALORIE_FLOOR moved there with the pivot so the
+// import-free module the Health ring is built from can own it. One constant, no copies.
+import { CALORIE_FLOOR, STEPS_FLOOR } from "@/lib/rings";
 import type { HabitView } from "@/lib/queries";
 
 /**
@@ -15,7 +16,9 @@ import type { HabitView } from "@/lib/queries";
  * score.
  *
  * IT SHOWS BOTH HALVES, blocks AND non-negotiables, because adherence is an even split of
- * the two — 50 points of blocked hours worked, 50 of non-negotiables ticked. A sheet
+ * the two — 50 PARTS of blocked hours worked, 50 of non-negotiables ticked. Parts, never
+ * points: the productivity score is gone (the owner's ruling of 2026-09-18) and adherence
+ * was never it — this figure is two even shares of one hundred, not a total. A sheet
  * showing only the calendar would be explaining half a figure while appearing to explain
  * all of it, which is worse than explaining none.
  *

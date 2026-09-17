@@ -44,8 +44,11 @@ export default function StepsChart({
       form="bars"
       unit="steps"
       marker={STEPS_FLOOR}
-      // Physical's own hue, the same one the checklist row's box and the Physical ring
-      // wear. Steps are one pillar's business and the colour says which.
+      // Health's own hue, the same one the Health ring wears by default. Steps are one
+      // pillar's business and the colour says which.
+      // DELIBERATELY THE TOKEN, not the owner's chosen hue: this is a chart of a BODY, not
+      // a checklist tick, and --color-physical IS Health's default. Spec §5 moves only the
+      // Steps and Calories tick BOXES onto the resolved tone. Do not "finish the job" here.
       colour="var(--color-physical)"
       height={height}
       emptyNote={emptyNote}

@@ -1,30 +1,32 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { projectedColour, SLAB_GYM, SLAB_NEUTRAL } from "@/lib/eventColor";
-import type { ProductivitySegment } from "@/lib/productivity";
+import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
+import type { DayHours, HourCategoryLabel } from "@/lib/productivity";
 
 /**
- * HOW THE DAY'S COLUMN GOT ITS HEIGHT.
+ * WHERE ONE DAY'S HOURS WENT.
  *
- * The strip prints no productivity number, and that rule stands: an uncapped figure sitting
- * on a chart with no ceiling beside it invites a comparison it cannot support, and it is the
- * shortest path back to a scoreboard. This is the other side of the same bargain — the bar
- * stays a shape you glance at, and the arithmetic is one deliberate tap away. A drill-down
- * you opened on purpose is an explanation; a number on a chart is a score.
+ * THE SCORE IS GONE — the owner's ruling of 2026-09-18: "quantifying productivity is
+ * stupid." This sheet used to explain a points total: a rate per hour, a flat figure per
+ * logged gym session, a figure per ticked non-negotiable. None of that is printed anywhere
+ * in the app any more. What survives is the honest half of it, the question the score was
+ * only ever a proxy for — where did the day's hours go — answered in MINUTES, which are a
+ * duration you actually spent rather than a number the app invented.
  *
- * WHAT DID NOT COUNT IS HALF THE SCREEN, and it is the more useful half. A day full of
- * scheduled hours can score nothing at all — an unmarked block pays nothing, a skipped or
- * drifted one pays nothing, a colour the table has never been taught pays nothing — and
- * every one of those is invisible on the bar. "I went to the gym, why is it not in there"
- * has an answer, and this is where it lives.
+ * The bar on the record's Hours chart is a shape you glance at; this is the arithmetic, one
+ * deliberate tap away. A drill-down you opened on purpose is an explanation.
  *
- * It is a LEDGER, not a scoreboard. No target, no average, no comparison with any other
- * day, and nothing here is drawn as a ring — the score is uncapped, and a ring implies a
- * ceiling it does not have.
+ * WHAT DID NOT COUNT IS STILL THE HALF THAT EARNS THE SCREEN. A day full of scheduled hours
+ * can hold no hours worked — an unmarked block adds nothing, a skipped or drifted one adds
+ * nothing, a colour that is not one of the four categories adds nothing — and every one of
+ * those is invisible on a stack. "I went to the gym, why is it not in there" has an answer,
+ * and this is where it lives. It is stated without scolding: an unmarked block is
+ * information about the log, never a verdict on the day.
+ *
+ * A LEDGER, not a scoreboard. No target, no average, no comparison with any other day.
  */
 
-type Rate = { id: string | null; google: string; label: string; rate: number };
 type Ignored = {
   title: string;
   minutes: number | null;
@@ -32,30 +34,18 @@ type Ignored = {
   state: string | null;
   reason: string | null;
 };
+
+/** Exactly what /api/productivity returns. */
 type Payload = {
   date: string;
   calendarConnected: boolean;
-  score: {
-    points: number;
-    timePoints: number;
-    habitPoints: number;
-    sessionPoints: number;
-    minutes: number;
-    segments: ProductivitySegment[];
-  } | null;
-  rates: Rate[];
+  /** null when Google could not be reached — an outage is "no data", not a day with
+   *  nothing worked. */
+  hours: DayHours | null;
+  /** The four categories in stacking order, for a legend on a day that holds none. */
+  categories: { label: HourCategoryLabel; colorId: string | null }[];
+  /** The minutes that did not count, with the reason each did not. */
   ignored: Ignored[];
-  habits: {
-    done: number;
-    scheduled: number;
-    points: number;
-    calories: number | null;
-    calorieFloor: number;
-    calorieCounted: boolean;
-  };
-  /** The kinds logged that day — "strength", "cardio", "misc" — one entry per session. */
-  sessions: string[];
-  constants: { perHour: number; perHabit: number; perSession: number };
 };
 
 /** Noon, never midnight: a bare ISO date parses as UTC and lands on the day before
@@ -67,7 +57,8 @@ const longDay = (iso: string) =>
     month: "long",
   });
 
-/** 150 -> "2h 30m". Time is shown as time; an abstract number would read as a score. */
+/** 150 -> "2h 30m". Time is shown as TIME. A bare number here is the shape a score wears,
+ *  and the whole point of this sheet since the pivot is that it no longer holds one. */
 function asTime(minutes: number): string {
   if (minutes <= 0) return "—";
   const h = Math.floor(minutes / 60);
@@ -75,9 +66,6 @@ function asTime(minutes: number): string {
   if (!h) return `${m}m`;
   return m ? `${h}h ${m}m` : `${h}h`;
 }
-
-/** "×1", "×0.5" — the rate as it reads in a line of arithmetic. */
-const asRate = (r: number) => `×${r % 1 === 0 ? r : String(r)}`;
 
 export default function ProductivityLog({
   date,
@@ -87,7 +75,7 @@ export default function ProductivityLog({
   date: string;
   onClose: () => void;
   /** The way through to catching up on this day. Kept as a quiet link inside the sheet
-   *  rather than on the tap that opened it — see the strip's own comment. */
+   *  rather than on the tap that opened it. */
   onOpenDay?: (date: string) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -116,9 +104,8 @@ export default function ProductivityLog({
     };
   }, [date]);
 
-  const s = data?.score ?? null;
-  const time = (s?.segments ?? []).filter((x) => x.kind === "time");
-
+  const hours = data?.hours ?? null;
+  const categories = hours?.categories ?? [];
 
   return (
     <dialog
@@ -137,8 +124,6 @@ export default function ProductivityLog({
         </button>
       </div>
 
-      {/* The intro paragraph fell to the 2026-08-24 text ruling — the ledger below is
-          the whole explanation, and the scoring rules live in productivity.ts. */}
       {error && (
         <p role="alert" className="mt-4 text-small font-semibold">
           {error}
@@ -148,63 +133,79 @@ export default function ProductivityLog({
         <p className="py-12 text-small text-[var(--color-muted)]">Reading…</p>
       )}
 
+      {/* AND NOTHING ELSE. Without the calendar there are no blocks, so neither half of
+          this sheet has anything true to say — an empty ledger under this line would read
+          as a day in which nothing was worked. */}
       {data && !data.calendarConnected && (
-        <p className="mt-4 max-w-[52ch] text-small leading-relaxed text-[var(--color-muted)]">
-          Google Calendar could not be reached — no score to show.
+        <p className="mt-4 text-small text-[var(--color-muted)]">
+          Google Calendar could not be reached.
         </p>
       )}
 
-      {data && s && (
+      {data && data.calendarConnected && hours && (
         <>
-          {/* THE TOTAL. Printed HERE and nowhere else — it is the thing the workings below
-              add up to, and a breakdown whose total is withheld is not a breakdown. */}
+          {/* THE FIGURE THIS SHEET ADDS UP TO. Printed here because a breakdown that
+              withholds its total is not a breakdown — and it is hours, which is a fact
+              about where a day went rather than a judgement about it. */}
           <div className="mt-4 flex items-baseline gap-3 border-y border-[var(--color-line-strong)] py-3">
-            <span className="font-serif text-heading tabular-nums">
-              {s.points}
+            <span className="stat-hero text-heading">
+              {asTime(hours.minutes)}
             </span>
-            <span className="min-w-0 flex-1 text-micro tabular-nums leading-snug text-[var(--color-muted)]">
-              points · {data.constants.perHour}/h full rate ·{" "}
-              {data.constants.perSession}/session ·{" "}
-              {data.constants.perHabit}/tick
+            <span className="min-w-0 flex-1 text-micro leading-snug text-[var(--color-muted)]">
+              hours worked
             </span>
           </div>
 
-          {/* THE HOURS. One row per colour, in the colour those hours had in the calendar,
-              with the arithmetic written out: time × rate = points. */}
+          {/* THE HOURS, one row per category, in the colour those hours had in the
+              calendar. Merged by CATEGORY and not by colour — Work Part Time owns two
+              calendar colours, and the route already collapsed them. */}
           <div className="mt-4">
             <div className="section-head">
               <h3 className="text-small font-semibold">Hours</h3>
-              <span className="text-micro tabular-nums text-[var(--color-muted)]">
-                {s.timePoints}
-              </span>
             </div>
-            {time.length === 0 ? (
-              <p className="max-w-[52ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                No blocked hours scored.
-              </p>
+            {categories.length === 0 ? (
+              <>
+                <p className="pt-3 text-small text-[var(--color-muted)]">
+                  No blocked hours worked.
+                </p>
+                {/* The four categories, named but unlit. On a day that holds none this is
+                    the only thing that says what the stack would have been made of; on
+                    any other day the rows above say it, so it is not drawn twice. */}
+                <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+                  {data.categories.map((c) => (
+                    <li
+                      key={c.label}
+                      className="flex items-center gap-1.5 text-micro text-[var(--color-muted)]"
+                    >
+                      <span
+                        aria-hidden
+                        className="h-2 w-2 shrink-0 rounded-[2px]"
+                        style={{
+                          background: projectedColour(c.colorId) ?? SLAB_NEUTRAL,
+                        }}
+                      />
+                      {c.label}
+                    </li>
+                  ))}
+                </ul>
+              </>
             ) : (
               <ul className="divide-y divide-[var(--color-line)]">
-                {time.map((seg, i) => (
+                {categories.map((c) => (
                   <li
-                    key={`${seg.colorId ?? "d"}-${i}`}
+                    key={c.label}
                     className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
                   >
                     <span
                       aria-hidden
                       className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-[2px]"
                       style={{
-                        background:
-                          projectedColour(seg.colorId) ?? SLAB_NEUTRAL,
+                        background: projectedColour(c.colorId) ?? SLAB_NEUTRAL,
                       }}
                     />
-                    <span className="w-28 shrink-0 text-small">
-                      {seg.label}
-                    </span>
-                    <span className="min-w-0 flex-1 text-micro tabular-nums text-[var(--color-muted)]">
-                      {asTime(seg.minutes)} {asRate(seg.rate ?? 0)}
-                    </span>
+                    <span className="min-w-0 flex-1 text-small">{c.label}</span>
                     <span className="shrink-0 text-small tabular-nums">
-                      {seg.points}
+                      {asTime(c.minutes)}
                     </span>
                   </li>
                 ))}
@@ -212,92 +213,9 @@ export default function ProductivityLog({
             )}
           </div>
 
-          {/* TRAINING. A FLAT figure per session, never per hour — three hours under a bar
-              is not more productive than two, and an hourly rate would say it was. The
-              scheduled block is worth nothing; this row is where the gym lives. */}
-          <div className="mt-5">
-            <div className="section-head">
-              <h3 className="text-small font-semibold">Gym</h3>
-              <span className="text-micro tabular-nums text-[var(--color-muted)]">
-                {s.sessionPoints}
-              </span>
-            </div>
-            {data.sessions.length === 0 ? (
-              <p className="max-w-[52ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                No session logged.
-              </p>
-            ) : (
-              <ul className="divide-y divide-[var(--color-line)]">
-                {data.sessions.map((kind, i) => (
-                  <li
-                    key={i}
-                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
-                  >
-                    <span
-                      aria-hidden
-                      className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-[2px]"
-                      style={{ background: SLAB_GYM }}
-                    />
-                    <span className="w-28 shrink-0 text-small capitalize">
-                      {kind}
-                    </span>
-                    <span className="min-w-0 flex-1 text-micro tabular-nums text-[var(--color-muted)]">
-                      one session · flat
-                    </span>
-                    <span className="shrink-0 text-small tabular-nums">
-                      {data.constants.perSession}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* THE TICKED THINGS. Achromatic, as they are on the bar — there is no calendar
-              colour behind a non-negotiable for a hue to mean. */}
-          <div className="mt-5">
-            <div className="section-head">
-              <h3 className="text-small font-semibold">Ticked</h3>
-              <span className="text-micro tabular-nums text-[var(--color-muted)]">
-                {s.habitPoints}
-              </span>
-            </div>
-            <ul className="divide-y divide-[var(--color-line)]">
-              <li className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5">
-                <span
-                  aria-hidden
-                  className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-[2px]"
-                  style={{ background: SLAB_NEUTRAL }}
-                />
-                <span className="w-28 shrink-0 text-small">Non-negotiables</span>
-                <span className="min-w-0 flex-1 text-micro tabular-nums text-[var(--color-muted)]">
-                  {data.habits.done} of {data.habits.scheduled}{" "}
-                  {asRate(data.constants.perHabit)}
-                </span>
-                <span className="shrink-0 text-small tabular-nums">
-                  {data.habits.points}
-                </span>
-              </li>
-              <li className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5">
-                <span
-                  aria-hidden
-                  className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-[2px]"
-                  style={{ background: SLAB_NEUTRAL }}
-                />
-                <span className="w-28 shrink-0 text-small">Calories</span>
-                <span className="min-w-0 flex-1 text-micro tabular-nums text-[var(--color-muted)]">
-                  {data.habits.calories ?? 0} of {data.habits.calorieFloor}
-                  {data.habits.calorieCounted ? "" : " · floor not reached"}
-                </span>
-                <span className="shrink-0 text-small tabular-nums">
-                  {data.habits.calorieCounted ? data.constants.perHabit : 0}
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          {/* WHAT DID NOT COUNT, and why. The half of this screen that actually answers a
-              question — everything above is visible on the bar already. */}
+          {/* WHAT DID NOT COUNT, and why. See the module docblock — this is the half of
+              the screen that answers a question, because everything above it is already
+              visible on the bar. */}
           {data.ignored.length > 0 && (
             <div className="mt-5">
               <div className="section-head">

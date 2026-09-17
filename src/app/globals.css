@@ -37,6 +37,17 @@
   --color-accent-rgb: 154 106 46;
   --color-accent-soft: #f0e4d0; /* accent tint for fills behind ink */
 
+  /* The adherence tracker's average numeral, over the tracker's own amber area (spec §4).
+   * NOT a second accent: it is --color-accent one step down in lightness, the same move
+   * segmentShade makes on a pillar hue, and it exists because a figure printed over a tint of
+   * its own colour has to be darker than that tint to read. Measured on the ground it is
+   * actually printed on — the tracker's `.record-card`, i.e. --color-panel, NOT the gold
+   * window the card sits in: 6.47:1, and 6.5:1 under the card's white top gradient. (It
+   * measures 5.69 on --color-surface-3, which also passes; the point is that the recorded
+   * pair has to be the pair on screen, or the next reader retuning the card's ground checks
+   * a number about a surface the numeral never touches.) */
+  --color-accent-deep: #7a5322; /* the tracker's average · 6.47 on the record-card ground */
+
   /* Block states — no red anywhere, and distinguished by FORM not by a severity ramp:
    *   adhered = filled accent        drifted = filled grey        skipped = outlined
    * Three shades of "worse" would encode judgement in the palette itself. Using fill
@@ -56,12 +67,26 @@
   --color-skipped: #72695a; /* outline + label · 4.64:1 on page, 5.14:1 on panel. Never a fill. */
 
   /* pillars: categorisation only, desaturated for a light ground.
-   * All three are verified at >=3:1 against the page as ring strokes AND >=4.5:1 with
-   * white on top, because each is also used as a filled chip with white text.
-   * physical was #4a8271, which measured 4.45:1 with white — a real fail, darkened. */
-  --color-social: #8c7434; /* 3.86 on bg · 4.50 with white */
-  --color-physical: #467c6c; /* 4.02 on bg · 4.68 with white */
-  --color-portfolio: #67609b; /* 4.84 on bg · 5.64 with white */
+   * BOTH are verified at >=3:1 against the page as ring strokes AND >=4.5:1 with white on
+   * top, because each is also used as a filled chip with white text.
+   * physical was #4a8271, which measured 4.45:1 with white — a real fail, darkened.
+   * There were three. Social was parked with the rest of its feature on 2026-09-18 (spec
+   * §1) — see archive/social/README.md; its hue token went with it, unread. */
+  --color-physical: #467c6c; /* HEALTH · 4.02 on bg · 4.68 with white */
+  /* Was #67609b (Iris). CAREER is Plum by the owner's ruling (spec §1); the migration stores
+   * it on the `portfolio` row, and this is the default the app falls back to when no colour
+   * is set. The KEY stays `portfolio` — renaming a live key is churn — and the NAME comes
+   * from PILLAR_NAME in rings.ts. Measured on the page ground: 5.09:1 as a stroke, 5.93:1
+   * with white on top, so it clears both the stroke floor and the filled-chip test. */
+  --color-portfolio: #7d5a72; /* CAREER · 5.09 on bg · 5.93 with white */
+
+  /* A non-negotiable with NO pillar — Journal, Read, Tidy room (spec §5). Warm grey, and
+   * deliberately the same value as --color-drifted rather than a ninth invented neutral: that
+   * grey is already certified both ways, which is what a habit tick needs (it is a filled box
+   * with a WHITE tick inside it, so it must pass the 4.5:1 chip test as well as the 3:1 mark
+   * floor). Two names for one value, kept apart because one is a BLOCK STATE and the other is
+   * the absence of a pillar; renaming either must not silently move the other. */
+  --color-neutral: #7b746a; /* no pillar · 3.97 on bg as a mark · 4.62 with white */
 
   /* Placeholder text is TEXT: it needs the same 4.5:1 as body, not a hairline colour.
    * --color-line-strong measures 1.47:1 and is for strokes only. */
@@ -419,7 +444,12 @@ b,
  *
  * Composited and measured against the calendar surface: 4.39:1 at the top edge (clear of
  * the 3:1 stroke floor), 1.46:1 at 70% down — exactly --color-line-strong's own weight —
- * and gone at the bottom. Nothing animates, so there is no reduced-motion path to write. */
+ * and gone at the bottom. Nothing animates, so there is no reduced-motion path to write.
+ *
+ * CURRENTLY UNUSED. Its only consumer was the calendar column, deleted with the nine-day
+ * view on 2026-09-18 (spec §4). KEPT deliberately: it is the app's one gradient and
+ * re-deriving the mask, the stops and the measured ratios would cost more than twenty
+ * lines. */
 .today-mark {
   position: relative;
 }
@@ -491,26 +521,11 @@ b,
   transition: transform var(--dur-data) var(--ease-out);
 }
 
-/* The one STAGGERED entrance in the app, and it is confined to the stats link.
- *
- * Sequencing is normally a tell — the uniform reflex of animating every section in turn —
- * so it is allowed in exactly one place, on the one element whose job is to be noticed.
- * The per-bar delay is inline; this class owns the travel.
- *
- * An ANIMATION rather than a transition, and the difference is load-bearing: a transition
- * needs something to change it, which in practice means a state flip in a rAF, which never
- * fires in a hidden tab. An animation is scheduled by CSS at element creation. `backwards`
- * holds the bar at zero through its delay; under reduced motion the animation is removed
- * entirely, which also removes the fill, leaving the bar at its resting height. The
- * resting state is always the VISIBLE one. */
-@keyframes spark-rise {
-  from {
-    transform: scaleY(0);
-  }
-}
-.motion-spark {
-  animation: spark-rise var(--dur-fast) var(--ease-out) backwards;
-}
+/* THE STAGGERED SPARKLINE ENTRANCE lived here — a keyframe and its class, the one sequenced
+ * arrival in the app, spent on the 14 bars under StatsLink. The spec removes that sparkline
+ * (§4: the record link is a plain line now), so the entrance has no consumer. Deleted rather
+ * than kept: sequencing is a tell, it was allowed in exactly one place, and an unclaimed
+ * sequencing idiom sitting in this file is an invitation to spend it somewhere it is wrong. */
 
 /* The same contract at UI speed: something moving across the screen in response to a tap,
  * rather than a datum settling on a new value. */
@@ -718,11 +733,6 @@ dialog[open]::backdrop {
     transition: none;
   }
 
-  /* Removed, not zeroed — see the class. Zeroing the duration would keep the backwards
-   * fill and leave every bar collapsed. */
-  .motion-spark {
-    animation: none;
-  }
 }
 
 ::-webkit-scrollbar {
@@ -892,18 +902,20 @@ input[type="number"]::-webkit-inner-spin-button {
   .panel-row[data-record] .panel {
     min-width: 0;
   }
-  /* The calendar window IS the rail — it is not replaced by one. A fourth element would have
-     added a fourth gap to a row that has three, so the row's width would have changed by
-     16px at rest, in both directions, for a strip that is only ever visible in one of the two
-     states. Shrinking the window that is already leftmost costs nothing and says the true
-     thing: the rail is where those windows went. */
+  /* The leftmost window IS the rail — it is not replaced by one. (That window held the
+     calendar column until 2026-09-18 and holds the day's BLOCKS now; the rail argument is
+     about position, not contents.) A fourth element would have added a fourth gap to a row
+     that has three, so the row's width would have changed by 16px at rest, in both
+     directions, for a strip that is only ever visible in one of the two states. Shrinking
+     the window that is already leftmost costs nothing and says the true thing: the rail is
+     where those windows went. */
   /* The horizontal padding goes with the width, and it HAS to.
      `box-sizing: border-box` clamps a box up to its own padding and border, so a window with
      `lg:p-6` cannot be narrower than 50px however small its flex-basis gets — which is why the
      first cut of this left a 50px white stub sitting between the rail and the record, and why
      the rail measured 50px when it was asked for 44. Nothing else needs to know: the rail's
      label is positioned against the padding box, so it re-centres on whatever is left. */
-  .panel-row[data-record] [data-panel="calendar"] {
+  .panel-row[data-record] [data-panel="blocks"] {
     flex-grow: 0;
     flex-basis: var(--rail-w);
     padding-left: 0;
@@ -926,7 +938,7 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 
   /* Held empty for the whole open stay, so the return trip has something to bring back. */
-  .panel-row[data-record] [data-panel="calendar"] .panel-fade,
+  .panel-row[data-record] [data-panel="blocks"] .panel-fade,
   .panel-row[data-record] [data-panel="today"] .panel-fade {
     opacity: 0;
     transform: translateY(5px);
@@ -1244,70 +1256,18 @@ input[type="number"]::-webkit-inner-spin-button {
   will-change: transform;
 }
 
-/* THE OTHER SIDE OF THE SAME GESTURE. Closing a pillar re-mounts the two that were not
- * chosen, and a fresh mount with nothing on it is the pop this pass exists to remove — just
- * pointed the other way. Each arrives FROM the side it was pushed to — `--enter-dy`, set
- * inline from which side of the closing pillar it sits on — so the pair reads as coming back
- * from where it went, not as materialising.
- *
- * @starting-style rather than a measured transform, because these genuinely ARE arriving:
- * they have no previous rectangle to come from, unlike the ring, which does. It fires on
- * insertion only, so the chosen pillar — the one node that survives the toggle — is untouched
- * and keeps its FLIP. On a cold page load all three mount at once with --enter-dy at zero and
- * simply fade in together, which is the same statement and costs nothing.
- *
- * The 120ms delay lets the big ring commit to shrinking before its neighbours appear, so the
- * eye follows the ring rather than the two things materialising beside it.
- *
- * DECLARED BEFORE `.pillar-ghost` deliberately. A section leaving carries both classes for one
- * commit and they both set opacity at equal specificity, so source order is what decides that
- * the push-OUT wins. */
-.pillar-enter {
-  opacity: 1;
-  transform: none;
-  transition:
-    opacity 260ms var(--ease-out) 120ms,
-    transform 320ms var(--ease-out) 120ms;
-}
-@starting-style {
-  .pillar-enter {
-    opacity: 0;
-    transform: translateY(var(--enter-dy, 0px));
-  }
-}
-
-/* THE TWO YOU DID NOT CHOOSE, pushed out of the expanding ring's way.
- *
- * They used to fly out on a 390ms timer and only THEN did the chosen pillar open, which made
- * one gesture into two beats — the thing leaves, you wait, the thing arrives. Here everything
- * happens at once: these give ground while the chosen ring travels through them — up if they
- * sat above it, down if below (`--ghost-dy`, set inline), so the column PARTS around the
- * arrival rather than dimming under it.
- *
- * Pinned absolutely at the offsets they already occupied, so leaving the flow costs them no
- * movement; the push is the only travel they make. Pointer-events go immediately — a control
- * halfway out of the way is not a control. */
-.pillar-ghost {
-  position: absolute;
-  left: 0;
-  right: 0;
-  opacity: 0;
-  transform: translateY(var(--ghost-dy, 0px)) scale(0.98);
-  pointer-events: none;
-  transition:
-    opacity 240ms var(--ease-out),
-    transform 320ms var(--ease-out);
-}
+/* THE GHOST-AND-PUSH PAIR lived here: the unchosen pillars shoved out of the expanding ring's
+ * way, and their arrival back from that shove. Both went with the THIRD pillar on 2026-09-18
+ * (spec §1) — with two rings side by side, opening one simply unmounts the other, so there is
+ * nothing for a column to part around and nothing to come back from. The FLIP survives them,
+ * because the ring still travels between the two layouts it appears in. */
 
 @media (prefers-reduced-motion: reduce) {
   /* Nulled, not zeroed. Every resting value here is the visible one — `transform: none` on the
-   * ring, opacity 1 on an arriving section — so removing the transition lands each element
-   * where it belongs, present and simply not shown getting there. The ghost is the exception
-   * and needs none: it rests at opacity 0 and is unmounted on a timer either way.
+   * ring, opacity 1 on arriving detail — so removing the transition lands each element where
+   * it belongs, present and simply not shown getting there.
    * The rotation loop is the JavaScript half of this setting and asks matchMedia itself. */
   .ring-flip,
-  .pillar-enter,
-  .pillar-ghost,
   .detail-enter {
     transition: none;
   }
@@ -1356,8 +1316,8 @@ input[type="number"]::-webkit-inner-spin-button {
 
 /* `.motion-exit` and `.motion-reveal` lived here: the unchosen pillars flying out on a
  * timer before anything could open, and the open pillar's detail arriving as one slab. Both
- * are gone with their gestures — the ring now travels through sections that are PUSHED
- * aside (.pillar-ghost), and the detail arrives item by item (.detail-enter). */
+ * are gone with their gestures — the unchosen pillar simply unmounts now, and the detail
+ * arrives item by item (.detail-enter). */
 
 /* A CHART CARD on the record. The window's own treatment at a smaller scale — the same
  * three-step bevel, a tighter radius, the same top light with a shorter throw — so the four
@@ -1377,6 +1337,29 @@ input[type="number"]::-webkit-inner-spin-button {
     rgb(255 255 255 / 0) 120px
   );
   padding: 1rem 1.25rem 1.25rem;
+}
+
+/* A SMALL SURFACE THAT FLOATS OVER THE PAGE, and the app's third such thing after the dialog
+ * and the timeline's cards.
+ *
+ * NO SHADOW. The only light this app ships is the window bevel, the ring bloom and the streak
+ * pill's glow, and a popover is not worth a fourth exception. What separates it from whatever
+ * it overlaps is an OPAQUE ground plus the window's own three-step bevel and a 2px halo in the
+ * page colour — a cut-out rather than a lift. It reads as "in front" because it interrupts
+ * what is behind it, which is the honest cue and costs no new colour.
+ *
+ * Positioning is the caller's: this class sets no top/left and no z-index beyond the token, so
+ * one popover can be fixed to the viewport and another absolute inside a card. */
+.popover {
+  position: relative;
+  z-index: var(--z-popover);
+  border-radius: 12px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line-strong);
+  border-top-color: var(--color-line);
+  border-bottom-color: var(--color-line-edge);
+  outline: 2px solid var(--color-bg);
+  outline-offset: 0;
 }
 
 

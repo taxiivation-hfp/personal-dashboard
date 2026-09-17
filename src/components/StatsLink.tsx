@@ -1,98 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 /**
- * The way through to /stats, sitting under the three pillar rings.
+ * The way through to /stats, sitting under the adherence tracker.
  *
- * It PREVIEWS rather than merely pointing. A row that said "Stats →" would be a link taking
- * up the height of a chart; showing the fortnight it leads to earns that height, and a
- * fourteen-day sparkline is small enough that it cannot be mistaken for the hero.
+ * IT PREVIEWS NOTHING NOW. It used to draw a fourteen-bar adherence sparkline, on the
+ * argument that showing the fortnight it leads to earned the height a plain link would have
+ * cost. The Recent window answered that argument itself: the tracker card above this is a
+ * real adherence chart with a real average on it, so the sparkline had become a second,
+ * smaller, mute drawing of the same series two inches below the first — and the one that
+ * could be misread, because it had no axis and no figure.
  *
- * WHAT IT DRAWS IS ADHERENCE, not productivity. The stats page opens on adherence, so the
- * preview is the first thing you will see when you arrive — a preview of something else
- * would be a promise the destination does not keep.
- *
- * No number is printed. This is a shape, not a reading: the figures live one tap away, and
- * a percentage here would make a quiet link into a fourth measurement on a screen that
- * already has three.
+ * So this is a line of type and an arrow. It also stopped fetching, which is the part worth
+ * knowing: a link that opens a network request on every day you step to was paying for a
+ * picture nobody needed.
  */
 
-/** Two weeks — the same window the rings above it use, so the row is one fortnight. */
-const DAYS = 14;
-
-type StripDay = { date: string; pct: number };
-
 export default function StatsLink({
-  date,
   onOpen,
 }: {
-  date: string;
   /** Opens the record in place. A BUTTON rather than a link, because nothing navigates:
    *  the record is this column read at length, and losing the page you were on to see more
    *  of a part of it is the wrong gesture. */
   onOpen: () => void;
 }) {
-  const [days, setDays] = useState<StripDay[] | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch(`/api/adherence?days=${DAYS}&to=${date}`)
-      .then((r) => r.json())
-      .then((d) => alive && !d.error && setDays(d.days ?? []))
-      .catch(() => alive && setDays([]));
-    return () => {
-      alive = false;
-    };
-  }, [date]);
-
   return (
     <button
       onClick={onOpen}
       aria-haspopup="dialog"
-      data-record-link
-      className="group -mx-2 mt-2 flex w-[calc(100%+1rem)] shrink-0 items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel)]"
+      className="group -mx-2 flex w-[calc(100%+1rem)] shrink-0 items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--color-panel)]"
     >
-      {/* One line, not two. It sits under three pillars in a column with no height to
-          spare, and the second line was restating what the destination is called. */}
-      <span className="min-w-0 flex-1 truncate">
-        <span className="text-small font-semibold">The record</span>
-        <span className="ml-2 text-micro text-[var(--color-muted)]">
-          everything, over time
-        </span>
-      </span>
-
-      {/* A row of hairlines rather than a chart: the same bar shape the week strip uses, at
-          a size where only the silhouette survives. Each rises on a stagger — the one piece
-          of sequenced motion in the app, allowed here because this is the one element whose
-          job is to be noticed.
-
-          A CSS ANIMATION, never a state flip. The first version set the bars to scaleY(0)
-          and flipped them on in a requestAnimationFrame, which does not fire in a hidden tab
-          — so the row shipped blank to anyone who opened the app in a background tab, and to
-          any headless renderer. The resting state is now the VISIBLE one and the animation is
-          pure decoration on top: if it never runs, the bars are simply there. */}
-      <span
-        aria-hidden
-        className="flex h-7 shrink-0 items-end gap-[2px]"
-        style={{ width: DAYS * 5 }}
-      >
-        {(days ?? []).map((d, i) => (
-          <span
-            key={d.date}
-            className="motion-spark block w-[3px] origin-bottom rounded-[1px]"
-            style={{
-              height: `${Math.max(d.pct, 4)}%`,
-              background:
-                i === (days?.length ?? 0) - 1
-                  ? "var(--color-accent)"
-                  : "var(--color-line-strong)",
-              // 18ms apart: fourteen bars land inside 250ms, so the whole gesture is over
-              // before it can become something you wait for.
-              animationDelay: `${i * 18}ms`,
-            }}
-          />
-        ))}
+      {/* One line, not two. The second line was restating what the destination is called. */}
+      <span className="min-w-0 flex-1 truncate text-small font-semibold">
+        The record
       </span>
 
       {/* Travels on hover, and only on hover — a pointer is the one input that can say

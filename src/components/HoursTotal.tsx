@@ -17,10 +17,10 @@ import type { ChartPoint } from "./DayChart";
  * query would eventually drift from what the chart draws, and a disagreeing explanation is
  * worse than none.
  *
- * MINUTES, NOT POINTS. The score is quarantined to the strip on Today and must not leak on
- * to the record — see CLAUDE.md. What this sheet reports is hours, which is a fact about
- * where a week went rather than a judgement about it, and there is no total score printed
- * anywhere on it.
+ * MINUTES, NOT POINTS — and there are no points left anywhere to leak. The productivity
+ * score is gone (the owner's ruling of 2026-09-18: "quantifying productivity is stupid"),
+ * so what a segment carries IS its minutes. This sheet reports hours, which is a fact about
+ * where a week went rather than a judgement about it.
  */
 
 const asTime = (mins: number): string => {
@@ -67,8 +67,9 @@ export default function HoursTotal({
     }
     return [...by.entries()]
       .map(([label, v]) => ({ label, ...v }))
-      // Only things measured in time. The non-negotiables slab is on the bar because it
-      // earns points, but it is not hours and cannot be reported as any.
+      // Only things measured in time. Kept as a guard rather than deleted with the score:
+      // a category summing to zero minutes is a row saying nothing, and the stack's own
+      // rounding can produce one.
       .filter((r) => r.minutes > 0)
       .sort((a, b) => b.minutes - a.minutes);
   }, [points]);
@@ -144,10 +145,9 @@ export default function HoursTotal({
         </p>
       )}
 
-      <p className="mt-3 text-micro leading-relaxed text-[var(--color-muted)]">
-        Blocked calendar time you marked adhered, counted at the share you
-        actually worked. Hours spent — never what came of them.
-      </p>
+      {/* The closing paragraph is GONE — TEXT IS DATA. It explained the sheet and it
+          talked about scoring, and the score no longer exists. What it argued lives in
+          productivity.ts, where hoursForDay decides what an hour worked is. */}
     </dialog>
   );
 }

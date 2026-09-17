@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { Block, BlockState } from "@/lib/adherence";
-import { WORKED_STEP } from "@/lib/worked";
+import DriftPopover from "./DriftPopover";
 
 /**
  * Tap-as-you-go marking.
@@ -12,11 +18,16 @@ import { WORKED_STEP } from "@/lib/worked";
  * to bad — "drifted" sits between the others as an equal option, because the moment
  * logging honestly feels like confessing, the data stops being true.
  *
- * A DRIFT CAN BE PARTIAL. The slider that says how much of it was worked joins the reason
- * in the afterthought row — after the mark is already saved, never in front of it. Both are
- * optional, both are dismissible, and a drift is still completable in a single tap. That
- * ordering is the honest-logging rule applied to a second control: the moment recording
- * what happened costs more than recording something tidier, the data goes soft.
+ * A DRIFT CAN BE PARTIAL. The slider that says how much of it was worked, and the reason
+ * beside it, now open as a POPOVER next to the row (DriftPopover) rather than as an inline
+ * expansion — after the mark is already saved, never in front of it. Both are optional,
+ * both are dismissible, and a drift is still completable in a single tap. That ordering is
+ * the honest-logging rule applied to a second control: the moment recording what happened
+ * costs more than recording something tidier, the data goes soft.
+ *
+ * Every row also carries a DISMISS, because an invite you were never going to do is not a
+ * block you skipped — it was never part of the day, and adherence drops dismissed rows
+ * from both sides of the block share rather than counting them against you.
  */
 
 /** Minutes between two "HH:MM" strings, or null if either is missing or the pair is not a
@@ -35,15 +46,84 @@ function spanMinutes(start: string | null, end: string | null): number | null {
   return d > 0 ? d : null;
 }
 
-/** "45 min" · "2h" · "1h 12m". The real figure under the percentage — a share with no
- *  denominator beside it is the one thing this app's charts never print. */
-function asSpan(mins: number): string {
-  const m = Math.round(mins);
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const rest = m % 60;
-  return rest === 0 ? `${h}h` : `${h}h ${rest}m`;
+/**
+ * A full three-line row at this type scale: the serif title, the state line, the chip row.
+ *
+ * MEASURED, not derived. Deriving it would mean measuring a row on a day whose blocks have
+ * not arrived yet, and the answer is needed before the first paint to decide what to draw.
+ * It is only ever compared against a height budget, so a few pixels out costs at worst one
+ * row of slack — never a wrong row.
+ */
+const ROW_FULL = 86;
+
+/** The gap left under the last row so a list that only just fits does not touch the
+ *  window's bottom edge. */
+const LIST_TAIL = 24;
+
+/** `undo` and `dismiss` wear the same quiet treatment, deliberately: neither is a fourth
+ *  state and neither is the preferred answer, they are both just ways to say the row was
+ *  read wrong. One string so the full row and the collapsed one cannot drift apart. */
+const QUIET =
+  "shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline";
+
+/**
+ * The state as a chip. ONE class string and ONE style table, shared by the full row and the
+ * collapsed one — form, not severity: skipped is an outline where the other two are fills,
+ * and the fills carry a transparent border of the same width so all three chips measure the
+ * same. A state must not be a different size from its neighbours.
+ *
+ * On a DRIFT it is a button, and the only thing that changes is that it can be pressed: a
+ * slider you cannot correct is worse than no slider, and re-marking the block from scratch
+ * to move it by 5% is not a correction, it is a punishment for a mis-drag.
+ */
+function StateChip({
+  state,
+  onOpen,
+}: {
+  state: BlockState;
+  onOpen: () => void;
+}) {
+  const label =
+    state === "adhered"
+      ? "Adhered"
+      : state === "drifted"
+        ? "Drifted"
+        : "Skipped";
+  const cls = "shrink-0 rounded-full px-3 py-1 text-small";
+  const style: CSSProperties =
+    state === "adhered"
+      ? {
+          background: "var(--color-adhered)",
+          color: "#fff",
+          border: "1px solid transparent",
+        }
+      : state === "drifted"
+        ? {
+            background: "var(--color-drifted)",
+            color: "#fff",
+            border: "1px solid transparent",
+          }
+        : {
+            border: "1px solid var(--color-skipped)",
+            color: "var(--color-skipped)",
+          };
+  return state === "drifted" ? (
+    <button
+      type="button"
+      onClick={onOpen}
+      title="Adjust how much of it you worked"
+      className={`${cls} transition-opacity hover:opacity-90`}
+      style={style}
+    >
+      {label}
+    </button>
+  ) : (
+    <span className={cls} style={style}>
+      {label}
+    </span>
+  );
 }
+
 export default function BlockList({
   date,
   blocks,
@@ -63,6 +143,10 @@ export default function BlockList({
   /** The open row's worked fraction, 0..1. Follows the thumb; only committed on release. */
   const [worked, setWorked] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
+  /** The open row's box in VIEWPORT coordinates, captured at the moment of the click. The
+   *  popover is fixed to the viewport, so it is placed from this rather than from the DOM
+   *  it is not inside. */
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   /**
    * What the server currently holds for the open row, so a release that moved nothing does
    * not write. A range input fires `change` on every pixel and this component listens on
@@ -70,6 +154,15 @@ export default function BlockList({
    * tapping Save after a drag would post the identical row twice.
    */
   const savedWorked = useRef(0);
+  /** Every row's <li>, keyed by event id, so a click can hand the popover the row's box. */
+  const rowRefs = useRef(new Map<string, HTMLLIElement>());
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const live = useMemo(
+    () => blocks.filter((b) => b.state !== "dismissed"),
+    [blocks],
+  );
+  const openBlock = live.find((b) => b.event_id === openReason) ?? null;
 
   /** Returns the RESULTING state, which is not always the one asked for: a drift worked in
    *  full is stored as an adherence. Null if the write failed. */
@@ -107,8 +200,16 @@ export default function BlockList({
     }
   }
 
-  /** Open the afterthought row on a block already marked drifted, prefilled. */
+  /** The row's box now. Read at the moment of the click rather than held in a ref that
+   *  updates on render: between a render and a click the window may have been resized, and
+   *  a popover aimed at where the row used to be is worse than no popover. */
+  function rectOf(b: Block): DOMRect | null {
+    return rowRefs.current.get(b.event_id)?.getBoundingClientRect() ?? null;
+  }
+
+  /** Open the editor on a block already marked drifted, prefilled. */
   function openFor(b: Block) {
+    setAnchor(rectOf(b));
     setOpenReason(b.event_id);
     setReason(b.reason ?? "");
     setWorked(b.workedFraction ?? 0);
@@ -125,6 +226,7 @@ export default function BlockList({
       // reason and a null fraction. Seeding the controls from anything else would show two
       // values the database does not hold.
       void mark(b, "drifted");
+      setAnchor(rectOf(b));
       setOpenReason(b.event_id);
       setReason("");
       setWorked(0);
@@ -138,15 +240,18 @@ export default function BlockList({
   /* Stepping to another day closes any open row. The mark it was attached to belongs to the
      day you left, and a slider left hanging over a different day's list is a control aimed
      at the wrong row — the same hazard the dated keys elsewhere in this app exist to close. */
-  useEffect(() => setOpenReason(null), [date]);
+  useEffect(() => {
+    setOpenReason(null);
+    setAnchor(null);
+  }, [date]);
 
   /**
    * Commit the slider — on release, never on drag.
    *
    * At the top of the range the server rewrites the mark as an adherence, because a drift
-   * worked in full IS one. The row closes on THAT answer rather than on a check of its own:
-   * the rule lives in engine.ts, and a screen that predicted it would eventually predict it
-   * wrongly.
+   * worked in full IS one. The popover closes on THAT answer rather than on a check of its
+   * own: the rule lives in engine.ts, and a screen that predicted it would eventually
+   * predict it wrongly.
    */
   async function commitWorked(b: Block) {
     if (worked === savedWorked.current) return;
@@ -160,21 +265,171 @@ export default function BlockList({
       savedWorked.current = previous;
       return;
     }
-    if (state !== "drifted") setOpenReason(null);
+    if (state !== "drifted") closeIfOpen(b);
   }
 
   /** Save the reason and whatever the slider is currently showing, and close. */
   async function commitRow(b: Block) {
     savedWorked.current = worked;
     await mark(b, "drifted", { reason, worked });
-    setOpenReason(null);
+    closeIfOpen(b);
   }
 
-  const live = blocks.filter((b) => b.state !== "dismissed");
+  /** Clear the popover only if it is still THIS row's. Every close below fires its write
+   *  without waiting for it, so by the time one lands the hand may already have opened
+   *  another row — and an unconditional clear would shut the row you just tapped. */
+  function closeIfOpen(b: Block) {
+    setOpenReason((cur) => (cur === b.event_id ? null : cur));
+  }
+
+  /**
+   * EVERY WAY OUT OF THE POPOVER COMMITS WHAT YOU CHANGED — outside click, Escape, skip, a
+   * scroll. A slider left at 40% and dismissed must not lose the 40%: that is the
+   * honest-logging rule applied to leaving, and the mark itself was saved the moment you
+   * tapped Drifted.
+   *
+   * WHAT YOU CHANGED, and nothing else. It used to post unconditionally, which made every
+   * Escape a second identical write of a row the server had just been told about — and the
+   * popover's outside-click listener is capture-phase, so a tap on the SAME ROW's `undo`
+   * closed the popover on the way down and unmarked the block on the way up: two writes for
+   * one event id, one of them re-asserting the drift the other was taking back. Whichever
+   * landed second won, so undo could quietly fail. Both controls sit on the row the popover
+   * points at, so that is one ordinary hand movement and not a contrivance.
+   *
+   * The guard is exact rather than cautious: `choose()` seeds the controls at 0 and "" over
+   * a row the server has just written as a bare drift, and `openFor()` seeds both from the
+   * block, so "nothing moved" means there is genuinely nothing new to say.
+   *
+   * It does NOT wait for the write. A popover still standing a network round trip after you
+   * pressed Escape reads as a control that ignored you, and the write has nothing left to
+   * tell the screen — `mark` already refreshes the day when it lands.
+   */
+  function closeRow(b: Block) {
+    if (worked !== savedWorked.current || reason !== (b.reason ?? ""))
+      void commitRow(b);
+    setOpenReason(null);
+    setAnchor(null);
+  }
+
+  /** The latest close, for a listener that outlives a keystroke. The scroll listener below
+   *  is subscribed once per open row while `reason` and `worked` change on every letter
+   *  typed, and a listener holding the closure it was born with would commit a reason two
+   *  letters old. */
+  const closeOpenRow = useRef<() => void>(() => {});
+  useEffect(() => {
+    closeOpenRow.current = () => {
+      if (openBlock) closeRow(openBlock);
+    };
+  });
+
+  /**
+   * The popover is fixed to the VIEWPORT while the row it points at is not, so anything
+   * that moves one without the other has to be answered: a resize re-aims it, a scroll of
+   * the window this list lives in closes it (committing, like every other way out).
+   *
+   * THE OWNING WINDOW, deliberately, and not every scroller on the page. The popover
+   * autofocuses its reason field, and on a phone that focus scrolls the PAGE to make room
+   * for the keyboard — a listener on the document would read its own arrival as a scroll
+   * and shut the editor in the same breath it opened. What it costs is that a page scrolled
+   * on the phone leaves the popover where it was; it is still the row's editor and still
+   * commits, it has just stopped pointing.
+   */
+  useEffect(() => {
+    if (openReason == null) return;
+    const box = listRef.current?.closest(".window") ?? null;
+    const reposition = () =>
+      setAnchor(
+        rowRefs.current.get(openReason)?.getBoundingClientRect() ?? null,
+      );
+    const away = () => closeOpenRow.current();
+    window.addEventListener("resize", reposition);
+    box?.addEventListener("scroll", away);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      box?.removeEventListener("scroll", away);
+    };
+  }, [openReason]);
+
+  /**
+   * THE OVERFLOW RULE. A day whose rows do not fit the window collapses the rows that are
+   * already MARKED to one line; the unmarked ones stay full.
+   *
+   * Which way round that goes is the whole of it: an unmarked row carries the three action
+   * chips, and shortening it would make marking cost more — the one thing the
+   * honest-logging rule forbids. A marked row is a record, and a record reads fine as a
+   * line. Nothing scrolls at rest (spec §4), so the list has to give way instead.
+   *
+   * Measured against the WINDOW rather than against the list, which is circular — the list
+   * is as tall as its rows. The same `closest(".window")` idiom the pillar column uses.
+   */
+  const [collapse, setCollapse] = useState(false);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const box = list.closest(".window");
+    const measure = () => {
+      // Below lg the page scrolls and there is nothing to fit inside. This is also the
+      // phone's SECOND instance of this list — Today's pane renders one too — and that one
+      // is display:none, so every measurement it takes is zero.
+      if (!window.matchMedia("(min-width: 64rem)").matches) {
+        setCollapse(false);
+        return;
+      }
+      if (!box) return;
+      const avail =
+        box.clientHeight -
+        (list.getBoundingClientRect().top - box.getBoundingClientRect().top) -
+        LIST_TAIL;
+      // A hidden window measures zero and must not flip the flag for the visible one.
+      if (avail <= 0) return;
+      setCollapse(live.length * ROW_FULL > avail);
+    };
+    measure();
+    if (!box || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [live]);
+
+  /**
+   * THE TWO WAYS TO TAKE A ROW BACK, drawn on EVERY row in BOTH variants.
+   *
+   * `mark(b, null)` is reachable from nowhere else, and `dismiss` is spec §2's "every block
+   * row gets a dismiss control" — so the collapsed variant dropping them meant that on
+   * exactly the days the overflow rule fires (nine rows or more), a block marked Adhered or
+   * Skipped by mistake could not be un-marked at all. That is the same argument the drift
+   * chip already makes: a mark you cannot correct is worse than no mark. They cost a row
+   * nothing in height — micro type beside a chip — so there is no width to buy back by
+   * hiding them behind a hover, which would also put them out of reach on a touch screen.
+   */
+  const undoDismiss = (b: Block, marked: boolean) => (
+    <>
+      {marked && (
+        <button onClick={() => mark(b, null)} className={QUIET}>
+          undo
+        </button>
+      )}
+      {/* On EVERY row, marked or not: the row this exists for — an invite, a birthday,
+          something never meant to be done — is usually one nobody ever marked. It is a
+          statement that the row was never part of the day, not a fourth state.
+
+          KNOWN AND ACCEPTED: engine.markBlock REFUSES a dismissal that would take back
+          hours already earned and returns the prior state, so dismissing an adhered row is
+          a no-op and the row stays. Not special-cased and no error is printed — `mark`
+          already trusts the RESULTING state, and a row that does not change is the honest
+          outcome. */}
+      <button onClick={() => mark(b, "dismissed")} className={QUIET}>
+        dismiss
+      </button>
+    </>
+  );
 
   if (!live.length) {
     return (
       <p className="max-w-[42ch] py-6 text-body leading-relaxed text-[var(--color-muted)]">
+        {/* TEXT IS DATA: this used to carry a second sentence explaining where blocks come
+            from. Where they come from is Google Calendar, which the connect prompt above
+            already says on the only day it matters. */}
         Nothing on the calendar{" "}
         {isToday
           ? "today"
@@ -183,8 +438,7 @@ export default function BlockList({
               day: "numeric",
               month: "long",
             })}`}
-        . Blocks come from Google Calendar — put something there and it shows up
-        here to mark.
+        .
       </p>
     );
   }
@@ -194,224 +448,133 @@ export default function BlockList({
        eleven identical cards turned it into a dashboard. The clock times are the one piece
        of genuine marginalia this app has, so they hang in the page margin and the owner's
        own title sits on the line beside them. */
-    <ul className="divide-y divide-[var(--color-line)]">
-      {live.map((b) => {
-        const marked = b.state != null;
-        const needsMarking = b.due && !marked;
-        return (
-          <li key={b.event_id} className="page-margin py-3">
-            {/* Stacked, not "09:00–10:30": the margin is 4.25rem and a full range will not
-                fit it at this step. Start over end reads as a span the way a timetable does.
-                An all-day block has no times and simply leaves the margin empty. */}
-            <div className="pt-1.5 text-right text-micro tabular-nums text-[var(--color-muted)]">
-              <span className="block">{b.time_start}</span>
-              {b.time_end ? <span className="block">{b.time_end}</span> : null}
-            </div>
+    <>
+      <ul ref={listRef} className="divide-y divide-[var(--color-line)]">
+        {live.map((b) => {
+          const marked = b.state != null;
+          const needsMarking = b.due && !marked;
+          const setRow = (el: HTMLLIElement | null) => {
+            if (el) rowRefs.current.set(b.event_id, el);
+            else rowRefs.current.delete(b.event_id);
+          };
 
-            <div className="min-w-0">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="truncate font-serif text-body">{b.title}</p>
-                {marked && (
-                  <button
-                    onClick={() => mark(b, null)}
-                    className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                  >
-                    undo
-                  </button>
-                )}
+          /* COLLAPSED: time · title · state chip, on the same rail. The drift chip is still
+             a button — the one control on this row you may need to correct. */
+          if (collapse && b.state != null) {
+            return (
+              <li
+                key={b.event_id}
+                ref={setRow}
+                className="page-margin py-1.5"
+              >
+                {/* The start only. The stacked start-over-end of a full row is two lines,
+                    which is the thing this variant exists to give back. */}
+                <div className="pt-1 text-right text-micro tabular-nums text-[var(--color-muted)]">
+                  {b.time_start}
+                </div>
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <p className="truncate font-serif text-body">{b.title}</p>
+                  <div className="flex shrink-0 items-center gap-2.5">
+                    {undoDismiss(b, true)}
+                    <StateChip state={b.state} onOpen={() => openFor(b)} />
+                  </div>
+                </div>
+              </li>
+            );
+          }
+
+          return (
+            <li key={b.event_id} ref={setRow} className="page-margin py-3">
+              {/* Stacked, not "09:00–10:30": the margin is 4.25rem and a full range will not
+                  fit it at this step. Start over end reads as a span the way a timetable does.
+                  An all-day block has no times and simply leaves the margin empty. */}
+              <div className="pt-1.5 text-right text-micro tabular-nums text-[var(--color-muted)]">
+                <span className="block">{b.time_start}</span>
+                {b.time_end ? <span className="block">{b.time_end}</span> : null}
               </div>
 
-              {!marked && (
-                <p className="mt-0.5 text-micro text-[var(--color-muted)]">
-                  {/* Never "overdue" or "missed" — the block is fine, it just needs a mark.
-                      It used to lean on a darker card border too; with the cards gone the
-                      words carry it alone, which is the honest amount of emphasis. */}
-                  {needsMarking ? "needs marking" : "later today"}
-                </p>
-              )}
-
-              {!marked && (
-                /* One class string for all three, deliberately. The instant one of them
-                   gets a fill, a weight or a position that reads as the preferred answer,
-                   marking honestly costs more than marking well and the data goes soft. */
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  {(["adhered", "drifted", "skipped"] as const).map((s) => (
-                    <button
-                      key={s}
-                      disabled={busy === b.event_id}
-                      onClick={() => choose(b, s)}
-                      className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small text-[var(--color-ink)] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
-                    >
-                      {s === "adhered"
-                        ? "Adhered"
-                        : s === "drifted"
-                          ? "Drifted"
-                          : "Skipped"}
-                    </button>
-                  ))}
+              <div className="min-w-0">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="truncate font-serif text-body">{b.title}</p>
+                  <div className="flex shrink-0 items-baseline gap-2.5">
+                    {undoDismiss(b, marked)}
+                  </div>
                 </div>
-              )}
 
-              {marked && b.state !== "dismissed" && (
-                <div className="mt-2 flex items-baseline gap-2.5">
-                  {/* Form, not severity: skipped is an outline where the other two are
-                      fills. The fills carry a transparent border of the same width so all
-                      three chips measure the same — a state must not be a different size
-                      from its neighbours either.
+                {!marked && (
+                  <p className="mt-0.5 text-micro text-[var(--color-muted)]">
+                    {/* Never "overdue" or "missed" — the block is fine, it just needs a mark.
+                        It used to lean on a darker card border too; with the cards gone the
+                        words carry it alone, which is the honest amount of emphasis. */}
+                    {needsMarking ? "needs marking" : "later today"}
+                  </p>
+                )}
 
-                      On a DRIFT it is a button, and the only thing that changes is that it
-                      can be pressed: a slider you cannot correct is worse than no slider,
-                      and re-marking the block from scratch to move it by 5% is not a
-                      correction, it is a punishment for a mis-drag. */}
-                  {(() => {
-                    const chip = (
-                      <>
-                        {b.state === "adhered"
+                {!marked && (
+                  /* One class string for all three, deliberately. The instant one of them
+                     gets a fill, a weight or a position that reads as the preferred answer,
+                     marking honestly costs more than marking well and the data goes soft. */
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {(["adhered", "drifted", "skipped"] as const).map((s) => (
+                      <button
+                        key={s}
+                        disabled={busy === b.event_id}
+                        onClick={() => choose(b, s)}
+                        className="rounded-full border border-[var(--color-line-strong)] px-3.5 py-1.5 text-small text-[var(--color-ink)] transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+                      >
+                        {s === "adhered"
                           ? "Adhered"
-                          : b.state === "drifted"
+                          : s === "drifted"
                             ? "Drifted"
                             : "Skipped"}
-                      </>
-                    );
-                    const cls = "shrink-0 rounded-full px-3 py-1 text-small";
-                    const style: CSSProperties =
-                      b.state === "adhered"
-                        ? {
-                            background: "var(--color-adhered)",
-                            color: "#fff",
-                            border: "1px solid transparent",
-                          }
-                        : b.state === "drifted"
-                          ? {
-                              background: "var(--color-drifted)",
-                              color: "#fff",
-                              border: "1px solid transparent",
-                            }
-                          : {
-                              border: "1px solid var(--color-skipped)",
-                              color: "var(--color-skipped)",
-                            };
-                    return b.state === "drifted" ? (
-                      <button
-                        type="button"
-                        onClick={() => openFor(b)}
-                        title="Adjust how much of it you worked"
-                        className={`${cls} transition-opacity hover:opacity-90`}
-                        style={style}
-                      >
-                        {chip}
                       </button>
-                    ) : (
-                      <span className={cls} style={style}>
-                        {chip}
+                    ))}
+                  </div>
+                )}
+
+                {b.state != null && (
+                  <div className="mt-2 flex items-baseline gap-2.5">
+                    <StateChip state={b.state} onOpen={() => openFor(b)} />
+                    {/* Beside the chip, never inside it — all three chips must keep measuring
+                        the same, and a percentage sewn into one of them would make the drift
+                        chip permanently wider than its neighbours. Only shown when there is
+                        something to show: a drift with the slider untouched reads exactly as
+                        every drift did before it existed. */}
+                    {b.state === "drifted" && (b.workedFraction ?? 0) > 0 && (
+                      <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                        {Math.round((b.workedFraction ?? 0) * 100)}% worked
                       </span>
-                    );
-                  })()}
-                  {/* Beside the chip, never inside it — all three chips must keep measuring
-                      the same, and a percentage sewn into one of them would make the drift
-                      chip permanently wider than its neighbours. Only shown when there is
-                      something to show: a drift with the slider untouched reads exactly as
-                      every drift did before it existed. */}
-                  {b.state === "drifted" && (b.workedFraction ?? 0) > 0 && (
-                    <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
-                      {Math.round((b.workedFraction ?? 0) * 100)}% worked
-                    </span>
-                  )}
-                  {b.reason && (
-                    <span className="min-w-0 truncate font-serif text-small text-[var(--color-muted)]">
-                      {b.reason}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {openReason === b.event_id && (
-                <div className="mt-3">
-                  {/* HOW MUCH OF IT WAS WORKED.
-                      A question about time, never about whether you should have. The mark
-                      is already saved above it, so this is an adjustment to a decision
-                      already recorded — which is why leaving it at zero is a complete
-                      answer and not an unfinished form. */}
-                  <div className="flex items-baseline justify-between gap-3">
-                    <label
-                      htmlFor="worked-slider"
-                      className="text-micro text-[var(--color-muted)]"
-                    >
-                      how much of it did you work?
-                    </label>
-                    <span className="shrink-0 text-small tabular-nums">
-                      {Math.round(worked * 100)}%
-                    </span>
+                    )}
+                    {b.reason && (
+                      <span className="min-w-0 truncate font-serif text-small text-[var(--color-muted)]">
+                        {b.reason}
+                      </span>
+                    )}
                   </div>
-                  <input
-                    id="worked-slider"
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={Math.round(WORKED_STEP * 100)}
-                    value={Math.round(worked * 100)}
-                    /* Follows the thumb; writes on RELEASE. A range fires change on every
-                       pixel, and one POST per pixel is a write storm on a phone. */
-                    onChange={(e) => setWorked(Number(e.target.value) / 100)}
-                    onPointerUp={() => void commitWorked(b)}
-                    onKeyUp={() => void commitWorked(b)}
-                    /* The backstop for a drag whose pointer left the control before it was
-                       let go. commitWorked is a no-op when nothing moved. */
-                    onBlur={() => void commitWorked(b)}
-                    className="worked-range mt-1.5"
-                    style={{ "--worked": worked } as CSSProperties}
-                    aria-label={`How much of ${b.title} you worked, as a percentage`}
-                  />
-                  {(() => {
-                    // The real figure under the share. A percentage with no denominator
-                    // beside it is the one thing this app's charts never print — and here
-                    // the denominator is the block itself. Omitted, never guessed, when the
-                    // event has no usable span.
-                    const total = spanMinutes(b.time_start, b.time_end);
-                    if (total == null) return null;
-                    return (
-                      <p className="mt-1 text-micro tabular-nums text-[var(--color-muted)]">
-                        {asSpan(total * worked)} of {asSpan(total)}
-                      </p>
-                    );
-                  })()}
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
-                  {/* A line, not a box. The mark is already saved by the time this appears,
-                      so this is a note added in the margin of a decision already made — a
-                      filled field would look like a form still waiting on you. Serif because
-                      the sentence is the owner's, and it must match the reason as displayed
-                      above: one string rendered in two faces reads as a bug. */}
-                  <div className="mt-3 flex items-end gap-3">
-                    <input
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void commitRow(b);
-                        if (e.key === "Escape") setOpenReason(null);
-                      }}
-                      autoFocus
-                      placeholder="What happened instead? (optional)"
-                      className="min-w-0 flex-1 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 font-serif text-small outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
-                    />
-                    <button
-                      onClick={() => void commitRow(b)}
-                      className="shrink-0 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-small text-white transition-opacity hover:opacity-90"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setOpenReason(null)}
-                      className="shrink-0 pb-1.5 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                    >
-                      skip
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+      {/* ONE popover for the whole list, for whichever row is open. Mounted outside the
+          <ul> so it is never a child of the row it points at: a list that reflows while you
+          are marking must not take the control with it. */}
+      {openBlock && anchor && (
+        <DriftPopover
+          anchor={anchor}
+          title={openBlock.title}
+          totalMinutes={spanMinutes(openBlock.time_start, openBlock.time_end)}
+          worked={worked}
+          reason={reason}
+          onWorked={setWorked}
+          onCommitWorked={() => void commitWorked(openBlock)}
+          onReason={setReason}
+          onSave={() => closeRow(openBlock)}
+          onClose={() => closeRow(openBlock)}
+        />
+      )}
+    </>
   );
 }

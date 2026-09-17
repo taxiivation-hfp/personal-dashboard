@@ -4,7 +4,7 @@ import { useState } from "react";
 import HabitBox from "./HabitBox";
 import CalorieLog from "./CalorieLog";
 import StreakFlame from "./StreakFlame";
-import { CALORIE_FLOOR } from "@/lib/productivity";
+import { CALORIE_FLOOR } from "@/lib/rings";
 import type { CalorieEntry } from "@/lib/queries";
 
 /**
@@ -26,6 +26,7 @@ export default function CalorieInput({
   calories,
   entries,
   streak = 0,
+  tone,
   onChanged,
 }: {
   date: string;
@@ -37,6 +38,16 @@ export default function CalorieInput({
   /** Consecutive days the LOG reached 2,000 — logging the day, deliberately not the
    *  2,500 eating floor (see streaks.ts). 0 draws nothing: a zero here would scold. */
   streak?: number;
+  /**
+   * The HEALTH tone, already resolved by the caller through `toneColor`.
+   *
+   * It was `var(--color-physical)` inline, which is only the DEFAULT half of that
+   * resolution — so recolouring Health at /colours moved its ring and left this box
+   * behind, two surfaces disagreeing about one pillar. Passed in rather than resolved
+   * here because the checklist already holds the owner's colours and every other row on
+   * it gets its tick colour the same way.
+   */
+  tone: string;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -48,7 +59,7 @@ export default function CalorieInput({
           where under-eating is the failure and there is no upper bound worth drawing. The
           box is dashed until it is met, which is this app's existing word for "not yet"
           rather than "failed"; most of the day is legitimately spent below the line. */}
-      <HabitBox done={met} pending tone="var(--color-physical)" />
+      <HabitBox done={met} pending tone={tone} />
       <span
         className={`min-w-0 flex-1 font-serif text-small leading-snug ${met ? "text-[var(--color-muted)]" : ""}`}
       >

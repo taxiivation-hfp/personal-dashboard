@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -11,16 +12,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
+import FloatingTasks from "./FloatingTasks";
 import HabitBox from "./HabitBox";
-import NextUp from "./NextUp";
 import WeightLog from "./WeightLog";
 import StepsLog from "./StepsLog";
 import StepsRefresh from "./StepsRefresh";
-import ProductivityLog from "./ProductivityLog";
 import Dashboard from "./Dashboard";
 import JournalPanel from "./JournalPanel";
-import CalendarColumn from "./CalendarColumn";
-import PillarSections from "./PillarSections";
+import PillarSections, { type TrackerDay } from "./PillarSections";
 import Timeline from "./Timeline";
 import Ring, { toneColor } from "./PillarRing";
 import { PhoneSwipe, type PhoneTab } from "./PhoneTabs";
@@ -29,62 +28,14 @@ import StreakFlame from "./StreakFlame";
 import ChapterName from "./ChapterName";
 import type { Workout } from "./WorkoutLog";
 import { addDays, daysBetween, prettyDate, todayISO } from "@/lib/dates";
-import { projectedColour, SLAB_GYM, SLAB_NEUTRAL } from "@/lib/eventColor";
-import { CALENDAR_RATES, type ProductivitySegment } from "@/lib/productivity";
-import type {
-  DayView,
-  GoalView,
-  SkillView,
-  SkillSlice,
-  PillarKey,
-} from "@/lib/queries";
+import { buildCareerRing } from "@/lib/career";
+import type { DayView, GoalView, PillarKey } from "@/lib/queries";
 import { STEPS_FLOOR } from "@/lib/rings";
 import type {
-  PillarFactInput,
+  HealthRingView,
   PillarRingView,
   WorkoutKind,
 } from "@/lib/rings";
-
-type StripDay = {
-  date: string;
-  /** 0-100, and it only ever climbs through the day. Never null — see adherence.ts. */
-  pct: number;
-  isToday: boolean;
-  /** Hours SPENT, uncapped. null when the calendar is unreachable — see CLAUDE.md's
-   *  Productivity section; it is a quarantined exception, not a second adherence. */
-  productivity: { points: number; segments: ProductivitySegment[] } | null;
-};
-
-// `isFuture` and `title` are still returned by /api/adherence and deliberately NOT declared
-// here. The strip ends on the day being viewed, so no day on it can be future; and the days
-// ahead are no longer named from this screen. Leaving the fields in the type would invite the
-// next reader to branch on one that is always false.
-
-/**
- * The gap between the week's columns, as a PERCENTAGE of the row.
- *
- * Four separate rows have to line up over each other — the percentages, the adherence bars,
- * the productivity columns and the weekday letters. A percentage gap keeps them aligned at
- * every width by construction; a px gap only agrees with itself, which is fine, but it made
- * the earlier SVG overlay drift because that was drawn in a stretched 0-100 box. The overlay
- * is gone and the percentage stayed: it costs nothing and removes a whole class of drift.
- */
-const STRIP_GAP_PCT = 2;
-
-/**
- * The stack, bottom-up, in the fill each slab is drawn with.
- *
- * Blocked time keeps the colour it had in the calendar. Logged training takes SLAB_GYM —
- * the hue gym already wears here, free now that Grape has left the rate table. The ticked
- * things go grey, because there is no calendar colour behind a non-negotiable for a hue to
- * mean.
- */
-const slabFill = (s: ProductivitySegment): string =>
-  s.kind === "sessions"
-    ? SLAB_GYM
-    : s.kind === "time"
-      ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL)
-      : SLAB_NEUTRAL;
 
 // Desktop only: each column owns its scroll, bounded to whatever the masthead leaves.
 //
@@ -183,7 +134,6 @@ export default function Today({
   initial,
   today: serverToday,
   goals: initialGoals,
-  skills: initialSkills,
   initialView,
 }: {
   initial: DayView;
@@ -201,7 +151,6 @@ export default function Today({
    */
   today: string;
   goals: GoalView[];
-  skills: SkillView[];
 }) {
   const [data, setData] = useState<DayView>(initial);
 
@@ -239,35 +188,27 @@ export default function Today({
       window.removeEventListener("focus", check);
     };
   }, []);
-  const [strip, setStrip] = useState<StripDay[]>([]);
-  // Goals, skills and rings are OWNED here rather than left as server props. page.tsx
-  // renders once per request, so every new control (subgoal tick, +15/+30/+60, gym
-  // toggle) would otherwise mutate data the screen could not re-read without a full
-  // navigation.
+  /**
+   * THE ADHERENCE TRACKER'S EIGHT DAYS — seven past, then the real today (spec §4).
+   *
+   * Anchored to TODAY and not to the viewed day, exactly as the week strip it replaces was:
+   * a chart that travelled with the screen could only ever be walked backwards, and it would
+   * rescale against a different week at every step. Fixed, it is a ruler, and a dot on it is
+   * a way to any of those days.
+   */
+  const [tracker, setTracker] = useState<TrackerDay[]>([]);
+  // Goals and the Health ring are OWNED here rather than left as server props. page.tsx
+  // renders once per request, so every new control (subtask tick, gym log) would otherwise
+  // mutate data the screen could not re-read without a full navigation.
   const [goals, setGoals] = useState<GoalView[]>(initialGoals);
-  const [skills, setSkills] = useState<SkillView[]>(initialSkills);
-  const [rings, setRings] = useState<PillarRingView[] | null>(null);
-  /** The raw fortnight printed under each pillar's name. Separate from `rings` because it
-   *  is a different kind of statement — see pillarCaption. */
-  const [facts, setFacts] = useState<PillarFactInput | null>(null);
+  /** Health's fortnight, from /api/rings. null until it lands — a ghost, not a zero. */
+  const [health, setHealth] = useState<HealthRingView | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
-  /** The fortnight's ADHERED graphite events — the Social ring's inner band and its
-   *  drill-down. null until /api/rings lands or when the calendar could not be reached. */
-  const [socialEvents, setSocialEvents] = useState<
-    { date: string; title: string }[] | null
-  >(null);
-  /** The adhered ONE-OFF social events — the Social ring's mid band. Same graphite as
-   *  the standing ones; what separates them is that these do not repeat. */
-  const [oneOffEvents, setOneOffEvents] = useState<
-    { date: string; title: string }[] | null
-  >(null);
-  /** Per-skill sessions in the window — the Portfolio ring's segments. */
-  const [skills14, setSkills14] = useState<SkillSlice[] | null>(null);
-  // Phone only: which of the three panes is showing. Opens on the day's work, and a
+  // Phone only: which of the two panes is showing. Opens on the day's work, and a
   // reload returns there rather than wherever you last wandered.
   const [tab, setTab] = useState<PhoneTab>("today");
-  // Naming TODAY. The days ahead used to be nameable inline on the strip; the strip now
-  // ends on today and holds none of them, so only today's intention is set from this screen.
+  // Naming TODAY, and only today. The days ahead used to be nameable inline on the week
+  // strip; nothing on this screen looks forward any more, so a day is named from the day.
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   // Raised by the Journal row in the checklist — the journal is written, not ticked.
@@ -293,10 +234,6 @@ export default function Today({
   const [weightOpen, setWeightOpen] = useState(false);
   /** The step trend dialog, raised from the Steps row's count. */
   const [stepsOpen, setStepsOpen] = useState(false);
-  /** Which day's productivity workings are open, raised from a column of the week strip.
-   *  Any day on the strip, including the one on screen — a score explains itself whether
-   *  or not you are standing on it. */
-  const [scoreDay, setScoreDay] = useState<string | null>(null);
   /**
    * Set the moment the refresh button is tapped, cleared by the read that answers it.
    *
@@ -393,7 +330,11 @@ export default function Today({
    *                      while the timeline layer fades in behind it
    *   falling → open     TL_FALL_MS later the row leaves the layout entirely (display:
    *                      none), so 110vh of transformed window stops extending the page's
-   *                      scroll height underneath the timeline
+   *                      scroll height underneath the timeline. That also discards the
+   *                      scrollTop of every window, which used to matter: the calendar
+   *                      column came back parked at its top instead of centred on today and
+   *                      had to be re-keyed on landing. The blocks list that replaced it
+   *                      opens at its top anyway, so nothing is re-keyed now.
    *   open → prep        the return: the row is DISPLAYED again, still translated — one
    *                      committed frame, because a transition can only travel from a
    *                      state the browser has actually painted. A timeout, not a rAF:
@@ -411,13 +352,6 @@ export default function Today({
   const [tl, setTl] = useState<"closed" | "falling" | "open" | "prep" | "rising">(
     initialView === "timeline" ? "open" : "closed",
   );
-  /**
-   * Bumped as the gesture lands closed, and it is the CALENDAR COLUMN's key. display:none
-   * discards a scroll container's scrollTop, so the column came back from the timeline
-   * parked at its top instead of centred on today; a remount re-runs its fetch-and-centre,
-   * which is the column's own opening move rather than a second centring rule.
-   */
-  const [calEpoch, setCalEpoch] = useState(0);
   useEffect(() => {
     if (tl === "falling") {
       const t = setTimeout(() => setTl("open"), TL_FALL_MS);
@@ -428,29 +362,39 @@ export default function Today({
       return () => clearTimeout(t);
     }
     if (tl === "rising") {
-      const t = setTimeout(() => {
-        setTl("closed");
-        setCalEpoch((n) => n + 1);
-      }, TL_RISE_MS);
+      const t = setTimeout(() => setTl("closed"), TL_RISE_MS);
       return () => clearTimeout(t);
     }
   }, [tl]);
 
+  /* BOTH SIDES GUARD ON THE MACHINE, and the URL is inside the guard.
+   *
+   * The state transition was already conditional and the replaceState beside it was not,
+   * which is a disagreement waiting for a second press: the machine sits in `falling` and
+   * in `rising` for 640ms each, and in BOTH of those states the control that triggered it
+   * is still on screen and still clickable (the panel row is only `hidden` at `open`, and
+   * the RETURN bar is mounted for every state but `closed`). Pressing TIMELINE, then RETURN,
+   * then TIMELINE again inside that window left nothing opening and `?view=timeline` in the
+   * address bar — so the next reload landed on the timeline the owner had just left. The
+   * mirror press left the timeline open with the URL reading `/`. `tl` is read rather than
+   * updated functionally because the guard has to decide the WRITE as well as the state. */
   const openTimeline = useCallback(() => {
-    setTl((s) => (s === "closed" ? "falling" : s));
+    if (tl !== "closed") return;
+    setTl("falling");
     const qs = new URLSearchParams();
     if (viewing.current !== today) qs.set("date", viewing.current);
     qs.set("view", "timeline");
     window.history.replaceState(null, "", `/?${qs}`);
-  }, [today]);
+  }, [tl, today]);
   const closeTimeline = useCallback(() => {
-    setTl((s) => (s === "open" ? "prep" : s));
+    if (tl !== "open") return;
+    setTl("prep");
     window.history.replaceState(
       null,
       "",
       viewing.current !== today ? `/?date=${viewing.current}` : "/",
     );
-  }, [today]);
+  }, [tl, today]);
 
   /** Escape returns to the dashboard — the timeline is a place you opened. */
   useEffect(() => {
@@ -478,39 +422,35 @@ export default function Today({
   viewing.current = data.date;
 
   /**
-   * ENDS ON TODAY — always, whatever day the screen is showing. There is no future half:
-   * the calendar column says what tomorrow holds, and a strip that reserved three columns
-   * for it spent a third of its width on days that had not happened. A consequence worth
-   * knowing — no day on this strip is ever `isFuture`, which is why nothing below branches
-   * on it.
-   *
-   * Anchored to TODAY and not to the viewed day, which matters now that those can differ.
-   * A strip that travelled with the screen could only ever be walked backwards — the way
-   * forward would be off its right-hand edge — and it would rescale its columns against a
-   * different week's high at every step. Fixed, it is a ruler: the last seven days, one of
-   * them underlined as the one you are on, and any of them a tap away.
+   * EIGHT DAYS ENDING ON TODAY — seven past days and the live one, which is the tracker's
+   * whole shape (spec §4). There is no future half: nothing has happened on a day that has
+   * not happened, and a chart reserving columns for it spends its width on nothing.
    */
-  const loadStrip = useCallback(() => {
-    fetch(`/api/adherence?days=7&to=${today}`)
+  const loadTracker = useCallback(() => {
+    fetch(`/api/adherence?days=8&to=${today}`)
       .then((r) => r.json())
-      .then((s) => !s.error && setStrip(s.days ?? []))
+      .then((s) => !s.error && setTracker(s.days ?? []))
       .catch(() => {});
   }, [today]);
 
+  /**
+   * HEALTH ONLY. The route still answers with both pillars, and the `portfolio` entry is
+   * deliberately ignored here — see `career` below, which is rebuilt on the client from the
+   * goals this screen already owns so that ticking a subtask moves the ring without a round
+   * trip. Health has no such local source: its fortnight is sessions, steps and calories.
+   */
   const loadRings = useCallback(() => {
     const asked = data.date;
     fetch(`/api/rings?date=${asked}`)
       .then((r) => r.json())
-      .then((s) => {
+      .then((s: { error?: unknown; pillars?: PillarRingView[]; workouts?: Workout[] }) => {
         if (s.error || viewing.current !== asked) return;
-        setRings(s.pillars ?? []);
-        setFacts(s.facts ?? null);
+        setHealth(
+          (s.pillars ?? []).find(
+            (p): p is HealthRingView => p.key === "physical",
+          ) ?? null,
+        );
         setWorkouts(s.workouts ?? []);
-        // undefined on a calendar failure, and passed through as such — the Events
-        // drill-down says "unavailable" rather than showing an empty fortnight.
-        setSocialEvents(s.socialEventList ?? null);
-        setOneOffEvents(s.oneOffEventList ?? null);
-        setSkills14(s.skills14 ?? null);
       })
       .catch(() => {});
   }, [data.date]);
@@ -520,9 +460,9 @@ export default function Today({
     // Applied only if it is still the day on screen. `d.date` is the server's own answer,
     // so this compares what arrived against what is being asked — never two guesses.
     if (!d.error) setData((cur) => (d.date === cur.date ? d : cur));
-    loadStrip();
+    loadTracker();
     loadRings();
-  }, [data.date, loadStrip, loadRings]);
+  }, [data.date, loadTracker, loadRings]);
 
   /**
    * GOING BACK A DAY — the whole of the backdating feature, in one function.
@@ -538,28 +478,18 @@ export default function Today({
    * and a tick made in that window is a tick you made against the wrong list. So the whole
    * day arrives at once and the control you pressed carries the wait.
    *
-   * NEVER PAST TODAY. There is nothing to log about a day that has not happened, and the
-   * calendar column already says what tomorrow holds.
+   * NEVER PAST TODAY. There is nothing to log about a day that has not happened.
    */
   const [moving, setMoving] = useState<string | null>(null);
   const goToDay = useCallback(
     async (iso: string) => {
       if (iso === data.date || iso > today || moving) return;
       setMoving(iso);
-      // Skills travel with the day: their 14-day figures are anchored to the date being
-      // VIEWED (see listSkills), so a screen on last Tuesday must read the fortnight that
-      // ended then. Fetched alongside rather than after, so the two land together.
-      const [d, s] = await Promise.all([
-        fetch(`/api/today?date=${iso}`)
-          .then((r) => r.json())
-          .catch(() => ({ error: true })),
-        fetch(`/api/skills?date=${iso}`)
-          .then((r) => r.json())
-          .catch(() => ({ error: true })),
-      ]);
+      const d = await fetch(`/api/today?date=${iso}`)
+        .then((r) => r.json())
+        .catch(() => ({ error: true }));
       if (!d.error) {
         setData(d);
-        if (!s.error) setSkills(s.skills ?? []);
         // The address bar follows, so a reload stays on the day being read and the
         // journal's "open that day" link survives being bookmarked. replaceState rather
         // than push: back should leave this screen, not walk one day at a time through
@@ -578,7 +508,7 @@ export default function Today({
   /** How far back the screen is, and the fact the standing bar prints. 0 is today. */
   const back = daysBetween(data.date, today);
 
-  useEffect(loadStrip, [loadStrip]);
+  useEffect(loadTracker, [loadTracker]);
   useEffect(loadRings, [loadRings]);
 
   /**
@@ -599,7 +529,7 @@ export default function Today({
    * and both go through the same throttle, so the pair that fires on a single return is
    * one read.
    *
-   * Nothing here touches adherence, the strip or the rings. A step count feeds the Physical
+   * Nothing here touches adherence, the tracker or the rings. A step count feeds the Health
    * ring's own fortnight, which is /api/rings' business on its own schedule — it is not
    * something a glance at the screen should recompute.
    */
@@ -719,16 +649,20 @@ export default function Today({
     if (!r.error && r.goals) setGoals(r.goals);
   }
 
-  async function mutateSkills(url: string, init: RequestInit) {
-    const r = await fetch(url, {
-      headers: { "content-type": "application/json" },
-      ...init,
-    })
-      .then((x) => x.json())
-      .catch(() => ({ error: true }));
-    if (!r.error && r.skills) setSkills(r.skills);
-    loadRings(); // a skill session feeds the Portfolio ring
-  }
+  /**
+   * TICK A GOAL DONE, from two places: the Career drill-down's `mark done` and a goal's
+   * sticky note on the timeline. Status `done` stamps `completed_at` server-side and status
+   * `active` clears it — the engine owns that pair, and this is only the button.
+   *
+   * A goal marked done leaves the Career ring, because only ACTIVE goals with a deadline take
+   * an arc (spec §1). That is intended: the ring is what is in flight, not what has been
+   * achieved. The timeline's note stays where it was put, with its tick and its date.
+   */
+  const onGoalDone = (id: number, done: boolean) =>
+    mutateGoals(`/api/goals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: done ? "done" : "active" }),
+    });
 
   /** Tick or untick a one-off task. The tick belongs to the day on screen. */
   async function toggleTask(id: number, done: boolean) {
@@ -789,74 +723,102 @@ export default function Today({
   const a = data.adherence;
 
   /**
-   * The week's one piece of arithmetic: how tall the tallest column is.
+   * CAREER IS REBUILT HERE, on the client, and that is load-bearing rather than an
+   * optimisation. Ticking a subtask must move the Career ring immediately — `mutateGoals`
+   * returns the whole refreshed collection, so the ring follows the answer that same beat,
+   * with no second round trip to /api/rings and no window where the list and the donut
+   * disagree.
    *
-   * Productivity is UNCAPPED, so there is no ceiling to scale against and it is scaled to
-   * the week's own high — the caption says so out loud, since a shape whose scale is
-   * unstated is a shape that lies.
-   *
-   * Adherence needs nothing here. It is a percentage, so its scale is fixed 0..100 and its
-   * bar is just the number drawn. That asymmetry is the reason the two are no longer sharing
-   * a box: one of them has an axis and the other cannot have one.
+   * It cannot drift from the server's own answer either: `buildCareerRing` is the exact
+   * function /api/rings calls, given the same goals and the same day. The `portfolio` entry
+   * that route returns is simply ignored on this screen.
    */
-  /** 1 keeps the maths safe before the fetch lands, when there are no bars to draw. */
-  const peak = Math.max(1, ...strip.map((d) => d.productivity?.points ?? 0));
+  const career = useMemo(
+    () => buildCareerRing(goals, data.date),
+    [goals, data.date],
+  );
 
-  /**
-   * A key for the stack, built from what the visible week actually contains.
-   *
-   * Derived rather than declared, so it can never list a colour that isn't on screen — a
-   * legend naming four things when three are drawn is worse than none. It is also the only
-   * place the grey slabs are named at all; a hue borrowed from the calendar explains
-   * itself, and a grey one cannot.
-   *
-   * Ordered by the registry rather than by first appearance, so it does not reshuffle
-   * itself when the week's composition changes.
-   */
-  const stackKey = (() => {
-    // Keyed by the slab's NAME, not by its fill. A category may own more than one calendar
-    // swatch — Work Part Time owns two — and the score merges those into one slab, so a
-    // legend keyed by colour would have printed the same name twice with two different
-    // marks beside it. The name is the unit here, exactly as it is in the bar.
-    const seen = new Map<string, { fill: string; rank: number }>();
-    for (const d of strip)
-      for (const s of d.productivity?.segments ?? []) {
-        if (seen.has(s.label)) continue;
-        const i = CALENDAR_RATES.findIndex((c) => c.id === s.colorId);
-        seen.set(s.label, {
-          fill: slabFill(s),
-          // Calendar categories in registry order, then the two things that were not
-          // hours — gym before the ticks, matching how they stack.
-          rank:
-            s.kind === "time"
-              ? (i < 0 ? CALENDAR_RATES.length : i)
-              : CALENDAR_RATES.length + (s.kind === "sessions" ? 1 : 2),
-        });
-      }
-    return [...seen]
-      .map(([label, v]) => ({ label, ...v }))
-      .sort((x, y) => x.rank - y.rank);
-  })();
   // Straight off DayView.pillars — no extra request for something already loaded.
   const colors = Object.fromEntries(
     data.pillars.map((p) => [p.key, p.color]),
   ) as Partial<Record<PillarKey, string | null>>;
 
-  /** The tick / fill for a non-negotiable, in its pillar's hue. Unassigned habits stay
-   *  amber. Extracted to a local so the two habit shapes below can't drift apart. */
+  /**
+   * The tick / fill for a non-negotiable, in its pillar's hue.
+   *
+   * A habit with NO pillar is the warm neutral now, not the amber accent (spec §5): Journal,
+   * Read and Tidy room are things with no pillar, and dressing them in the one accent made
+   * three unfiled rows the loudest marks on the checklist. The accent stays where it means
+   * something — the hero ring, and the ONE-OFF non-negotiables below, which belong to the day
+   * rather than to any pillar. That branch is separate and deliberately unchanged.
+   */
   const habitTone = (pillar: PillarKey | null | undefined) =>
-    pillar ? toneColor(pillar, colors[pillar]) : "var(--color-accent)";
+    pillar ? toneColor(pillar, colors[pillar]) : "var(--color-neutral)";
+
+  /**
+   * THE DAY'S BLOCKS, and the way onto the timeline.
+   *
+   * Rendered TWICE — once in the blocks window on desktop and once inside Today's own pane
+   * below `lg`, where the spec puts the list above the checklist. Two BlockList instances
+   * mount and only one is ever visible; both read the same `data.blocks` and call the same
+   * `refresh`, so they cannot disagree about a mark. A single instance moved between two
+   * parents would remount on every breakpoint change and lose whatever row was open.
+   */
+  const blocksPane = (
+    <section>
+      <div className="section-head">
+        <h2 className="text-small font-semibold">
+          {back === 0 ? "Today's blocks" : `Blocks on ${shortDay(data.date)}`}
+        </h2>
+        {/* The timeline's entry point MOVES here from the old calendar head — this window
+            is what replaced that one. A word, not a chip, tracked out: it is a PLACE you go
+            rather than an action you take, and the chips on this screen are all marks. */}
+        <button
+          type="button"
+          onClick={openTimeline}
+          className="text-micro font-semibold tracking-[0.18em] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
+        >
+          TIMELINE
+        </button>
+      </div>
+      <div className="mt-4">
+        {data.calendarConnected ? (
+          <BlockList
+            date={data.date}
+            isToday={back === 0}
+            blocks={data.blocks}
+            onChanged={refresh}
+          />
+        ) : (
+          <p className="max-w-[42ch] text-body text-[var(--color-muted)]">
+            Google Calendar isn&apos;t connected.{" "}
+            <a
+              href="/api/google/connect"
+              className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
+            >
+              Connect it
+            </a>
+            .
+          </p>
+        )}
+      </div>
+    </section>
+  );
 
   const middle = (
-    <div className="flex flex-col gap-10">
+    // gap-8 on a past day, gap-10 on a live one. The catching-up bar is ~85px of furniture
+    // this column does not otherwise carry, and the window's height budget has 77px of slack
+    // — so the two gaps between the three blocks give back the 8px that would otherwise put
+    // the checklist's last row past the fold. Nothing scrolls at rest, on either kind of day.
+    <div className={`flex flex-col ${back > 0 ? "gap-8" : "gap-10"}`}>
       {/* THE DAY. Date first and small — orienting meta, not a headline — then what you
           INTEND the day to be, in your own words. The intention is deliberately connected
           to nothing: it feeds no rate, no ring and no score, because the moment naming a
           day becomes something you can fail at, it stops being a plan. */}
-      {/* CARDS now, not bare type on the window — the owner asked this screen for more
-          structure and weight, and the record's card is the house word for it: the day's
-          name in one card, the next thing that will happen in its own beside it. Same
-          smaller-pane-of-the-same-glass the chart cards established. */}
+      {/* A CARD, not bare type on the window — the owner asked this screen for more
+          structure and weight, and the record's card is the house word for it. Same
+          smaller-pane-of-the-same-glass the chart cards established. It takes the window's
+          full width now that nothing stands beside it. */}
       {/* CATCHING UP.
 
           The one piece of furniture the backdating feature adds, and it stands only while
@@ -865,9 +827,9 @@ export default function Today({
           exactly as it does on a live day, which is the whole point and also the whole
           risk. A tick is cheap to make and expensive to make against the wrong date.
 
-          --color-recorded is the token the calendar column already gives a past day, so a
-          screen in the past wears the colour the app has always used to mean "recorded".
-          No warning hue and no alarm: catching up is the feature working, not a mistake. */}
+          --color-recorded is the token the calendar column gave a past day, so a screen in
+          the past wears the colour the app has always used to mean "recorded". No warning
+          hue and no alarm: catching up is the feature working, not a mistake. */}
       {back > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-recorded)] px-4 py-2.5">
           <p className="min-w-0 text-small leading-snug">
@@ -887,104 +849,109 @@ export default function Today({
         </div>
       )}
 
-      <header className="flex flex-wrap items-stretch gap-4">
-        <div className="record-card min-w-0 flex-1">
-          {/* THE DATE, and the way to another one. The arrows sit at the end of the line
-              they move rather than flanking it: a date with a chevron on each side is a
-              stepper, and this line is a heading that happens to be steppable — the day
-              you open on is today, and nothing should suggest a dial to be spun. */}
-          {/* items-center, not items-baseline: the arrows are 36px boxes now and a baseline
-              would hang them off the date's own. -my-2 gives the buttons their height back
-              out of the card's padding, so a generous target costs the header nothing. */}
-          <div className="-my-2 flex items-center justify-between gap-3">
-            <p className="min-w-0 truncate text-micro text-[var(--color-muted)]">
-              {prettyDate(data.date)}
-            </p>
-            <div className="-mr-2 flex shrink-0 items-center">
-              {/* 2.25rem square each, and sized for a thumb rather than for the glyph.
-                  These are the always-visible way into the whole feature on a phone, and a
-                  chevron's own advance width is about 5px — a target that small, with its
-                  twin 12px away, is one where the commonest gesture in the feature lands on
-                  the wrong arrow and moves the screen the wrong way. The MARK stays small;
-                  only the box around it is generous. */}
-              <button
-                onClick={() => goToDay(addDays(data.date, -1))}
-                disabled={moving != null}
-                aria-label="The day before"
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-small leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] disabled:opacity-40"
-              >
-                ‹
-              </button>
-              <button
-                onClick={() => goToDay(addDays(data.date, 1))}
-                // Never past today. There is nothing to log about a day that has not
-                // happened, and the calendar column is what says what tomorrow holds.
-                disabled={moving != null || back === 0}
-                aria-label="The day after"
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-small leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] disabled:opacity-40"
-              >
-                ›
-              </button>
-            </div>
-          </div>
-          {editingTitle ? (
-            <input
-              autoFocus
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={() => saveDayTitle(data.date, titleDraft)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                if (e.key === "Escape") setEditingTitle(false);
-              }}
-              maxLength={80}
-              placeholder={back === 0 ? "What is today for?" : "What was that day for?"}
-              aria-label={back === 0 ? "What is today for?" : "What was that day for?"}
-              className="mt-1 w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-heading outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
-            />
-          ) : (
+      {/* The "next up" card stood beside this one and went with the calendar window (spec
+          §4). What is next is on the blocks list, one window to the left — the same glance,
+          and also where you mark it. */}
+      <header className="record-card">
+        {/* THE DATE, and the way to another one. The arrows sit at the end of the line
+            they move rather than flanking it: a date with a chevron on each side is a
+            stepper, and this line is a heading that happens to be steppable — the day
+            you open on is today, and nothing should suggest a dial to be spun. */}
+        {/* items-center, not items-baseline: the arrows are 36px boxes now and a baseline
+            would hang them off the date's own. -my-2 gives the buttons their height back
+            out of the card's padding, so a generous target costs the header nothing. */}
+        <div className="-my-2 flex items-center justify-between gap-3">
+          <p className="min-w-0 truncate text-micro text-[var(--color-muted)]">
+            {prettyDate(data.date)}
+          </p>
+          <div className="-mr-2 flex shrink-0 items-center">
+            {/* 2.25rem square each, and sized for a thumb rather than for the glyph.
+                These are the always-visible way into the whole feature on a phone, and a
+                chevron's own advance width is about 5px — a target that small, with its
+                twin 12px away, is one where the commonest gesture in the feature lands on
+                the wrong arrow and moves the screen the wrong way. The MARK stays small;
+                only the box around it is generous. */}
             <button
-              onClick={() => {
-                setTitleDraft(data.title ?? "");
-                setEditingTitle(true);
-              }}
-              className="mt-1 w-full min-w-0 truncate text-left font-serif text-heading transition-colors hover:text-[var(--color-accent)]"
+              onClick={() => goToDay(addDays(data.date, -1))}
+              disabled={moving != null}
+              aria-label="The day before"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-small leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] disabled:opacity-40"
             >
-              {data.title ?? (
-                <span className="text-[var(--color-muted)]">
-                  {/* An intention is written in advance, so on a past day the question is
-                      in the past tense — asking what a Tuesday three weeks gone "is for"
-                      would be the screen not knowing which day it is on. */}
-                  {back === 0 ? "What is today for?" : "What was that day for?"}
-                </span>
-              )}
+              ‹
             </button>
-          )}
+            <button
+              onClick={() => goToDay(addDays(data.date, 1))}
+              // Never past today. There is nothing to log about a day that has not
+              // happened.
+              disabled={moving != null || back === 0}
+              aria-label="The day after"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-small leading-none text-[var(--color-muted)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] disabled:opacity-40"
+            >
+              ›
+            </button>
+          </div>
         </div>
-
-        {/* NextUp wears its own card and returns null when there is nothing next, so no
-            empty frame ever stands here at 11pm — or on any day but today. */}
-        <NextUp blocks={data.blocks} date={data.date} today={today} />
+        {editingTitle ? (
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => saveDayTitle(data.date, titleDraft)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") setEditingTitle(false);
+            }}
+            maxLength={80}
+            placeholder={back === 0 ? "What is today for?" : "What was that day for?"}
+            aria-label={back === 0 ? "What is today for?" : "What was that day for?"}
+            className="mt-1 w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-heading outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+          />
+        ) : (
+          <button
+            onClick={() => {
+              setTitleDraft(data.title ?? "");
+              setEditingTitle(true);
+            }}
+            className="mt-1 w-full min-w-0 truncate text-left font-serif text-heading transition-colors hover:text-[var(--color-accent)]"
+          >
+            {data.title ?? (
+              <span className="text-[var(--color-muted)]">
+                {/* An intention is written in advance, so on a past day the question is
+                    in the past tense — asking what a Tuesday three weeks gone "is for"
+                    would be the screen not knowing which day it is on. */}
+                {back === 0 ? "What is today for?" : "What was that day for?"}
+              </span>
+            )}
+          </button>
+        )}
       </header>
 
-      {/* THE HERO. The ring keeps the left side to itself and stays the largest thing on
-          the screen; the checklist sits beside it deliberately quieter, because the number
-          is the answer and the list is the work. */}
-      <section className="flex flex-wrap items-start gap-x-9 gap-y-7">
-        <div className="shrink-0">
-          {/* The figure CLIMBS from zero: 70 parts blocked hours, 30 parts non-negotiables.
+      {/* THE HERO BAND. The ring is CENTRED now and 240px — the largest thing on the screen
+          by a wide margin — with the day's tasks floating on rails either side of it (spec
+          §4). It used to sit on the left with the checklist beside it, which was the right
+          answer when this column was a third of a narrower page; with the window at ~717px
+          the checklist has room to run the full width underneath, and the ring gets the
+          middle of the band it was always the subject of. FloatingTasks owns the rails and
+          draws nothing at all when the day holds no tasks. */}
+      <FloatingTasks tasks={data.tasks} onToggle={toggleTask}>
+        {/* items-center rather than a width: the caption is a sentence whose length changes
+            through the day, and pinning it to the ring's 240px would wrap "10 of 12 ticked"
+            onto a second line on exactly the days that have the most to say. */}
+        <div className="flex flex-col items-center">
+          {/* The figure CLIMBS from zero: 50 parts blocked hours, 50 parts non-negotiables.
               It is always a number now — a morning that has earned nothing reads 0, which is
               a true statement, where the old null-and-dash meant "nothing has come due" and
               had to be explained every time. Nothing here ever subtracts. */}
-          <Ring fill={a.pct / 100} size={176} stroke={8} tone="accent" bloom>
+          <Ring fill={a.pct / 100} size={240} stroke={10} tone="accent" bloom>
             <div className="flex items-end">
               <span className="stat-hero text-hero">{a.pct}</span>
               <span className="stat-hero pb-2 text-body text-[var(--color-muted)]">%</span>
             </div>
           </Ring>
-          <p className="mt-3 max-w-[11rem] text-micro text-[var(--color-muted)]">
-            {/* What the figure is MADE of, so the number is never a black box. Hours to one
-                decimal — "3.5 of 8h" is the shape of a day; "3.4999" is noise. */}
+          {/* What the figure is MADE of, so the number is never a black box. Hours to one
+              decimal — "3.5 of 8h" is the shape of a day; "3.4999" is noise. ONE line,
+              centred under a centred ring. */}
+          <p className="mt-3 text-center text-micro text-[var(--color-muted)]">
             {round1(a.workedHours)} of {round1(a.totalHours)}h blocked
             {a.habitsScheduled > 0 && (
               <>
@@ -992,659 +959,343 @@ export default function Today({
                 {a.habitsDone} of {a.habitsScheduled} ticked
               </>
             )}
-            {a.unmarked > 0 && (
-              <span className="mt-1 block text-[var(--color-ink)]">
-                {a.unmarked} to mark
-              </span>
-            )}
           </p>
-        </div>
-
-        {/* THE CHECKLIST, in TWO COLUMNS.
-
-            One column ran the block well past the bottom of the 176px ring and left the row
-            looking like a ring with a list falling off it. Two columns halve the height and
-            put the whole day's list inside the ring's own bounds, which is what makes the
-            row read as one object rather than two stacked ones.
-
-            Calories and Steps live IN here, as rows of the list. The owner's ruling — they
-            are things you do each day, and a second block underneath for two numbers was a
-            second block to look at. The weight and calorie history that used to hang off
-            these rows has moved to /stats; nothing here is a link any more.
-
-            auto-fit rather than a breakpoint: the column this sits in is 178px wide beside
-            the ring on a wide screen and the full 390px below it when it wraps, and neither
-            of those is a viewport width. minmax lets the grid answer for itself — two
-            columns when there is room for two, one when there is not. */}
-        <div className="min-w-[15rem] flex-1">
-          {/* The way into the editor — and into "Tomorrow, specifically". This used to
-              exist only in the empty state, which meant that the moment you had habits
-              there was no path to the screen that edits them. Quiet, right-aligned, the
-              same word Goals and Skills use. */}
-          <div className="mb-1 flex justify-end">
-            <Link
-              href="/habits"
-              className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-            >
-              edit · tomorrow
-            </Link>
-          </div>
-          {/* 9rem and a 20px gutter, which is what makes two columns land at 308px — the
-              width this block actually gets beside the ring. At 10.5rem it needed 364px and
-              silently stayed one column, which is the failure mode of auto-fit: it does not
-              warn, it just gives you back what you already had. Below ~308px it drops to one
-              column on its own, which is the right answer on a narrow phone. */}
-          <ul
-            className="grid gap-x-5"
-            style={{
-              gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))",
-            }}
-          >
-            {data.habits.map((h) =>
-              h.input === "number" ? (
-                // A NUMERIC non-negotiable — weight. Typing the number IS the tick: the
-                // entry exists or it does not, so adherence needs no special case, and
-                // clearing the field clears the day exactly like unticking.
-                // KEYED BY DAY AS WELL AS BY HABIT, and this one is load-bearing rather
-                // than tidy. The number field below is UNCONTROLLED — `defaultValue`, so a
-                // background refresh cannot yank a figure out from under a cursor — and
-                // React only ever writes `defaultValue` to the value ATTRIBUTE, which the
-                // browser ignores once the field has been typed into. With a key that is
-                // the same on every day, stepping from today to yesterday left this
-                // morning's 82.4 sitting in a row whose tick and label had already become
-                // yesterday's; blurring it then POSTed 82.4 against yesterday and
-                // overwrote a real reading. A key that carries the date makes the day
-                // change a REMOUNT, which is the one thing that reliably re-seeds an
-                // uncontrolled field.
-                <li key={`${data.date}-${h.id}`} className={CHECK_ROW}>
-                  <div className="flex w-full items-center gap-2.5 py-2.5">
-                    <HabitBox done={h.done} tone={habitTone(h.pillar)} />
-                    {/* WEIGHT's name is the way into its trend — the same pattern the
-                        Calories row set: the field logs, the row opens the record. Other
-                        number habits keep the plain label; a control that opens nothing
-                        must not dress as one. */}
-                    {h.system_key === "weight" ? (
-                      <button
-                        onClick={() => setWeightOpen(true)}
-                        aria-haspopup="dialog"
-                        className={`min-w-0 flex-1 text-left font-serif text-small leading-snug underline-offset-4 transition-colors hover:underline ${h.done ? "text-[var(--color-muted)]" : ""}`}
-                      >
-                        {h.name}
-                      </button>
-                    ) : (
-                      <label
-                        htmlFor={`h${h.id}`}
-                        className={`min-w-0 flex-1 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
-                      >
-                        {h.name}
-                      </label>
-                    )}
-                    {/* The run STACKS above the field, the Steps row's arrangement — not
-                        inline beside the label. This row carries a fixed-width control on
-                        its right, and in a ~160px checklist column an inline flame left
-                        the label's min-w-0 box narrower than its own word: a single word
-                        cannot wrap, so "Weight" overflowed its span and the flame painted
-                        over the glyphs. Only on a live day: the days you step back to are
-                        precisely the unmarked ones. */}
-                    <span className="flex shrink-0 flex-col items-end gap-1">
-                      {back === 0 && <StreakFlame count={h.streak} />}
-                      {/* A value written on a line, not typed into a chip. The underline
-                          is the field; it darkens on focus rather than growing a box. */}
-                      <span className="flex items-baseline gap-1">
-                        <input
-                          id={`h${h.id}`}
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          inputMode="decimal"
-                          placeholder="—"
-                          defaultValue={h.value ?? ""}
-                          onBlur={(e) => setHabitNumber(h.id, e.target.value)}
-                          onKeyDown={(e) =>
-                            e.key === "Enter" &&
-                            (e.target as HTMLInputElement).blur()
-                          }
-                          className={NUM_FIELD}
-                        />
-                        {h.unit && (
-                          <span className="text-micro text-[var(--color-muted)]">
-                            {h.unit}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                  </div>
-                </li>
-              ) : (
-                // Dated for the same reason as the numeric row above — these hold no
-                // uncontrolled state, but one list must not be keyed two ways.
-                <li
-                  key={`${data.date}-${h.id}`}
-                  className={`${CHECK_ROW} flex items-center gap-2`}
-                >
-                  <button
-                    onClick={() =>
-                      // Two rows are not ticked, they are WRITTEN. The journal's opens the
-                      // page picker — a page existing is what ticks it. A document habit
-                      // (outreach, reading) opens its logger: ONE control, the owner's
-                      // ruling, replacing the tick-plus-side-button pair — saving is what
-                      // ticks, and unticking lives inside the dialog it opens.
-                      h.system_key === "journal"
-                        ? setJournalPrompt(true)
-                        : h.system_key != null && DOC_HABITS[h.system_key]
-                          ? setNoteHabit(h.id)
-                          : toggleHabit(h.id, !h.done)
-                    }
-                    aria-pressed={
-                      h.system_key === "journal" ||
-                      (h.system_key != null && DOC_HABITS[h.system_key])
-                        ? undefined
-                        : h.done
-                    }
-                    aria-haspopup={
-                      h.system_key != null && DOC_HABITS[h.system_key]
-                        ? "dialog"
-                        : undefined
-                    }
-                    className="-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
-                  >
-                    <HabitBox done={h.done} tone={habitTone(h.pillar)} />
-                    {/* break-words: a name is usually several words and wraps on its own,
-                        but a single word wider than the label's min-w-0 box would OVERFLOW
-                        it and collide with the flame — the live-site bug the weight and
-                        calorie rows hit. Wrapping mid-word is the honest fallback. */}
-                    <span
-                      className={`min-w-0 flex-1 break-words font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
-                    >
-                      {h.name}
-                    </span>
-                    {/* The run, at the row's far edge. A fact, not a mechanic — see
-                        StreakFlame — and only on a live day, for the app-wide streak's own
-                        reason: the days you step back to are the unmarked ones. */}
-                    {back === 0 && <StreakFlame count={h.streak} />}
-                  </button>
-                </li>
-              ),
-            )}
-
-            {/* ONE-OFF NON-NEGOTIABLES — "Tomorrow, specifically", arrived. Items of this
-                day's checklist and its tally exactly like the standing ones; what differs
-                is only that they exist on this one date, which the quiet suffix says.
-                Accent, not a pillar hue — a one-off belongs to the day, not to a pillar. */}
-            {data.oneOffs.map((o) => (
-              <li
-                key={`${data.date}-o${o.id}`}
-                className={`${CHECK_ROW} flex items-center gap-2`}
-              >
-                <button
-                  onClick={() => toggleOneOff(o.id, !o.done)}
-                  aria-pressed={o.done}
-                  className="-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
-                >
-                  <HabitBox done={o.done} tone="var(--color-accent)" />
-                  <span
-                    className={`min-w-0 flex-1 font-serif text-small leading-snug ${o.done ? "text-[var(--color-muted)]" : ""}`}
-                  >
-                    {o.title}
-                  </span>
-                  <span className="shrink-0 text-micro text-[var(--color-muted)]">
-                    one-off
-                  </span>
-                </button>
-              </li>
-            ))}
-
-            {/* CALORIES. A row of the checklist like any other, with the running total
-                where a tick would be — because a total IS the state here, and a box you
-                tick would be a second thing to remember once the number is already in. */}
-            <li className={CHECK_ROW}>
-              <CalorieInput
-                date={data.date}
-                today={today}
-                calories={data.calories}
-                entries={data.calorieEntries}
-                // The LOG streak — days the total reached 2,000, deliberately below the
-                // 2,500 floor: it counts logging the day, not eating enough. Hidden off
-                // today with every other streak.
-                streak={back === 0 ? data.calorieStreak : 0}
-                onChanged={refresh}
-              />
-            </li>
-
-            {/* STEPS, live from the phone. A FLOOR row like Calories: the box is dashed
-                until 7,000 is reached — "not yet", never "failed" — and the count is the
-                phone's own last push, read-only, because the phone is the instrument and
-                a hand-typed step count would be a number nobody measured. "—" until the
-                Shortcut has pushed today; never a zero the phone didn't say. */}
-            <li className={CHECK_ROW}>
-              <div className="flex items-center gap-2.5 py-2.5">
-                <HabitBox
-                  done={(data.steps ?? 0) >= STEPS_FLOOR}
-                  pending
-                  tone="var(--color-physical)"
-                />
-                <span
-                  className={`min-w-0 flex-1 font-serif text-small leading-snug ${(data.steps ?? 0) >= STEPS_FLOOR ? "text-[var(--color-muted)]" : ""}`}
-                >
-                  Steps
-                </span>
-                {/* THE COUNT, and its age beneath it — STACKED, not wrapped.
-                    These columns are about 150px wide, which two pills side by side do not
-                    fit into, and a flex-wrap would have dropped the age to a second line at
-                    some widths and not others. Stacking it deliberately also says the right
-                    thing: the number is the reading and the age is a fact ABOUT the reading,
-                    which is a hierarchy and not two equal figures. */}
-                <span className="flex shrink-0 flex-col items-end gap-1">
-                  {/* The run of floor days — every checklist row streaks now, the owner's
-                      2026-08-24 ruling, revising the earlier no-steps-streak stance. It
-                      heads this stacked column rather than sitting beside the label: the
-                      count pill is the widest on the list, and in the two-column desktop
-                      checklist a flame beside the label truncated the word "Steps".
-                      Hidden off today with every other streak. */}
-                  {back === 0 && <StreakFlame count={data.stepsStreak} />}
-                  {/* The count IS the way into the trend — the same move the Calories row
-                      makes with its total. A number you can only read is a number you
-                      cannot ask a question of, and the question a step count raises is
-                      always "is that normal for me", which one day cannot answer. */}
-                  <button
-                    onClick={() => setStepsOpen(true)}
-                    aria-haspopup="dialog"
-                    // The name is BUILT FROM THE COUNT, not put in place of it. A bare
-                    // aria-label replaces an element's contents in the accessible name, so
-                    // labelling this "Open the step record" would have made the figure —
-                    // which was plain text in the row until it became a control — the one
-                    // number on the checklist a screen reader could not reach. The row's
-                    // rule is that the count is always printed; printing it only in pixels
-                    // is not printing it.
-                    aria-label={`Steps ${
-                      data.steps == null
-                        ? "not pushed yet"
-                        : data.steps.toLocaleString()
-                    } of ${STEPS_FLOOR.toLocaleString()} — open the step record`}
-                    className="rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-small tabular-nums transition-colors hover:bg-[var(--color-panel)]"
-                  >
-                    {data.steps == null ? (
-                      <span className="text-[var(--color-muted)]">—</span>
-                    ) : (
-                      data.steps.toLocaleString()
-                    )}
-                    <span className="text-micro text-[var(--color-muted)]">
-                      /{STEPS_FLOOR.toLocaleString()}
-                    </span>
-                  </button>
-                  {/* How old that figure is — and on a phone, the way to go and fix it. The
-                      count is printed directly above, so this carries the age alone: saying
-                      "12,431" twice in one row would be the row arguing with itself about
-                      which of the two is the reading. */}
-                  <StepsRefresh
-                    updatedAt={data.stepsUpdatedAt}
-                    // The Shortcut pushes to whatever day the SERVER calls today, so on a
-                    // day stepped back to there is nothing this button could correctly do
-                    // — it would write into a row that is not on screen. The age still
-                    // prints; only the ask, and the staleness dressing, stand down.
-                    live={back === 0}
-                    onRun={() => {
-                      stepsWanted.current = true;
-                    }}
-                  />
-                </span>
-              </div>
-            </li>
-
-            {data.habits.length === 0 && data.oneOffs.length === 0 && (
-              <li className="py-2.5 text-small leading-relaxed text-[var(--color-muted)]">
-                Nothing set for {back === 0 ? "today" : shortDay(data.date)}.{" "}
-                <Link
-                  href="/habits"
-                  className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
-                >
-                  Add some
-                </Link>
-                .
-              </li>
-            )}
-          </ul>
-
-        </div>
-        {/* TASKS — one-off things, and the one list here that is NOT scored.
-
-            A FULL-WIDTH BAND under both columns, not a tail on the checklist. It used to
-            live inside the right-hand column, which meant a day with three tasks drew them
-            in a 300px gutter while the whole area beneath the 176px ring — half the width
-            of the pane — stayed empty. The row read as unfinished, and the more tasks there
-            were the worse the hole looked.
-
-            `basis-full` in the wrapping flex row is what gives it its own line: the ring and
-            the checklist settle side by side, and this takes the width they sit on.
-
-            Still below the checklist and under its own rule, because it is a different kind
-            of thing: the list above is the standing daily minimum and carries half the day's
-            points; these are single decisions that carry themselves forward until done.
-            Mixing them would have meant a backlog you never cleared quietly lowering what
-            every non-negotiable was worth — see src/lib/tasks.ts.
-
-            The label says "not scored" out loud rather than leaving it to be discovered.
-            A list that looks like the scored one and isn't is worse than no list. */}
-        {data.tasks.length > 0 && (
-          <div className="basis-full border-t border-[var(--color-line-strong)] pt-3">
-            <div className="mb-1 flex items-baseline justify-between gap-3">
-              <span className="text-micro text-[var(--color-muted)]">
-                tasks · not scored
-              </span>
-              <Link
-                href="/habits"
-                className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-              >
-                add
-              </Link>
-            </div>
-            {/* Two columns once the band is wide enough, one when it is not — the same
-                auto-fit rule the checklist above it uses, so the two lists wrap on the same
-                terms rather than on two independent guesses. 14rem because a task title is
-                a sentence where a non-negotiable is a couple of words. */}
-            <ul
-              className="grid gap-x-9"
-              style={{
-                gridTemplateColumns: "repeat(auto-fit, minmax(14rem, 1fr))",
-              }}
-            >
-              {data.tasks.map((t) => (
-                <li key={t.id} className={CHECK_ROW}>
-                  <button
-                    onClick={() => toggleTask(t.id, !t.done)}
-                    aria-pressed={t.done}
-                    className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
-                  >
-                    {/* The checklist's own box, in ink rather than a pillar hue — a task
-                        belongs to no pillar, and borrowing one would file it under a
-                        category it does not feed. */}
-                    <span className="mt-0.5">
-                      <HabitBox done={t.done} tone="var(--color-ink)" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={`block font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
-                      >
-                        {t.title}
-                      </span>
-                      {/* How long it has waited, stated plainly. No red, no "overdue",
-                          no escalating weight — the honest-logging rule covers this list
-                          too, and a list that starts scolding is one you stop writing to. */}
-                      {!t.done && t.carried > 0 && (
-                        <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
-                          carried {t.carried} day{t.carried === 1 ? "" : "s"}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-
-      {/* THE WEEK — two measurements, two rows, and deliberately no shared axis.
-
-          Adherence is a thin horizontal bar per day, filling left to right in the accent.
-          Productivity is the column beneath it, stacked in the colours those hours had in
-          the calendar. They used to share one box with adherence drawn as a line over the
-          bars; separating them says plainly that they are two different questions, and it
-          stops a reader trying to compare a percentage against an uncapped score.
-
-          The window ENDS ON TODAY. There is no future half any more — the calendar column
-          is what says what tomorrow holds, and a week strip that reserved three empty
-          columns for it was spending a third of its width on nothing.
-
-          A CARD, like the record's charts — the owner's ask for weight and structure on
-          this screen. The strip is this screen's one chart, so it wears the chart's frame. */}
-      <section className="record-card">
-        <div className="mb-2.5 flex items-baseline justify-between gap-3">
-          {/* The window alone — the 2026-08-24 text ruling stripped the how-to copy that
-              used to follow it; the data is the interface. */}
-          <span className="text-micro text-[var(--color-muted)]">
-            seven days to today
-          </span>
-          {/* TODAY ONLY. The streak comes from the VIEWED day's DayView — getStreak counts
-              the run ending on whatever day was asked for — and this card is anchored to
-              today. Printed on a past day it would quietly swap today's run for a different
-              one, and worse: the days you step back to are the ones with nothing marked on
-              them yet, so the number you would see is almost always 0. A card captioned
-              around today must not carry another day's fact. Wears the flame like every
-              other streak since the 2026-08-24 ruling. */}
-          {back === 0 && <StreakFlame count={data.streak} />}
-        </div>
-
-        {/* TAPPING A COLUMN OPENS ITS WORKINGS, not the day.
-
-            The column is a SCORE, so the question a finger asks of it is "why is it that
-            tall" — and that question had no answer anywhere in the app: the strip prints no
-            productivity number by design, so a day that felt busy and drew a stub was a
-            mystery with nothing to read. The breakdown is that answer, and it carries the
-            half the bar cannot draw at all: the hours that scored NOTHING, and why.
-
-            Navigating to the day lives on the date line's arrows instead, and inside this
-            sheet as a quiet link — the commonest thing the workings make you want to do is
-            go and mark the block that did not count.
-
-            The target is ONE TRANSPARENT BUTTON PER COLUMN, laid over all four rows rather
-            than built into any of them. The four rows have to line up over each other and
-            they do it with a percentage gap — see STRIP_GAP_PCT — so turning one of them
-            into a row of controls would have made that row a different height from its
-            neighbours and pulled the alignment apart. An overlay takes the same gap, so it
-            covers exactly the columns it names, and nothing underneath it is interactive
-            for it to steal a click from. */}
-        <div className="relative">
-          <div
-            className="absolute inset-0 z-[1] flex"
-            style={{ gap: `${STRIP_GAP_PCT}%` }}
-          >
-            {strip.map((d) => (
-              <button
-                key={d.date}
-                onClick={() => setScoreDay(d.date)}
-                aria-haspopup="dialog"
-                aria-current={d.date === data.date ? "date" : undefined}
-                aria-label={`${prettyDate(d.date)} · ${d.pct}% adhered — see how the day scored`}
-                // No hover fill and no ring: the columns beneath carry three ink levels
-                // and a stack of calendar colours, and any wash over them would tint a
-                // chart made of colours. The cursor is the whole affordance on a laptop,
-                // and on a phone the caption above says it in words.
-                className="min-w-0 flex-1 rounded-sm outline-offset-2 disabled:cursor-default"
-              />
-            ))}
-          </div>
-
-          {/* ADHERENCE. The number and its bar are one unit — the bar is the number drawn,
-              not a second measurement — so they sit together above the rule with the columns
-              below it. Productivity gets no number at all: its height is the whole claim, and
-              an uncapped score printed with no ceiling beside it invites a comparison it
-              cannot support. */}
-          <div className="flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
-          {strip.map((d) => (
-            <span
-              key={d.date}
-              className="min-w-0 flex-1 text-center text-micro tabular-nums"
-              style={{
-                color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
-              }}
-            >
-              {d.pct}%
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-1 flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
-          {strip.map((d) => (
-            <div
-              key={d.date}
-              className="h-[3px] min-w-0 flex-1 overflow-hidden"
-              // --color-line-strong, not --color-line: a 0% day must still draw a bar. Against
-              // the column's #fffdf9 surface, line-strong measures 1.68:1 and line only 1.36:1,
-              // which at 3px tall is the difference between an empty bar and no bar. It is the
-              // same swap the ring track already made, for the same reason.
-              style={{ background: "var(--color-line-strong)" }}
-            >
-              {/* SQUARE ends, no rounding — the butt-cap rule, applied to a bar. A 1.5px cap at
-                  each end of a 40px phone column overstates a small figure by about four points,
-                  and the low end is exactly where honesty matters most.
-
-                  scaleX from the left edge, never width: transform is composited and skips
-                  layout. A floor of 2%, so a day that earned something never reads as a day that
-                  earned nothing; a true 0 draws nothing at all and the track carries the day. */}
-              {d.pct > 0 && (
-                <div
-                  // .motion-data, so today's bar TRAVELS when a mark lands rather than
-                  // snapping while the hero ring beside it animates. It costs nothing on
-                  // first paint: the bars only exist once the fetch has returned, so they
-                  // MOUNT at their value and a mount is not a transition. Nothing grows
-                  // from zero on load.
-                  //
-                  // No opacity distinction for today either. Today already carries the ink
-                  // percentage above, the ink column border below and the right-hand edge;
-                  // a fourth marker is over-marking a day the eye cannot miss. Worse, a
-                  // dimmed amber bar reads as a LOWER figure — which is a gradient encoding
-                  // a value by another name.
-                  className="motion-data h-full w-full origin-left"
-                  style={{
-                    transform: `scaleX(${Math.max(d.pct, 2) / 100})`,
-                    background: "var(--color-accent)",
-                  }}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* PRODUCTIVITY. */}
-        <div className="mt-2.5 flex items-end" style={{ gap: `${STRIP_GAP_PCT}%` }}>
-          {strip.map((d) => (
-            <div
-              key={d.date}
-              className="relative h-20 min-w-0 flex-1 overflow-hidden rounded-t-[3px] border-x border-t"
-              style={{
-                // OUTLINED, not filled. --color-panel-2 measures 1.04:1 against the page,
-                // so a day with no bar vanished entirely and the strip read as five days
-                // instead of seven. An outline is the system's existing answer: it is how
-                // "skipped" stays legible without becoming a third weight of fill.
-                //
-                // Today is marked by a STRONGER OUTLINE rather than an amber wash. The wash
-                // sat behind the slabs and tinted every colour in the stack, which is the
-                // one thing a chart made of colours cannot afford.
-                borderColor: d.isToday
-                  ? "var(--color-ink)"
-                  : "var(--color-line-strong)",
-              }}
-            >
-              {/* Each slab sized against the WEEK'S PEAK directly, bottom-aligned.
-                  Deliberately un-transformed: a scaleY on the stack would have been
-                  composited and free, but it scales the separators with it, so the
-                  hairlines that make two slabs read as two would thin toward nothing on
-                  exactly the short days that need them most. */}
-              {d.productivity && d.productivity.points > 0 && (
-                <div className="absolute inset-0 flex flex-col justify-end">
-                  {/* Drawn bottom-up, so the largest slab sits at the base and the day
-                      reads as a foundation with the extras on top. `segments` arrives
-                      largest first — see scoreDay. */}
-                  {[...d.productivity.segments].reverse().map((s, i) => (
-                    <div
-                      key={`${s.kind}-${s.colorId ?? "d"}-${i}`}
-                      style={{
-                        height: `${(s.points / peak) * 100}%`,
-                        background: slabFill(s),
-                        // A hairline in the column's own surface, so two slabs of a similar
-                        // tone still read as two things.
-                        borderTop:
-                          i === 0
-                            ? undefined
-                            : "1px solid var(--color-surface-1)",
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="h-px w-full bg-[var(--color-line-strong)]" />
-
-          {/* THE LETTERS carry TWO marks now, and they mean different things. Ink is the
-              real today, wherever it falls in the window — server truth, the same flag the
-              calendar column pins its green row with. The UNDERLINE is the day on screen.
-              On a live day they are the same column and the pair reads as one emphasis;
-              stepped back, the underline travels and today stays where it is, which is
-              exactly the fact a reader needs and the only place the strip states it. */}
-          <div className="mt-2 flex" style={{ gap: `${STRIP_GAP_PCT}%` }}>
-            {strip.map((d) => (
-              <span
-                key={d.date}
-                className={`min-w-0 flex-1 text-center text-micro ${
-                  d.date === data.date
-                    ? "underline decoration-[var(--color-ink)] decoration-2 underline-offset-4"
-                    : ""
-                }`}
-                style={{
-                  color: d.isToday ? "var(--color-ink)" : "var(--color-muted)",
-                }}
-              >
-                {new Date(`${d.date}T12:00:00`).toLocaleDateString("en-AU", {
-                  weekday: "narrow",
-                })}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Swatches, not a boxed legend. A few small marks on one line under the chart read
-            in a glance and cost a line; a bordered key would cost a block and turn the strip
-            into a figure with an apparatus. */}
-        {stackKey.length > 0 && (
-          <ul className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1">
-            {stackKey.map((k) => (
-              <li
-                key={k.fill}
-                className="flex items-center gap-1.5 text-micro text-[var(--color-muted)]"
-              >
-                <span
-                  aria-hidden
-                  className="h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{ background: k.fill }}
-                />
-                {k.label}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section>
-        <div className="section-head">
-          <h2 className="text-small font-semibold">
-            {back === 0 ? "Today's blocks" : `Blocks on ${shortDay(data.date)}`}
-          </h2>
-        </div>
-        <div className="mt-4">
-          {data.calendarConnected ? (
-            <BlockList
-              date={data.date}
-              isToday={back === 0}
-              blocks={data.blocks}
-              onChanged={refresh}
-            />
-          ) : (
-            <p className="max-w-[42ch] text-body text-[var(--color-muted)]">
-              Google Calendar isn&apos;t connected.{" "}
-              <a
-                href="/api/google/connect"
-                className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
-              >
-                Connect it
-              </a>
-              .
+          {a.unmarked > 0 && (
+            <p className="mt-1 text-center text-micro text-[var(--color-ink)]">
+              {a.unmarked} to mark
             </p>
           )}
         </div>
+      </FloatingTasks>
+
+      {/* THE BLOCKS, on the phone only. Desktop has them in their own window one column to
+          the left; below `lg` there is no such column, and the spec puts the list here —
+          above the checklist, under the ring — because that is the order the day is worked
+          in. Two instances, one visible; see blocksPane. */}
+      <div className="lg:hidden">{blocksPane}</div>
+
+      {/* THE CHECKLIST, ACROSS THE WINDOW.
+
+          It used to sit in a ~300px gutter beside a 176px ring, which is why it went to two
+          columns in the first place. The ring is centred and the band above it is its own
+          row now, so this runs the full width underneath — the same list, given the room it
+          was always being squeezed out of.
+
+          Calories and Steps live IN here, as rows of the list. The owner's ruling — they
+          are things you do each day, and a second block underneath for two numbers was a
+          second block to look at. The weight and calorie history that used to hang off
+          these rows has moved to /stats; nothing here is a link any more.
+
+          auto-fit rather than a breakpoint, and deliberately still auto-fit now that the
+          block is wider: the window is ~717px on the owner's screen and 390px on the phone,
+          and neither of those is a number this list should be told. minmax answers for
+          itself — as many columns as the track minimum fits, one when there is room for
+          one. */}
+      <section>
+        {/* The way into the editor — and into "Tomorrow, specifically". This used to
+            exist only in the empty state, which meant that the moment you had habits
+            there was no path to the screen that edits them. Quiet, right-aligned, the
+            same word Goals uses. */}
+        <div className="mb-1 flex justify-end">
+          <Link
+            href="/habits"
+            className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+          >
+            edit · tomorrow
+          </Link>
+        </div>
+        {/* 20rem and a 20px gutter — RAISED from 9rem when the window went full width.
+            auto-fit does not warn when the answer changes: at the old 308px column 9rem
+            gave two, and at this window's ~717px the same 9rem silently gave FOUR, which
+            squeezed the Steps and Calories rows (their figure pills wrapped under the
+            label) and is not the two columns the layout was decided as. 20rem is chosen
+            against both ends of the range rather than against the owner's screen alone:
+            320px × 2 + the gutter is 660 and fits 717 with room, 3 would need 1000 and
+            cannot happen at any width this window reaches, and the 358px phone falls to
+            one. The track minimum is what carries the decision, so nothing here is told a
+            viewport number.
+            `min(20rem, 100%)` and not a bare 20rem: minmax's MINIMUM is a hard floor, so a
+            single 20rem track stood 2px proud of the 318px phone pane and shoved the weight
+            row's `kg` into the window's padding. The min() caps the floor at the box. */}
+        <ul
+          className="grid gap-x-5"
+          style={{
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(20rem, 100%), 1fr))",
+          }}
+        >
+          {data.habits.map((h) =>
+            h.input === "number" ? (
+              // A NUMERIC non-negotiable — weight. Typing the number IS the tick: the
+              // entry exists or it does not, so adherence needs no special case, and
+              // clearing the field clears the day exactly like unticking.
+              // KEYED BY DAY AS WELL AS BY HABIT, and this one is load-bearing rather
+              // than tidy. The number field below is UNCONTROLLED — `defaultValue`, so a
+              // background refresh cannot yank a figure out from under a cursor — and
+              // React only ever writes `defaultValue` to the value ATTRIBUTE, which the
+              // browser ignores once the field has been typed into. With a key that is
+              // the same on every day, stepping from today to yesterday left this
+              // morning's 82.4 sitting in a row whose tick and label had already become
+              // yesterday's; blurring it then POSTed 82.4 against yesterday and
+              // overwrote a real reading. A key that carries the date makes the day
+              // change a REMOUNT, which is the one thing that reliably re-seeds an
+              // uncontrolled field.
+              <li key={`${data.date}-${h.id}`} className={CHECK_ROW}>
+                <div className="flex w-full items-center gap-2.5 py-2.5">
+                  <HabitBox done={h.done} tone={habitTone(h.pillar)} />
+                  {/* WEIGHT's name is the way into its trend — the same pattern the
+                      Calories row set: the field logs, the row opens the record. Other
+                      number habits keep the plain label; a control that opens nothing
+                      must not dress as one. */}
+                  {h.system_key === "weight" ? (
+                    <button
+                      onClick={() => setWeightOpen(true)}
+                      aria-haspopup="dialog"
+                      className={`min-w-0 flex-1 text-left font-serif text-small leading-snug underline-offset-4 transition-colors hover:underline ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                    >
+                      {h.name}
+                    </button>
+                  ) : (
+                    <label
+                      htmlFor={`h${h.id}`}
+                      className={`min-w-0 flex-1 font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                    >
+                      {h.name}
+                    </label>
+                  )}
+                  {/* The run STACKS above the field, the Steps row's arrangement — not
+                      inline beside the label. This row carries a fixed-width control on
+                      its right, and in a ~160px checklist column an inline flame left
+                      the label's min-w-0 box narrower than its own word: a single word
+                      cannot wrap, so "Weight" overflowed its span and the flame painted
+                      over the glyphs. Only on a live day: the days you step back to are
+                      precisely the unmarked ones. */}
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    {back === 0 && <StreakFlame count={h.streak} />}
+                    {/* A value written on a line, not typed into a chip. The underline
+                        is the field; it darkens on focus rather than growing a box. */}
+                    <span className="flex items-baseline gap-1">
+                      <input
+                        id={`h${h.id}`}
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        inputMode="decimal"
+                        placeholder="—"
+                        defaultValue={h.value ?? ""}
+                        onBlur={(e) => setHabitNumber(h.id, e.target.value)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" &&
+                          (e.target as HTMLInputElement).blur()
+                        }
+                        className={NUM_FIELD}
+                      />
+                      {h.unit && (
+                        <span className="text-micro text-[var(--color-muted)]">
+                          {h.unit}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                </div>
+              </li>
+            ) : (
+              // Dated for the same reason as the numeric row above — these hold no
+              // uncontrolled state, but one list must not be keyed two ways.
+              <li
+                key={`${data.date}-${h.id}`}
+                className={`${CHECK_ROW} flex items-center gap-2`}
+              >
+                <button
+                  onClick={() =>
+                    // Two rows are not ticked, they are WRITTEN. The journal's opens the
+                    // page picker — a page existing is what ticks it. A document habit
+                    // (outreach, reading) opens its logger: ONE control, the owner's
+                    // ruling, replacing the tick-plus-side-button pair — saving is what
+                    // ticks, and unticking lives inside the dialog it opens.
+                    h.system_key === "journal"
+                      ? setJournalPrompt(true)
+                      : h.system_key != null && DOC_HABITS[h.system_key]
+                        ? setNoteHabit(h.id)
+                        : toggleHabit(h.id, !h.done)
+                  }
+                  aria-pressed={
+                    h.system_key === "journal" ||
+                    (h.system_key != null && DOC_HABITS[h.system_key])
+                      ? undefined
+                      : h.done
+                  }
+                  aria-haspopup={
+                    h.system_key != null && DOC_HABITS[h.system_key]
+                      ? "dialog"
+                      : undefined
+                  }
+                  className="-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+                >
+                  <HabitBox done={h.done} tone={habitTone(h.pillar)} />
+                  {/* break-words: a name is usually several words and wraps on its own,
+                      but a single word wider than the label's min-w-0 box would OVERFLOW
+                      it and collide with the flame — the live-site bug the weight and
+                      calorie rows hit. Wrapping mid-word is the honest fallback. */}
+                  <span
+                    className={`min-w-0 flex-1 break-words font-serif text-small leading-snug ${h.done ? "text-[var(--color-muted)]" : ""}`}
+                  >
+                    {h.name}
+                  </span>
+                  {/* The run, at the row's far edge. A fact, not a mechanic — see
+                      StreakFlame — and only on a live day, for the app-wide streak's own
+                      reason: the days you step back to are the unmarked ones. */}
+                  {back === 0 && <StreakFlame count={h.streak} />}
+                </button>
+              </li>
+            ),
+          )}
+
+          {/* ONE-OFF NON-NEGOTIABLES — "Tomorrow, specifically", arrived. Items of this
+              day's checklist and its tally exactly like the standing ones; what differs
+              is only that they exist on this one date, which the quiet suffix says.
+              Accent, not a pillar hue — a one-off belongs to the day, not to a pillar. */}
+          {data.oneOffs.map((o) => (
+            <li
+              key={`${data.date}-o${o.id}`}
+              className={`${CHECK_ROW} flex items-center gap-2`}
+            >
+              <button
+                onClick={() => toggleOneOff(o.id, !o.done)}
+                aria-pressed={o.done}
+                className="-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg)]"
+              >
+                <HabitBox done={o.done} tone="var(--color-accent)" />
+                <span
+                  className={`min-w-0 flex-1 font-serif text-small leading-snug ${o.done ? "text-[var(--color-muted)]" : ""}`}
+                >
+                  {o.title}
+                </span>
+                <span className="shrink-0 text-micro text-[var(--color-muted)]">
+                  one-off
+                </span>
+              </button>
+            </li>
+          ))}
+
+          {/* CALORIES. A row of the checklist like any other, with the running total
+              where a tick would be — because a total IS the state here, and a box you
+              tick would be a second thing to remember once the number is already in. */}
+          <li className={CHECK_ROW}>
+            <CalorieInput
+              date={data.date}
+              today={today}
+              calories={data.calories}
+              entries={data.calorieEntries}
+              // The LOG streak — days the total reached 2,000, deliberately below the
+              // 2,500 floor: it counts logging the day, not eating enough. Hidden off
+              // today with every other streak.
+              streak={back === 0 ? data.calorieStreak : 0}
+              // The Health tone, for the same reason the Steps box takes it (spec §5):
+              // the box stopped hard-coding --color-physical so the owner's /colours
+              // choice reaches it.
+              tone={habitTone("physical")}
+              onChanged={refresh}
+            />
+          </li>
+
+          {/* STEPS, live from the phone. A FLOOR row like Calories: the box is dashed
+              until 7,000 is reached — "not yet", never "failed" — and the count is the
+              phone's own last push, read-only, because the phone is the instrument and
+              a hand-typed step count would be a number nobody measured. "—" until the
+              Shortcut has pushed today; never a zero the phone didn't say. */}
+          <li className={CHECK_ROW}>
+            <div className="flex items-center gap-2.5 py-2.5">
+              {/* The HEALTH tone, resolved through habitTone like every other row, not
+                  the raw --color-physical literal this used to hard-code (spec §5). The
+                  token is only Health's DEFAULT; the owner may pick another hue at
+                  /colours, and a row that reads the token directly would have been the
+                  one box on the checklist that ignored the choice. */}
+              <HabitBox
+                done={(data.steps ?? 0) >= STEPS_FLOOR}
+                pending
+                tone={habitTone("physical")}
+              />
+              <span
+                className={`min-w-0 flex-1 font-serif text-small leading-snug ${(data.steps ?? 0) >= STEPS_FLOOR ? "text-[var(--color-muted)]" : ""}`}
+              >
+                Steps
+              </span>
+              {/* THE COUNT, and its age beneath it — STACKED, not wrapped.
+                  These columns are about 150px wide, which two pills side by side do not
+                  fit into, and a flex-wrap would have dropped the age to a second line at
+                  some widths and not others. Stacking it deliberately also says the right
+                  thing: the number is the reading and the age is a fact ABOUT the reading,
+                  which is a hierarchy and not two equal figures. */}
+              <span className="flex shrink-0 flex-col items-end gap-1">
+                {/* The run of floor days — every checklist row streaks now, the owner's
+                    2026-08-24 ruling, revising the earlier no-steps-streak stance. It
+                    heads this stacked column rather than sitting beside the label: the
+                    count pill is the widest on the list, and in the two-column desktop
+                    checklist a flame beside the label truncated the word "Steps".
+                    Hidden off today with every other streak. */}
+                {back === 0 && <StreakFlame count={data.stepsStreak} />}
+                {/* The count IS the way into the trend — the same move the Calories row
+                    makes with its total. A number you can only read is a number you
+                    cannot ask a question of, and the question a step count raises is
+                    always "is that normal for me", which one day cannot answer. */}
+                <button
+                  onClick={() => setStepsOpen(true)}
+                  aria-haspopup="dialog"
+                  // The name is BUILT FROM THE COUNT, not put in place of it. A bare
+                  // aria-label replaces an element's contents in the accessible name, so
+                  // labelling this "Open the step record" would have made the figure —
+                  // which was plain text in the row until it became a control — the one
+                  // number on the checklist a screen reader could not reach. The row's
+                  // rule is that the count is always printed; printing it only in pixels
+                  // is not printing it.
+                  aria-label={`Steps ${
+                    data.steps == null
+                      ? "not pushed yet"
+                      : data.steps.toLocaleString()
+                  } of ${STEPS_FLOOR.toLocaleString()} — open the step record`}
+                  className="rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-small tabular-nums transition-colors hover:bg-[var(--color-panel)]"
+                >
+                  {data.steps == null ? (
+                    <span className="text-[var(--color-muted)]">—</span>
+                  ) : (
+                    data.steps.toLocaleString()
+                  )}
+                  <span className="text-micro text-[var(--color-muted)]">
+                    /{STEPS_FLOOR.toLocaleString()}
+                  </span>
+                </button>
+                {/* How old that figure is — and on a phone, the way to go and fix it. The
+                    count is printed directly above, so this carries the age alone: saying
+                    "12,431" twice in one row would be the row arguing with itself about
+                    which of the two is the reading. */}
+                <StepsRefresh
+                  updatedAt={data.stepsUpdatedAt}
+                  // The Shortcut pushes to whatever day the SERVER calls today, so on a
+                  // day stepped back to there is nothing this button could correctly do
+                  // — it would write into a row that is not on screen. The age still
+                  // prints; only the ask, and the staleness dressing, stand down.
+                  live={back === 0}
+                  onRun={() => {
+                    stepsWanted.current = true;
+                  }}
+                />
+              </span>
+            </div>
+          </li>
+
+          {data.habits.length === 0 && data.oneOffs.length === 0 && (
+            <li className="py-2.5 text-small leading-relaxed text-[var(--color-muted)]">
+              Nothing set for {back === 0 ? "today" : shortDay(data.date)}.{" "}
+              <Link
+                href="/habits"
+                className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
+              >
+                Add some
+              </Link>
+              .
+            </li>
+          )}
+        </ul>
       </section>
 
       {/* The JOURNAL'S MACHINERY, and nothing visible.
@@ -1719,32 +1370,21 @@ export default function Today({
         <StepsLog date={data.date} onClose={() => setStepsOpen(false)} />
       )}
 
-      {/* The day's workings, raised from its column on the strip. Mounted only while open,
-          so its read never runs behind a closed sheet. */}
-      {scoreDay && (
-        <ProductivityLog
-          date={scoreDay}
-          onClose={() => setScoreDay(null)}
-          onOpenDay={(d) => {
-            setScoreDay(null);
-            goToDay(d);
-          }}
-        />
-      )}
+      {/* ProductivityLog was mounted here, raised from a column of the week strip. The
+          strip is gone and so is the score it drew (spec §3). The day's HOURS still open
+          their workings — from the record's hours chart, which is the one place a breakdown
+          of hours belongs now. */}
     </div>
   );
 
   const pillarPane = (
     <PillarSections
-      goals={goals}
-      skills={skills}
-      rings={rings}
-      facts={facts}
+      health={health}
+      career={career}
       colors={colors}
       workouts={workouts}
-      socialEvents={socialEvents}
-      oneOffEvents={oneOffEvents}
-      skills14={skills14}
+      goals={goals}
+      tracker={tracker}
       date={data.date}
       today={today}
       onSubgoal={(id, done) =>
@@ -1753,30 +1393,17 @@ export default function Today({
           body: JSON.stringify({ done }),
         })
       }
-      /* The DIALOG's date, not the screen's: it carries its own picker, capped at the real
-         today, so a session written from a past day lands where it happened. `id` present
-         is an edit — the same contract saveWorkout runs under. */
-      onLogSession={(skillId, note, day, id) =>
-        mutateSkills(`/api/skills/${skillId}/time`, {
-          method: "POST",
-          body: JSON.stringify({ note, date: day, id }),
-        })
-      }
-      onDeleteSession={(skillId, id) =>
-        mutateSkills(
-          `/api/skills/${skillId}/time?session=${id}&date=${data.date}`,
-          { method: "DELETE" },
-        )
-      }
+      onGoalDone={onGoalDone}
       onSaveWorkout={saveWorkout}
       onDeleteWorkout={deleteWorkout}
+      onOpenDay={goToDay}
       onOpenRecord={openRecord}
     />
   );
 
-  // Every pane is ALWAYS mounted. On desktop all three show and the tab is ignored; on
-  // the phone the unselected panes sit in a grid collapsed to 0fr — see .pane-grid —
-  // which is what lets both the opening AND the closing window animate to auto height.
+  // Every pane is ALWAYS mounted. On desktop both show and the tab is ignored; on the
+  // phone the unselected pane sits in a grid collapsed to 0fr — see .pane-grid — which is
+  // what lets both the opening AND the closing window animate to auto height.
   //
   // `lg:h-full` on both wrappers is LOAD-BEARING, not decoration. A percentage height
   // resolves against the parent's, and these divs sit between a window that has a
@@ -1794,10 +1421,10 @@ export default function Today({
 
   /**
    * The phone's tab switch: flip the state, then bring the page back to the top. The
-   * accordion keeps calendar → today → pillars order, so after a switch at most two
-   * collapsed bars sit above the open window — the top IS where the content is. Without
-   * this, opening Pillars from the bottom of a long Today leaves the viewport parked on
-   * empty space the collapse just vacated.
+   * accordion keeps today → pillars order, so after a switch at most one collapsed bar
+   * sits above the open window — the top IS where the content is. Without this, opening
+   * Pillars from the bottom of a long Today leaves the viewport parked on empty space the
+   * collapse just vacated.
    */
   const switchTab = (t: PhoneTab) => {
     setTab(t);
@@ -1829,7 +1456,10 @@ export default function Today({
               link — hence a three-column grid with an empty cell mirroring the link. A
               flex row with one item pushed right would drift the title off centre by
               exactly half the link’s width. */}
-          <div className="mx-auto grid w-full max-w-[92rem] grid-cols-[1fr_auto_1fr] items-baseline gap-4 px-6 py-5 sm:px-8">
+          {/* FULL WIDTH. The `max-w-[92rem]` cap went with the three-window relayout (spec
+              §4): the owner's screen is 1858px and the row underneath now spends all of it,
+              so a masthead that stopped at 1472 would have sat inside its own page. */}
+          <div className="mx-auto grid w-full grid-cols-[1fr_auto_1fr] items-baseline gap-4 px-6 py-5 sm:px-8">
             <span aria-hidden />
             {/* Serif because a page heading is the owner’s side of the Author Rule, and
                 text-heading rather than text-hero — 52px is the adherence numeral and
@@ -1865,7 +1495,7 @@ export default function Today({
             once the fallen row leaves the layout (display:none takes its height with
             it; on desktop flex-1 already owns the height). */}
         <div
-          className={`relative mx-auto w-full max-w-[92rem] px-4 pb-24 pt-4 sm:px-8 lg:min-h-0 lg:flex-1 lg:px-6 lg:pb-6 lg:pt-6 ${
+          className={`relative mx-auto w-full px-4 pb-24 pt-4 sm:px-8 lg:min-h-0 lg:flex-1 lg:px-6 lg:pb-6 lg:pt-6 ${
             tl !== "closed" ? "min-h-[calc(100dvh-9rem)]" : ""
           }`}
         >
@@ -1878,7 +1508,11 @@ export default function Today({
               className="tl-layer"
               data-shown={tl === "falling" || tl === "open" ? "" : undefined}
             >
-              <Timeline today={today} goals={goals} />
+              <Timeline
+                today={today}
+                goals={goals}
+                onGoalDone={onGoalDone}
+              />
               <button
                 type="button"
                 onClick={closeTimeline}
@@ -1888,10 +1522,10 @@ export default function Today({
               </button>
             </div>
           )}
-          {/* Source order is middle → left → right, which IS the stacked mobile order, so
-            the phone needs no reordering and the day's work leads the document. Desktop
-            only moves the columns spatially.
-            Three WINDOWS now, each on its own surface with a hairline and a gutter of page
+          {/* Source order is today → blocks → pillars, which IS the stacked mobile order,
+            so the phone needs no reordering and the day's work leads the document. Desktop
+            only moves the windows spatially.
+            Three WINDOWS, each on its own surface with a hairline and a gutter of page
             ground between them. Their tones differ by only 1.03–1.07:1 — the hairline and
             the gutter do the separating; the tone just says which one you are in. */}
           {/* FLEX, not grid, and the change is what makes the record open at all.
@@ -1900,9 +1534,13 @@ export default function Today({
               overlay. As flex items the same three shares are `flex: <n> 1 0%`, which IS
               interpolable: the row keeps summing to itself at every frame of the move, so the
               record window grows by exactly what the other two give up and no gap opens.
-              The ratios are unchanged — 1 / 1.9 / 1.15 with the same minimums. */}
+              The shares are 1 / 1.7 / 1.25 now, measured against the owner's 1858px window
+              (spec §4): ≈450 / 765 / 563, which is what puts a 240px ring with a task rail
+              either side inside the middle one and two 200px donuts side by side in the
+              right. Today took width from the other two because it is the only window whose
+              contents are laid out ACROSS rather than down. */}
           <div
-            // Order is calendar → today → pillars in both worlds — one set of order
+            // Order is blocks → today → pillars in both worlds — one set of order
             // classes, no lg: fork. Height is desktop's concern only: the phone column
             // is as tall as its content, and the page scrolls it.
             className={`panel-row relative flex flex-col gap-3 lg:h-full lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-4 ${
@@ -1919,12 +1557,13 @@ export default function Today({
             }
           >
             {/* THE RAIL'S LABEL, and the way back out.
-                A CHILD OF THE ROW, not of the calendar window it sits over. That window is a
-                scroll container and it opens scrolled to centre today; an absolutely
-                positioned child of a scroll container scrolls with the content, which put
-                this word hundreds of pixels above the visible rail and off the screen. The
-                row never scrolls, so anchoring here fixes it at the source instead of
-                compensating for a scroll offset that changes as you read the calendar.
+                A CHILD OF THE ROW, not of the leftmost window it sits over. That window is a
+                scroll container, and an absolutely positioned child of a scroll container
+                scrolls with the CONTENT — when the calendar column lived there and opened
+                scrolled to centre today, this word was laid out hundreds of pixels above the
+                visible rail and off the screen. The row never scrolls, so anchoring here
+                fixes it at the source rather than compensating for an offset that changes as
+                the window is read.
 
                 Desktop only: the phone shows one pane at a time, so there is nothing there
                 for a rail to be the remains of — the record's own × closes it instead. */}
@@ -1941,7 +1580,7 @@ export default function Today({
             <div
               data-panel="today"
               data-open={tab === "today" ? "" : undefined}
-              style={{ "--panel-grow": 1.9, "--panel-min": "26rem" } as CSSProperties}
+              style={{ "--panel-grow": 1.7, "--panel-min": "26rem" } as CSSProperties}
               className={`panel window order-2 bg-[var(--color-surface-1)] p-5 lg:p-6 ${colScroll}`}
             >
               {/* THE COLLAPSED BAR, phone only: the window's own title as the way into
@@ -1961,40 +1600,27 @@ export default function Today({
               <div className="panel-fade lg:h-full">{pane("today", middle)}</div>
             </div>
 
+            {/* THE BLOCKS WINDOW, DESKTOP ONLY — `hidden lg:flex`, and therefore the one
+                window with no collapsed phone bar and no pane of its own. Below `lg` its
+                contents are rendered a second time inside Today, above the checklist (spec
+                §4), which is where a hand marking a block already is.
+                `data-open` is deliberately never set: this window has no phone pane for the
+                accordion to open, and stating that is cheaper than leaving the next reader to
+                notice the attribute missing. */}
             <div
-              data-panel="calendar"
-              data-open={tab === "calendar" ? "" : undefined}
+              data-panel="blocks"
+              data-open={undefined}
               style={{ "--panel-grow": 1, "--panel-min": "15rem" } as CSSProperties}
-              className={`panel window order-1 bg-[var(--color-surface-2)] p-5 lg:p-6 ${colScroll}`}
+              className={`panel window order-1 hidden bg-[var(--color-surface-2)] p-5 lg:flex lg:flex-col lg:p-6 ${colScroll}`}
             >
-              <button
-                type="button"
-                onClick={() => switchTab("calendar")}
-                className={`w-full items-baseline justify-between text-left lg:hidden ${tab === "calendar" ? "hidden" : "flex"}`}
-              >
-                <span className="text-small font-semibold">Calendar</span>
-                <span aria-hidden className="text-micro text-[var(--color-muted)]">
-                  open
-                </span>
-              </button>
-              <div className="panel-fade lg:h-full">
-                {pane(
-                  "calendar",
-                  <CalendarColumn
-                    key={calEpoch}
-                    date={data.date}
-                    onTimeline={openTimeline}
-                  />,
-                )}
-              </div>
-
+              <div className="panel-fade lg:h-full">{blocksPane}</div>
             </div>
 
             <div
               ref={pillarPanel}
               data-panel="pillars"
               data-open={tab === "pillars" ? "" : undefined}
-              style={{ "--panel-grow": 1.15, "--panel-min": "16rem" } as CSSProperties}
+              style={{ "--panel-grow": 1.25, "--panel-min": "17rem" } as CSSProperties}
               className={`panel window order-3 bg-[var(--color-surface-3)] p-5 lg:p-6 ${colScroll}`}
             >
               <button

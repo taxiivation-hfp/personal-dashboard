@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/client";
-import { listGoals, getPillars } from "@/lib/queries";
+import { listGoals } from "@/lib/queries";
 import GoalEditor from "@/components/GoalEditor";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +9,9 @@ export const dynamic = "force-dynamic";
 // change something about tomorrow.
 export const metadata = { title: "Goals" };
 
+// No getPillars: every goal is a Career goal since the Health & Career pivot, so the editor
+// has no picker to fill and nothing here needs the pillar list.
 export default async function GoalsPage() {
   const db = await getDb();
-  const [goals, pillars] = await Promise.all([listGoals(db), getPillars(db)]);
-  return <GoalEditor initial={goals} pillars={pillars} />;
+  return <GoalEditor initial={await listGoals(db)} />;
 }

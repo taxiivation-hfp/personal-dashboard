@@ -26,7 +26,8 @@ import { brokenRuns, runPoints, bridgeRun } from "@/lib/chart";
  *   bars     a total that accumulates and then starts again — calories, adherence. From
  *            ZERO, because a bar that doesn't start at zero lies about its proportions,
  *            and because a line would imply Tuesday's intake flowed into Wednesday's.
- *   stacked  bars with composition — productivity, split by where the hours went.
+ *   stacked  bars with composition — hours, split by the category they went to. Minutes,
+ *            never points: there is no score left to draw (spec §3).
  *
  * A DAY WITH NO ENTRY DRAWS NOTHING. Not a zero-height bar, not a line through it. An
  * unweighed morning is not a morning that weighed nothing, and this app is new enough that
@@ -37,21 +38,21 @@ import { brokenRuns, runPoints, bridgeRun } from "@/lib/chart";
 
 export type ChartSegment = {
   key: string;
-  points: number;
+  /**
+   * THE SLICE'S MAGNITUDE, and it is MINUTES — renamed from `points` with the pivot.
+   *
+   * The productivity score is gone (the owner's ruling of 2026-09-18), so there is no
+   * second magnitude to carry beside the first: a slice used to hold `points` for the
+   * height and `minutes` as a side-channel for the hours breakdown, precisely because the
+   * record was not allowed to print a score. With the score deleted the two collapse into
+   * one, and one number is one fewer thing for a stack and the sheet explaining it to
+   * disagree about.
+   */
+  minutes: number;
   fill: string;
   /** Names the slice in the legend and the tooltip. Optional — a caller that cannot name
    *  its colours simply gets no legend rather than a legend of hex codes. */
   label?: string;
-  /**
-   * The MINUTES behind this slice, where the slice is time at all.
-   *
-   * Carried beside `points` rather than derived from it, because points are a SCORE and the
-   * record is deliberately not allowed to report one — the productivity number is
-   * quarantined to the Today strip. What the hours figure's workings may state is hours, so
-   * the hours have to travel. Absent on a slice that is not time (the non-negotiables slab),
-   * which is exactly how that slab is excluded from an hours breakdown.
-   */
-  minutes?: number;
 };
 
 export type ChartPoint = {
@@ -106,6 +107,7 @@ export default function DayChart({
   floor = null,
   height = 160,
   colour = "var(--color-accent)",
+  format,
   emptyNote,
   onDay,
 }: {
@@ -114,6 +116,26 @@ export default function DayChart({
   unit: string;
   ceiling?: number | null;
   floor?: number | null;
+  /**
+   * HOW A VALUE IS PRINTED — EVERY value this chart states in words: the hovered reading, a
+   * stacked day's named slices, the line's latest value, the gridline labels, the range
+   * under the axis and the floor line's own figure.
+   *
+   * It exists because the Hours series is MINUTES, and 640 printed bare reads as an
+   * abstract quantity — which is exactly what an hours chart must not look like, since a
+   * number with no unit is the shape a score wears. The Hours card passes a time
+   * formatter, so the tooltip says "10h 40m".
+   *
+   * IT GOVERNS THE SCALE TOO, and that is a correction. It used to be kept off the
+   * gridlines and the range on the argument that a scale wants a short even step — but the
+   * Hours card also passes `unit=""` (the unit is inside the formatted string), so the
+   * scale it left behind was a bare `160 / 320 / 480` up the side and `0–640` underneath:
+   * an unlabelled magnitude on the one card the score was deleted from. A chart may not
+   * name the same quantity two ways. The step is still the chart's own even quarter; only
+   * how it is SPELLED belongs to the caller. The default is the chart's own `fmt`, so
+   * every other caller is unchanged.
+   */
+  format?: (n: number) => string;
   /**
    * Open a day's workings.
    *
@@ -187,6 +209,9 @@ export default function DayChart({
   /** Weight carries a decimal because 0.4kg is a real difference; nothing else does. */
   const fmt = (v: number) =>
     form === "line" ? String(Math.round(v * 10) / 10) : String(Math.round(v));
+
+  /** What a STATED value reads as — the caller's `format` where there is one. See the prop. */
+  const show = format ?? fmt;
 
   // --- line ------------------------------------------------------------------------------
   const y = (v: number) => 100 - ((v - bottom) / span) * 100;
@@ -300,7 +325,7 @@ export default function DayChart({
             {/* text-micro, not a smaller ad-hoc size — the type scale has five steps and
                 a chart does not get a sixth. */}
             <span className="absolute left-0 top-0 -translate-y-full pr-1 text-micro tabular-nums text-[var(--color-muted)]">
-              {fmt(bottom + span * k)}
+              {show(bottom + span * k)}
             </span>
           </div>
         ))}
@@ -377,7 +402,7 @@ export default function DayChart({
                       <div
                         key={s.key}
                         style={{
-                          height: `${(s.points / p.value!) * 100}%`,
+                          height: `${(s.minutes / p.value!) * 100}%`,
                           background: s.fill,
                           borderTop:
                             i === 0 || n > GAP_LIMIT
@@ -413,7 +438,7 @@ export default function DayChart({
             }}
           >
             <span className="absolute right-0 top-0 pl-1 text-micro tabular-nums text-[var(--color-floor-line)]">
-              {fmt(marker)}
+              {show(marker)}
             </span>
           </div>
         )}
@@ -482,7 +507,7 @@ export default function DayChart({
               <span className="font-semibold tabular-nums">
                 {hovered.value == null
                   ? "no entry"
-                  : `${fmt(hovered.value)}${unit ? ` ${unit}` : ""}`}
+                  : `${show(hovered.value)}${unit ? ` ${unit}` : ""}`}
               </span>
               {/* The composition, for a stacked day: each named slice and its share, the
                   same facts the bar's bands already draw. */}
@@ -492,7 +517,7 @@ export default function DayChart({
                   <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
                     {(hovered.segments ?? [])
                       .filter((s) => s.label)
-                      .map((s) => `${s.label} ${fmt(s.points)}`)
+                      .map((s) => `${s.label} ${show(s.minutes)}`)
                       .join(" · ")}
                   </span>
                 )}
@@ -508,8 +533,8 @@ export default function DayChart({
         <span>{short(points[0]!.date)}</span>
         <span>
           {ceiling != null
-            ? `${fmt(bottom)}–${fmt(ceiling)}${unit ? ` ${unit}` : ""}`
-            : `${fmt(lo)}–${fmt(hi)}${unit ? ` ${unit}` : ""}`}
+            ? `${show(bottom)}–${show(ceiling)}${unit ? ` ${unit}` : ""}`
+            : `${show(lo)}–${show(hi)}${unit ? ` ${unit}` : ""}`}
           {/* Only when some days are MISSING. Adherence has a figure for every day in the
               window by construction, so "30 days logged" there would be counting the axis
               rather than the record — a caption that is true of any window and therefore
@@ -524,7 +549,7 @@ export default function DayChart({
             <>
               {" · last "}
               <span className="text-[var(--color-ink)]">
-                {fmt(latest.value!)}
+                {show(latest.value!)}
                 {unit ? ` ${unit}` : ""}
               </span>
             </>

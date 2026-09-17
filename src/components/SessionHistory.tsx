@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import WorkoutLog, { type Workout } from "./WorkoutLog";
-import SkillLog, { type SkillSession } from "./SkillLog";
 import { toneColor } from "./PillarRing";
 import { WORKOUT_KINDS, type WorkoutKind } from "@/lib/rings";
 import {
@@ -27,34 +26,29 @@ import {
  */
 
 /**
- * WHAT THIS PAGE LISTS, and it is no longer only the gym.
+ * WHAT THIS PAGE LISTS: the gym, and only the gym.
  *
- * Skill sessions joined the log because they became the same object: a dated free-text
- * document with its first line as its title. Two pages listing one kind of thing each would
- * mean two searches, and a search that can only see half your sessions is a search you stop
- * trusting. One page, one query, three chips.
+ * It briefly listed skill sessions too — they had become the same object, a dated free-text
+ * document with its first line as its title, and one search over both beat two. SKILLS ARE
+ * HIDDEN since the pivot (spec §1): no skill chip, no skill rows, and `/skills` redirects.
+ * Every skill session is kept in `skill_time` and SkillLog.tsx is still on disk; nothing
+ * here reads either, because a hidden thing must not sit on a page as an unfilled one.
  *
- * They stay DIFFERENT ROWS in different tables — a workout has a kind, a skill session has a
- * skill — so this type is the union and nothing merges them in the database.
+ * The alias stays rather than collapsing into `WorkoutKind` everywhere below, because what
+ * this page means by a kind is "a row of the log" — which is the thing that changed shape
+ * once and could again.
  */
-type LogKind = WorkoutKind | "skill";
+type LogKind = WorkoutKind;
 
-type Session = Omit<Workout, "kind"> & {
-  kind: LogKind;
-  /** Set only on a skill session; the skill it belongs to. */
-  skillId?: number;
-  skillName?: string;
-};
+type Session = Omit<Workout, "kind"> & { kind: LogKind };
 
 const LABEL: Record<LogKind, string> = {
   strength: "Strength",
   cardio: "Cardio",
-  skill: "Skills",
 };
 
-/** The chips, in the order they are read. Skills last because it is the newest and because
- *  the two gym kinds belong together. */
-const LOG_KINDS: LogKind[] = [...WORKOUT_KINDS, "skill"];
+/** The chips, in the order they are read. */
+const LOG_KINDS: LogKind[] = [...WORKOUT_KINDS];
 
 /**
  * The query, marked where it lands.
@@ -105,10 +99,13 @@ const heading = (iso: string) =>
 export default function SessionHistory({ today }: { today: string }) {
   const [all, setAll] = useState<Session[] | null>(null);
   /**
-   * Seeded from `?kind=` so the record can link straight at one chip — the sessions figure
-   * there names physical and skills separately and each opens its own half of this log.
-   * Read once, on mount: after that the chips own it, and a link that kept re-asserting
-   * itself would fight the control.
+   * Seeded from `?kind=` so a link can land on one chip. Read once, on mount: after that
+   * the chips own it, and a link that kept re-asserting itself would fight the control.
+   *
+   * Only `strength` and `cardio` are accepted — `?kind=skill` was a real link from the
+   * record's old skills figure, and an unrecognised value falls through to NO filter
+   * rather than to an empty list. A stale bookmark should show the whole log, not a page
+   * that looks like the log is gone.
    */
   const [filter, setFilter] = useState<LogKind | null>(null);
   const [query, setQuery] = useState("");
@@ -126,57 +123,24 @@ export default function SessionHistory({ today }: { today: string }) {
   }, []);
 
   /**
-   * BOTH LOGS, merged and sorted as one.
+   * THE GYM LOG. One request — deliberately unpaginated, which is what lets the search
+   * below be a scan over an array rather than a second query.
    *
-   * Two requests rather than one endpoint switching on a parameter: these are different
-   * tables with different columns, and a single route doing both would be two queries
-   * wearing one name. Merged here, where the page already wants them in one list.
-   *
-   * `Promise.all`, so a slow half cannot make the other half arrive first and flash a
-   * partial log. Either failing yields an empty list for that half rather than an error
-   * page — half a record is worth reading, and the chips still say which half is missing.
+   * It used to be two, merged: `/api/skills/history` came alongside and the two were
+   * sorted into one list. Skills are hidden since the pivot, so that half is gone and the
+   * `Promise.all` with it. A failed read yields an empty list rather than an error page —
+   * the chips still work and the next write re-reads.
    */
   const load = () => {
-    const gym = fetch("/api/gym/history")
+    fetch("/api/gym/history")
       .then((r) => r.json())
       .then((d) => (d.error ? [] : ((d.sessions ?? []) as Session[])))
-      .catch(() => []);
-    const skills = fetch("/api/skills/history")
-      .then((r) => r.json())
-      .then((d) =>
-        d.error
-          ? []
-          : ((d.sessions ?? []) as {
-              id: number;
-              skillId: number;
-              skillName: string;
-              date: string;
-              note: string;
-            }[]
-            ).map(
-              (x): Session => ({
-                // Ids collide across the two tables, so the list is keyed by kind AND id
-                // everywhere below — see the map keys.
-                id: x.id,
-                date: x.date,
-                kind: "skill",
-                // A skill session has no stored title; its first line IS the title, which
-                // splitSession derives. Passing null keeps that rule in one place.
-                title: null,
-                note: x.note,
-                skillId: x.skillId,
-                skillName: x.skillName,
-              }),
-            ),
-      )
-      .catch(() => []);
-    Promise.all([gym, skills]).then(([g, k]) =>
-      setAll(
-        [...g, ...k].sort(
-          (a, b) => b.date.localeCompare(a.date) || b.id - a.id,
+      .catch(() => [])
+      .then((g: Session[]) =>
+        setAll(
+          [...g].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id),
         ),
-      ),
-    );
+      );
   };
   useEffect(load, []);
 
@@ -228,12 +192,11 @@ export default function SessionHistory({ today }: { today: string }) {
     return m;
   }, [all]);
 
-  /** A session wears its PILLAR's hue: the gym is Physical, a skill is Portfolio. The
-   *  chip you filtered by and the dialog you open from it therefore agree about what kind
-   *  of thing you are looking at, without either naming it again. */
-  const hueFor = (k: LogKind) =>
-    k === "skill" ? toneColor("portfolio", null) : toneColor("physical", null);
-  const hue = hueFor(filter ?? "strength");
+  /** A session wears its PILLAR's hue, and every session on this page is HEALTH now — the
+   *  skills half is gone. Kept as a call rather than inlined so the one place that decides
+   *  it stays one place. `null` for the colour: this page does not read /api/pillars, so
+   *  it draws Health's default. */
+  const hue = toneColor("physical", null);
 
   return (
     // The WINDOW LOOK, the same architecture the record and the journal wear: the masthead
@@ -284,31 +247,17 @@ export default function SessionHistory({ today }: { today: string }) {
             );
           })}
 
-          {/* A NEW SKILL SESSION CANNOT BE WRITTEN FROM HERE, and the control says so
-              rather than failing quietly.
-              This page lists sessions across every skill, so "which skill" has no answer
-              here — on the board it is answered by the row you tapped. The button would
-              otherwise open a dialog with no skill to write to, which is the worst kind of
-              dead control: one that looks live. A gym session has no such ambiguity, since
-              the chip you are standing on IS its kind. */}
-          {filter === "skill" ? (
-            <Link
-              href="/"
-              className="ml-auto rounded-full border border-[var(--color-line-strong)] px-4 py-1.5 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-ink)] hover:text-[var(--color-ink)]"
-            >
-              Log a skill on the board
-            </Link>
-          ) : (
-            <button
-              onClick={() =>
-                setOpen({ kind: (filter as WorkoutKind) ?? "strength", id: null })
-              }
-              aria-haspopup="dialog"
-              className="ml-auto rounded-full bg-[var(--color-accent)] px-4 py-1.5 text-micro text-white transition-opacity hover:opacity-90"
-            >
-              Write one down
-            </button>
-          )}
+          {/* The chip you are standing on IS the kind a new session takes, which is what
+              makes this button unambiguous. (It used to have a skills twin that could
+              only send you back to the board, because "which skill" had no answer on a
+              page listing all of them. Skills are hidden; the branch went with them.) */}
+          <button
+            onClick={() => setOpen({ kind: filter ?? "strength", id: null })}
+            aria-haspopup="dialog"
+            className="ml-auto rounded-full bg-[var(--color-accent)] px-4 py-1.5 text-micro text-white transition-opacity hover:opacity-90"
+          >
+            Write one down
+          </button>
         </div>
 
         {/* A LINE, not a box — the app's own input idiom, and the one that keeps a control
@@ -537,67 +486,15 @@ export default function SessionHistory({ today }: { today: string }) {
         </div>
       </main>
 
-      {/* THE RIGHT DIALOG FOR THE ROW. Two logs share this page, and they are not the same
-          document: a workout belongs to a kind and writes to /api/gym, a skill session
-          belongs to a SKILL and writes to /api/skills/[id]/time. Branching here rather than
-          widening one dialog keeps each one's rules where they already live. */}
-      {open?.kind === "skill" &&
-        (() => {
-          const row =
-            open.id == null
-              ? null
-              : ((all ?? []).find(
-                  (x) => x.kind === "skill" && x.id === open.id,
-                ) ?? null);
-          // A NEW skill session cannot be written from here: this page lists sessions across
-          // every skill, and "which skill" is a question the board answers by being the
-          // place you tapped. Sending you there beats guessing.
-          if (!row?.skillId) return null;
-          const session: SkillSession = {
-            id: row.id,
-            date: row.date,
-            note: row.note ?? "",
-          };
-          return (
-            <SkillLog
-              key={`sk${row.id}`}
-              name={row.skillName ?? "Skill"}
-              date={today}
-              today={today}
-              session={session}
-              recent={(all ?? [])
-                .filter((x) => x.kind === "skill" && x.skillId === row.skillId)
-                .map((x) => ({ id: x.id, date: x.date, note: x.note ?? "" }))}
-              hue={hueFor("skill")}
-              onSave={async (note, day) => {
-                await fetch(`/api/skills/${row.skillId}/time`, {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ id: row.id, note, date: day }),
-                }).catch(() => {});
-                load();
-              }}
-              onDelete={async () => {
-                await fetch(
-                  `/api/skills/${row.skillId}/time?session=${row.id}&date=${today}`,
-                  { method: "DELETE" },
-                ).catch(() => {});
-                load();
-              }}
-              onPick={(picked) =>
-                setOpen(picked ? { kind: "skill", id: picked.id } : null)
-              }
-              onClose={() => setOpen(null)}
-            />
-          );
-        })()}
-
-      {open && open.kind !== "skill" && (
+      {/* ONE DIALOG, because one log. This page used to branch on the row's kind — a
+          workout writes to /api/gym, a skill session to /api/skills/[id]/time — and the
+          skills arm is gone with the skills chip. */}
+      {open && (
         <WorkoutLog
           /* One dialog per SESSION — see the same key in PillarSections. `note` and `day`
              are state seeded from props, and only a remount re-seeds them. */
           key={open.id ?? "new"}
-          kind={open.kind as WorkoutKind}
+          kind={open.kind}
           label={LABEL[open.kind]}
           // The day a NEW session defaults to. Editing an existing one ignores this and
           // opens on the session's own date — the dialog reads that off `workout`, which

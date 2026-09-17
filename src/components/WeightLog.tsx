@@ -73,8 +73,11 @@ export default function WeightLog({
       className="w-[min(94vw,680px)] overflow-y-auto rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)] p-5 text-[var(--color-ink)]"
     >
       <div className="section-head">
-        {/* Physical's dot — the same statement the workout and food logs make about which
-            pillar's document this is. */}
+        {/* Health's dot — the same statement the workout and food logs make about which
+            pillar's document this is.
+            DELIBERATELY THE TOKEN, not the owner's chosen hue: this is a chart of a BODY,
+            not a checklist tick, and --color-physical IS Health's default. Spec §5 moves
+            only the Steps and Calories tick BOXES onto the resolved tone. */}
         <h2 className="flex min-w-0 items-center gap-2 text-small font-semibold">
           <span
             aria-hidden

@@ -8,9 +8,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { skillDefaultHex, METRICS } from "@/lib/rings";
-import type { MetricRing, PillarRingView } from "@/lib/rings";
-import type { PillarKey, SkillSlice } from "@/lib/queries";
+import type { PillarKey } from "@/lib/rings";
 
 /**
  * The lamp, on a ring's TRACK.
@@ -83,9 +81,9 @@ function LitTrack({
  * adherence reads as one more quota to fill, and the quota rings borrow adherence's
  * authority:
  *
- *   adherence — 176px, amber, a fine 8px stroke, the numeral INSIDE
- *   pillar    — 48px and 28px, pillar-hued, thinner still, fact line BESIDE or BELOW
- *               (never a percentage)
+ *   adherence — 240px, amber, a fine 10px stroke, the numeral INSIDE
+ *   pillar    — 200px closed / 240px opened, pillar-hued, segmented, its parts listed BELOW
+ *   marker    — 18px, one per part row in an opened pillar's list
  *
  * Size and hue separate them, not stroke weight: both are drawn as a line around
  * something rather than as a gauge, because a thick arc reads as a dashboard dial and
@@ -104,7 +102,6 @@ function LitTrack({
 
 const TONE: Record<PillarKey | "accent", string> = {
   accent: "var(--color-accent)",
-  social_capital: "var(--color-social)",
   physical: "var(--color-physical)",
   portfolio: "var(--color-portfolio)",
 };
@@ -121,15 +118,15 @@ export const toneColor = (
  *
  * 1.24 is solved, not chosen. `.pillar-bloom` peaks at the 76% stop of `closest-side`, so the
  * peak lands at `size * 1.24 / 2 * 0.76 = size * 0.471` — which is the stroke's own radius at
- * every size the column solver produces. The light comes off the ring rather than sitting
- * behind it, which is the whole difference between a lamp and an achievement glow.
+ * every size this file is asked for. The light comes off the ring rather than sitting behind
+ * it, which is the whole difference between a lamp and an achievement glow.
  */
 const BLOOM_BOX = 1.24;
 /**
  * Below this a ring gets no bloom.
  *
  * The same argument that gates the lit track at 48px: an annular gradient across an 18px
- * metric ring is 4px of tint nobody can resolve, and eight of them down a list is haze. The
+ * marker ring is 4px of tint nobody can resolve, and five of them down a list is haze. The
  * bloom belongs to the donut a pillar is READ from, not to the row markers beside its facts.
  */
 const BLOOM_MIN_SIZE = 48;
@@ -139,15 +136,21 @@ const BLOOM_MIN_SIZE = 48;
  *  true here rather than merely intended. */
 function PillarBloom({ size, hue }: { size: number; hue: string }) {
   if (size < BLOOM_MIN_SIZE) return null;
-  const box = Math.round(size * BLOOM_BOX);
   return (
     <span
       aria-hidden
       className="pillar-bloom"
       style={
         {
-          width: box,
-          height: box,
+          // A PERCENTAGE of the wrapper, not `size` in pixels. The wrapper is capped at
+          // `maxWidth: 100%` so the donut shrinks in a column narrower than its nominal
+          // size — and a lamp pinned to the nominal size would then stand proud of the
+          // ring it belongs to and spill onto its neighbour. Sized this way the light and
+          // the ring can never come apart. `aspect-ratio` rather than a second percentage:
+          // height % on an absolutely positioned box resolves against the wrapper's
+          // HEIGHT, which is the SVG's rendered height and would circle back on itself.
+          width: `${BLOOM_BOX * 100}%`,
+          aspectRatio: "1",
           "--bloom-hue": hue,
         } as CSSProperties
       }
@@ -155,9 +158,12 @@ function PillarBloom({ size, hue }: { size: number; hue: string }) {
   );
 }
 
+/** 0..1, and never NaN. One helper for both rings so a clamp can never be written twice. */
+const clamp01 = (n: number): number =>
+  Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
+
 export default function Ring({
   fill,
-  overdrive = null,
   size,
   stroke,
   tone,
@@ -167,13 +173,6 @@ export default function Ring({
   children,
 }: {
   fill: number | null;
-  /**
-   * Work past the threshold, 0..1. Drawn as a second, lighter arc over the full ring.
-   *
-   * VISUAL ONLY — it never reaches the pillar mean. Extra effort is acknowledged where it
-   * happened; it cannot paper over a metric that was neglected.
-   */
-  overdrive?: number | null;
   size: number;
   stroke: number;
   tone: PillarKey | "accent";
@@ -190,15 +189,11 @@ export default function Ring({
    */
   dashed?: boolean;
   /**
-   * Draw the lamp's bloom behind this ring. The 176px adherence hero, and nothing else.
+   * Draw the lamp's bloom behind this ring. The 240px adherence hero, and nothing else.
    *
    * A BOOLEAN, deliberately — it can be on or off and can never be given a value. A bloom
    * that brightened with the figure would turn marking a block into a reward, which is the
    * one thing the light layer may not do. See The One Lamp Rule in globals.css.
-   *
-   * Not given to the pillar donuts either: three coloured blooms would be three accents by
-   * the back door, and a pillar ring that glowed as it filled is exactly the "full ring is
-   * a win" reading CLAUDE.md forbids.
    */
   bloom?: boolean;
   children?: ReactNode;
@@ -210,9 +205,7 @@ export default function Ring({
   const ghost = fill == null;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const dash = ghost ? 0 : c * Math.min(1, Math.max(0, fill));
-  const over =
-    ghost || overdrive == null ? 0 : c * Math.min(1, Math.max(0, overdrive));
+  const dash = ghost ? 0 : c * clamp01(fill);
 
   return (
     <div
@@ -275,24 +268,6 @@ export default function Ring({
             className="motion-arc"
           />
         )}
-        {/* A second lap, translucent and inset, over an already-full ring. Reads as
-            "past the minimum" without reading as "more is better" — it is the same fact
-            the caption already states, made visible. */}
-        {over > 0 && (
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            stroke={toneColor(tone, color)}
-            strokeWidth={Math.max(1, stroke * 0.42)}
-            strokeLinecap="butt"
-            strokeDasharray={`${over} ${c}`}
-            transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            className="motion-arc"
-            style={{ opacity: 0.45 }}
-          />
-        )}
       </svg>
       {children && (
         <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -303,106 +278,8 @@ export default function Ring({
   );
 }
 
-/** One slice of a pillar's donut — or of any of its bands. */
-export type RingSegment = {
-  key: string;
-  /** Names the slice at its arc. Optional now that bands exist whose slices are UNITS
-   *  (one event, one outreach) rather than metrics — a six-slot band with six copies of
-   *  "Events" around it would be noise, so the builders label one slot per band. */
-  label?: string;
-  /** 0..1, or null for a metric with no source. */
-  fill: number | null;
-  /** Share of the band. Drives the slice's ARC LENGTH. */
-  weight: number;
-  /** No writer for this source yet — drawn dashed and never filled. */
-  ghost: boolean;
-  /** Explicit stroke colour — a SKILL's own hue on the Portfolio ring. Absent, the slice
-   *  takes the pillar hue stepped by index (segmentShade). */
-  color?: string | null;
-  /**
-   * A SPACER: takes up arc, draws nothing — not even track. For a band with no target that
-   * must nevertheless keep a fixed unit size, where an empty track out to the full circle
-   * would draw a quota that does not exist.
-   *
-   * Nothing uses it at present — Social's extras band, its last consumer, took the opposite
-   * route and shares the whole circle instead (see socialBands). Kept because it is the only
-   * way to draw units without drawing a target, and that trade comes back every time a band
-   * counts things nobody set a number for.
-   */
-  bare?: boolean;
-};
-
 /**
- * LABELS, ATTACHED TO THEIR ARCS.
- *
- * The donut was the app's least legible object: two to four arcs, all the same base hue,
- * with nothing saying which was which — so the name sits AT the arc, always, in every view.
- * The leader-line system this replaces parked the names in two fixed side columns, which
- * cannot survive a ring that rotates: the elbow geometry assumes the anchor never moves.
- *
- * Here each label rides its own segment — positioned at the slice's midpoint, just off the
- * stroke — and when the ring turns, the label turns with it while the TEXT counter-rotates
- * so it is always upright. The radial distance breathes with the world angle (see
- * `labelDist`), so a horizontal word near three o'clock stands further out than one at
- * twelve, and no glyph ever crosses the arc it names.
- */
-/** How far the label sits off the stroke. 4, down from 6: every pixel here is paid twice
- *  in the box, and the ring was paying it out of its own diameter. */
-const LABEL_GAP = 4;
-
-/** Breathing room between two labels' boxes, in px of arc. Small — the point is that they
- *  stop touching, not that they stand apart. */
-const LABEL_CLEAR = 6;
-
-/** The label's own type. Off the app's step scale and predates this pass; left alone
- *  deliberately, because changing it moves the whole column's width budget. */
-const LABEL_SIZE = 11.5;
-
-/**
- * A label's width, ESTIMATED rather than measured.
- *
- * 0.52em per glyph is Source Sans's average at this size — "Outreach", the longest metric
- * name, comes out at 50px against a measured 48. Deterministic on purpose: the estimate is
- * used during render to place the label and size the box, and measuring instead would mean
- * an SSR pass that disagrees with the client, a layout that shifts when fonts land, and a
- * box that changes size after first paint.
- */
-const labelW = (t: string): number => t.length * LABEL_SIZE * 0.52 + 2;
-
-/**
- * How far a label's CENTRE must sit from the ring's centre so its horizontal box clears
- * the stroke, at a given world angle.
- *
- * The text is always upright while its anchor rides the circle, so the clearance needed is
- * the box's half-extent along the radial direction: |cos|·w/2 near three and nine o'clock,
- * |sin|·h/2 near twelve and six. Adding exactly that keeps every label hugging the ring —
- * close at the poles where the box is shallow, further out at the sides where it is wide —
- * instead of orbiting at the worst-case distance all the way round.
- */
-const labelDist = (rl: number, w: number, rad: number): number =>
-  rl +
-  Math.abs(Math.cos(rad)) * (w / 2 + 2) +
-  Math.abs(Math.sin(rad)) * (LABEL_SIZE / 2 + 1.5);
-
-/**
- * The box's label margin, each side. SOLVED, not chosen: the worst case is a label at
- * three o'clock — `labelDist` puts its centre at `rl + w/2 + 2`, and its right edge another
- * w/2 out, so the pad must hold the widest name plus the gap and margin. "Outreach" at 50px
- * plus LABEL_GAP plus 2 rounds to 56. Vertically the same sum uses the type height instead:
- * 11.5 + 1.5 + gap ≈ 20. Both trimmed from 60/22 — the owner's ruling was that the rings
- * had become too small, and these pads are the width the rings were paying for.
- *
- * EXPORTED, because PillarSections solves ring sizes against them. They used to be written
- * down in both files, which is precisely how two numbers drift apart.
- */
-export const LABEL_PAD_X = 56;
-/** Vertical: the label anchor sits at `size/2 + 2`, and a label at twelve o'clock extends
- *  one type height plus its margins above that — 11.5 + 1.5 + 2 ≈ 15. 16, measured down
- *  from a 20 that was insurance twice over; the four points go straight to the donut. */
-export const LABEL_PAD_Y = 16;
-
-/**
- * ROTATION. Idle, the three pillar donuts turn — one lap a minute, slow enough to read as
+ * ROTATION. Idle, the two pillar donuts turn — one lap a minute, slow enough to read as
  * alive rather than as motion. A hovered ring slows to a fifth of that (never stops: a
  * stopped ring looks broken, a slowed one looks attended to), and the two speeds meet
  * through an exponential approach so there is no snap at either edge.
@@ -433,17 +310,18 @@ const wantsMotion = (): boolean =>
 
 /**
  * The DEFAULT pillar hues as hex, because `segmentShade` has to do arithmetic on a colour
- * and `var(--color-social)` is not a number.
+ * and `var(--color-portfolio)` is not a number.
  *
  * MUST move with the tokens in globals.css. There is no way to resolve a CSS variable
  * during render that also works server-side — the same constraint that forced
  * --color-accent-rgb to exist beside --color-accent, and this carries the same warning.
+ * `portfolio` is CAREER's Plum (spec §1); the key stays `portfolio` because renaming a live
+ * database key is churn, and the NAME comes from PILLAR_NAME in rings.ts.
  */
 export const TONE_HEX: Record<PillarKey | "accent", string> = {
   accent: "#9a6a2e",
-  social_capital: "#8c7434",
   physical: "#467c6c",
-  portfolio: "#67609b",
+  portfolio: "#7d5a72",
 };
 
 /** #rgb / #rrggbb → [h 0..360, s 0..100, l 0..100], or null for anything else. */
@@ -494,8 +372,11 @@ function hslToHex(h: number, s: number, l: number): string {
  *
  * The steps lean DARK — one gentle lighter step, never more. Every pillar hue is certified
  * at ≥3:1 against the page as a stroke, and darkening only adds contrast while lightening
- * spends it; +7L is measured as the most the weakest hue (social, 3.86:1) can give up and
- * stay above the floor. Subtle by design: distinct at a glance, nothing near a rainbow.
+ * spends it; +7L is measured as the most the weakest hue can give up and stay above the
+ * floor. Subtle by design: distinct at a glance, nothing near a rainbow.
+ *
+ * FIVE steps, which is exactly Health's five parts — Career's arcs cycle back to step 0 at
+ * the sixth goal, and that is correct: a sixth goal is not a sixth kind of thing.
  */
 const SHADE_STEPS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
@@ -508,8 +389,8 @@ const SHADE_STEPS: ReadonlyArray<readonly [number, number]> = [
 /** The i-th segment's stroke, derived from the pillar hue. Falls back to the hue untouched
  *  when it is not parseable hex — a wrong colour would be worse than a flat ring.
  *
- *  EXPORTED because the metric list beneath the ring now wears the same colours: a legend
- *  that computes its own shades is a legend that eventually disagrees with the chart. */
+ *  EXPORTED because the part list beneath the ring wears the same colours: a legend that
+ *  computes its own shades is a legend that eventually disagrees with the chart. */
 export function segmentShade(hue: string, i: number): string {
   const step = SHADE_STEPS[i % SHADE_STEPS.length]!;
   if (step[0] === 0 && step[1] === 0) return hue;
@@ -523,31 +404,34 @@ export function segmentShade(hue: string, i: number): string {
   );
 }
 
-/** Fraction of the circle an unweighted metric gets, so "tracked but not scored" and
- *  "no source yet" still appear instead of silently vanishing at weight 0. */
-const UNSCORED_SHARE = 0.09;
 /** Gap between slices, in fractions of the circle. Small — the slices should read as one
  *  ring divided, not as separate arcs floating near each other. */
 const GAP = 0.012;
 
 /**
- * A pillar as ONE segmented donut rather than a ring plus a row of little ones.
+ * A pillar as ONE segmented donut of ONE thickness — the owner's ruling, spec §1.
  *
- * The old shape drew a pillar ring for the mean and then a small ring per metric beneath
- * it, which said the same thing twice and made three pillars taller than a screen. Here
- * each metric is a SLICE of a single ring: arc length is its weight, so Strength owns most
- * of Physical's circle and Cardio a fifth of it, and the amount of colour around the whole
- * donut IS the pillar's fill. One glance, one shape, no arithmetic.
+ * Each arc is a part of the pillar: its arc LENGTH is its weight (the weights of one ring
+ * sum to 1, which `buildHealthRing` and `buildCareerRing` both guarantee) and the lit
+ * fraction of it is that part's fill. The amount of colour around the whole donut IS the
+ * pillar's figure. One glance, one shape, no arithmetic.
  *
- * Unscored and ghost metrics get a fixed small slice each rather than a weighted one —
- * their weight is 0, so weighting would delete them from a ring that is supposed to show
- * everything the pillar tracks. They are drawn dashed and never filled, which is already
- * this app's language for "recorded, but not a target".
+ * WHAT WENT, and why it is not coming back: the mid band, the thin outer lap, the overdrive
+ * second lap and the arc-riding labels. The mid band and the lap existed for Social and for
+ * Portfolio's project hours, both of which the pivot removes; overdrive drew past a
+ * threshold that Career does not have; and the labels were solving "which arc is which" for
+ * a ring whose parts are now printed in a list directly under it, in the same shades. Three
+ * radii and a fan-out relaxation loop were a lot of geometry to say what five lines of text
+ * say better.
+ *
+ * The box is exactly `size × size` — no label pad. That is what lets a 200px ring sit in a
+ * 150px column: `width: size, maxWidth: 100%` on the wrapper and `width="100%"` on the SVG
+ * scale the whole object down as one thing rather than clipping it, so the chart stays
+ * itself on a 1280px laptop instead of reflowing into a different chart.
  */
 export function SegmentedRing({
-  segments,
-  mid = [],
-  outer = [],
+  arcs,
+  ghost = false,
   size,
   stroke,
   tone,
@@ -557,19 +441,24 @@ export function SegmentedRing({
   glow = false,
   children,
 }: {
-  segments: RingSegment[];
   /**
-   * A SECOND full band between the donut and the thin outer lap — medium stroke, its own
-   * segments. Social wears the events past its sixth here. The three radii read outward as
-   * the standing they encode: the core commitment innermost, the adjacent-but-lesser band
-   * around it, the thin extra outermost.
-   *
-   * A band OUTSIDE the donut is not a bigger target than the donut, and Social's use of it
-   * depends on that: what rides here is drawn thinner, which is this file's way of saying
-   * "lesser" without a legend. Anything given a shortfall to draw on this band would be
-   * making a second quota out of a ring that is meant to read as an aside.
+   * One arc each, in order. `ArcView[]` from rings.ts satisfies this exactly — pass
+   * `ring.arcs` straight through. Weights sum to 1; `fill` null is a dashed ghost arc.
    */
-  mid?: RingSegment[];
+  arcs: { key: string; weight: number; fill: number | null }[];
+  /**
+   * The WHOLE ring is a ghost: one dashed full-circle track, no arcs, no fill. Career with
+   * no counted goal (spec §1: an empty dashed ghost labelled "no goals", never "0%").
+   *
+   * A flag rather than an inference from an empty `arcs`, because the two states it would
+   * conflate are different statements: "no goal has a deadline" is a fact about the board,
+   * and "the fetch has not landed" is a fact about the app. Dashes mean the first.
+   */
+  ghost?: boolean;
+  size: number;
+  stroke: number;
+  tone: PillarKey;
+  color?: string | null;
   /**
    * Rotate, idly and forever — see the SPIN_* constants. Opt-in, because rotation is a
    * statement about the surface: the pillar column is a glance, where a slow turn reads as
@@ -584,34 +473,11 @@ export function SegmentedRing({
    */
   kick?: number;
   /**
-   * Metrics drawn as a thin LAP OUTSIDE the donut instead of a slice of it.
-   *
-   * This is where a metric goes when it has a floor of its own but must never move the
-   * pillar's average — Misc, at one session a fortnight. As a slice it would either take
-   * space from the metrics that do count, or sit there at weight 0 looking like a slice
-   * that had been switched off. As an outer lap it reads as an extra, which is exactly
-   * what it is.
-   *
-   * Translucent rather than glowing: a glow is a shadow, and the count in this app is
-   * zero.
-   */
-  outer?: RingSegment[];
-  size: number;
-  stroke: number;
-  tone: PillarKey;
-  color?: string | null;
-  /**
    * Draw the pillar's own lamp behind the donut.
    *
    * A BOOLEAN, exactly as the hero's `bloom` is, and for the same reason: it can be on or off
-   * and can never be given a value. The owner asked for the adherence ring's glow on these
-   * three, which reverses this file's old ruling that pillar donuts get no bloom — but the
-   * half of that ruling that mattered is kept, because it is the half The One Lamp Rule
-   * actually rests on. A bloom that tracked the fill would say a full ring is a win; a bloom
-   * that is identical at 0/8 and 11/8 says only that there is a ring here.
-   *
-   * Opt-in rather than automatic, so the record's dense chart grid does not inherit three
-   * glows it never asked for.
+   * and can never be given a value. A bloom that tracked the fill would say a full ring is a
+   * win; a bloom that is identical at 0/8 and 11/8 says only that there is a ring here.
    */
   glow?: boolean;
   children?: ReactNode;
@@ -626,23 +492,9 @@ export function SegmentedRing({
   const hue = color ?? TONE_HEX[tone];
   const trackId = `lit-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
-  // Every band is drawn INSIDE `size`, with the donut inset to make room, so a pillar
-  // with three bands and one with one still occupy the same box and the column stays
-  // aligned. Reading outward: main donut, then the mid band at ~70% stroke, then the thin
-  // lap at 45% — thickness IS the standing, so the radii never have to be explained.
-  //
-  // The lap USED to be drawn at 0.55 opacity, which measured 1.93-2.14:1 against the pillar
-  // window once the donut grew to 148px — under the 3:1 floor for a stroke, i.e. a mark you
-  // could not reliably see. Translucency was the wrong lever: it was standing in for "this
-  // is an extra", and thickness and radius already say that. So every band is FULL HUE and
-  // separation is carried by stroke weight and radius alone.
-  const lapStroke = outer.length ? Math.max(2, stroke * 0.45) : 0;
-  const lapGap = outer.length ? 5 : 0;
-  const midStroke = mid.length ? Math.max(3, stroke * 0.7) : 0;
-  const midGap = mid.length ? 5 : 0;
-  const rLap = (size - lapStroke) / 2;
-  const rMid = (size - midStroke) / 2 - lapStroke - lapGap;
-  const r = (size - stroke) / 2 - lapStroke - lapGap - midStroke - midGap;
+  // ONE THICKNESS, ONE RADIUS. Nothing is inset for a band any more, so the donut is drawn
+  // at the full box and the stroke is centred on it.
+  const r = (size - stroke) / 2;
 
   /** A point on a ring of radius `rad`. Angles run from twelve o'clock, clockwise. */
   const at = (turn: number, rad: number) => {
@@ -668,146 +520,44 @@ export function SegmentedRing({
   };
 
   /**
-   * Weight-proportional slices for ONE band. Scored slices split whatever the unscored
-   * ones leave; the gap comes off the END of each slice so arcs never touch; null fill
-   * never enters the arithmetic — the same guard the single ring uses. Shared by the main
-   * donut and the mid band so two bands cannot disagree about what a weight means.
-   */
-  const buildSlices = (segs: RingSegment[]) => {
-    const unscored = segs.filter((s) => s.weight <= 0);
-    const scored = segs.filter((s) => s.weight > 0);
-    const totalWeight = scored.reduce((sum, s) => sum + s.weight, 0);
-    const scoredShare = Math.max(0, 1 - unscored.length * UNSCORED_SHARE);
-    let cursor = 0;
-    return segs.map((s) => {
-      const share =
-        s.weight > 0 && totalWeight > 0
-          ? (s.weight / totalWeight) * scoredShare
-          : UNSCORED_SHARE;
-      const start = cursor;
-      cursor += share;
-      const span = Math.max(0, share - GAP);
-      const fillSpan =
-        s.fill == null ? 0 : Math.min(1, Math.max(0, s.fill)) * span;
-      return { ...s, start, span, fillSpan };
-    });
-  };
-
-  const slices = buildSlices(segments);
-  const midSlices = buildSlices(mid);
-
-  // Laps share the whole circle between them rather than being packed after the slices —
-  // an outer ring that stopped a third of the way round would read as a fourth slice.
-  const laps = outer.map((s, i) => {
-    const span = (1 - GAP * outer.length) / Math.max(1, outer.length);
-    const start = i * (span + GAP);
-    const fillSpan = s.fill == null ? 0 : Math.min(1, Math.max(0, s.fill)) * span;
-    return { ...s, start, span, fillSpan };
-  });
-
-  /**
-   * One label per LABELLED slice, at the slice's midpoint, ALWAYS — both views, every
-   * size, every band. Slices without a `label` are units (one event, one tick) and stay
-   * mute; the builders name one slot per band instead. All labels anchor just past the
-   * OUTERMOST band, whichever that is, so a name can never sit across a ring it does not
-   * belong to. The geometry is shared between this render (the resting positions) and the
-   * rotation loop below (the same maths, per frame), so a static ring and a paused
-   * spinning ring are pixel-identical.
-   */
-  const rl = size / 2 + LABEL_GAP - 2;
-  const labelMeta = [...slices, ...midSlices, ...laps]
-    .filter((s) => s.label)
-    .map((s) => ({
-      key: s.key,
-      label: s.label!,
-      ghost: s.ghost,
-      baseDeg: (s.start + s.span / 2) * 360,
-      w: labelW(s.label!),
-    }));
-
-  /**
-   * FAN APART ANY TWO NAMES THAT LAND ON THE SAME SPOT.
+   * The slices, laid round the circle in order.
    *
-   * Every label sits at ONE radius, just past the outermost band, so a name's only
-   * coordinate is its angle — and two bands can genuinely agree on one. Portfolio is the
-   * case that forced this: a donut of a single slice puts "Skills" at the bottom of the
-   * circle, and a single outer lap puts "Projects" at the bottom of the circle, and the two
-   * printed straight through each other.
-   *
-   * Relaxation rather than reassignment: a cluster is pushed apart around its own mean, so
-   * a name never leaves its arc by more than it must, and a ring whose labels were already
-   * clear of each other — Physical's four, Social's three — comes out untouched. Applied
-   * ONCE, here, so the resting positions and the rotation loop below read the same numbers
-   * and a spinning ring cannot disagree with a paused one.
+   * The weights are taken AS GIVEN — they sum to 1 by the ring builders' construction, and
+   * re-normalising them here would be a second opinion about a pillar's shape held in the
+   * component that draws it. The gap comes off the END of each slice so arcs never touch,
+   * and a null fill never enters the arithmetic: the same guard the single ring uses.
    */
-  if (labelMeta.length > 1) {
-    /**
-     * How far apart this particular pair has to be, in degrees.
-     *
-     * NOT a constant, because a constant cannot know how wide a word is: 26° separates
-     * "Misc" from "Steps" and leaves "Projects" still lying across "Skills". The room two
-     * boxes need is measured along the direction they are being pushed, which is the
-     * tangent — nearly horizontal at the top and bottom of the circle, where their WIDTHS
-     * collide, and nearly vertical at three and nine o'clock, where only their line heights
-     * do. Same decomposition the radial clearance above already uses, turned ninety degrees.
-     */
-    const needDeg = (a: (typeof labelMeta)[number], b: (typeof labelMeta)[number]) => {
-      const mid = (((a.baseDeg + b.baseDeg) / 2) * Math.PI) / 180;
-      const along =
-        Math.abs(Math.cos(mid)) * ((a.w + b.w) / 2) +
-        Math.abs(Math.sin(mid)) * LABEL_SIZE * 1.2;
-      return ((along + LABEL_CLEAR) * 180) / (Math.PI * rl);
-    };
-
-    labelMeta.sort((a, b) => a.baseDeg - b.baseDeg);
-    for (let pass = 0; pass < 8; pass++) {
-      let moved = false;
-      for (let i = 0; i < labelMeta.length; i++) {
-        const a = labelMeta[i]!;
-        const b = labelMeta[(i + 1) % labelMeta.length]!;
-        // The last pair wraps the top of the circle, so its gap crosses 360.
-        const gap =
-          b.baseDeg - a.baseDeg + (i === labelMeta.length - 1 ? 360 : 0);
-        const need = needDeg(a, b);
-        if (gap >= need) continue;
-        const push = (need - gap) / 2;
-        a.baseDeg -= push;
-        b.baseDeg += push;
-        moved = true;
-      }
-      if (!moved) break;
-    }
-  }
-
-  // The padded box. Geometry is unchanged — the viewBox simply starts negative, so every
-  // cx/cy/r below still means what it meant before the labels existed. The pad is
-  // UNCONDITIONAL now: every donut carries its labels, so every donut pays for them.
-  const padX = LABEL_PAD_X;
-  const padY = LABEL_PAD_Y;
-  const boxW = size + padX * 2;
-  const boxH = size + padY * 2;
+  let cursor = 0;
+  const slices = ghost
+    ? []
+    : arcs.map((a) => {
+        const share = Math.max(0, a.weight);
+        const start = cursor;
+        cursor += share;
+        const span = Math.max(0, share - GAP);
+        return {
+          key: a.key,
+          start,
+          span,
+          dashed: a.fill == null,
+          fillSpan: a.fill == null ? 0 : clamp01(a.fill) * span,
+        };
+      });
 
   /**
    * THE ROTATION LOOP. Direct DOM writes from one rAF, never React state — a re-render per
-   * frame would rebuild every path on three rings at 60fps for a decoration.
+   * frame would rebuild every path on two rings at 60fps for a decoration.
    *
-   * Everything the loop needs is republished into `meta` on every render, so a resize or a
-   * data refresh changes the geometry under the loop without restarting it — the next frame
-   * simply reads the new numbers.
-   *
-   * Three writes per frame per ring: the group's rotation, the gradient's counter-rotation
-   * (the lamp stays at twelve — see LitTrack), and each label's position + counter-turn.
-   * The label's translate is in LOCAL coordinates: the group's rotation carries it to the
-   * world angle, and `labelDist` is fed the WORLD angle so the upright text breathes in and
-   * out as its anchor rounds the circle.
+   * Two writes per frame per ring: the group's rotation and the gradient's counter-rotation
+   * (the lamp stays at twelve — see LitTrack). The centre is republished into `meta` on
+   * every render, so a resize changes the geometry under the loop without restarting it.
    */
   const rotRef = useRef<SVGGElement | null>(null);
   const gradRef = useRef<SVGLinearGradientElement | null>(null);
-  const labelRefs = useRef(new Map<string, SVGGElement>());
   const hoverRef = useRef(false);
   const boostRef = useRef(0);
-  const meta = useRef({ cx, cy, rl, labels: labelMeta });
-  meta.current = { cx, cy, rl, labels: labelMeta };
+  const meta = useRef({ cx, cy });
+  meta.current = { cx, cy };
 
   /** Ref-compared rather than effect-on-mount, so a remount mid-session (the phone panes
    *  unmount freely) cannot replay a spin that already happened. */
@@ -836,7 +586,8 @@ export function SegmentedRing({
           boostRef.current * (1 - Math.exp(-dt / KICK_TAU)) + KICK_FLOOR * dt,
         );
         a += step;
-        boostRef.current = boostRef.current - step < 0.5 ? 0 : boostRef.current - step;
+        boostRef.current =
+          boostRef.current - step < 0.5 ? 0 : boostRef.current - step;
       } else {
         a += v * dt;
       }
@@ -847,17 +598,6 @@ export function SegmentedRing({
         "gradientTransform",
         `rotate(${-a} ${m.cx} ${m.cy})`,
       );
-      for (const L of m.labels) {
-        const el = labelRefs.current.get(L.key);
-        if (!el) continue;
-        const world = ((L.baseDeg + a - 90) * Math.PI) / 180;
-        const local = ((L.baseDeg - 90) * Math.PI) / 180;
-        const d = labelDist(m.rl, L.w, world);
-        el.setAttribute(
-          "transform",
-          `translate(${m.cx + d * Math.cos(local)} ${m.cy + d * Math.sin(local)}) rotate(${-a})`,
-        );
-      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -867,58 +607,82 @@ export function SegmentedRing({
   return (
     <div
       className="relative inline-flex shrink-0 items-center justify-center"
-      style={{ width: boxW, maxWidth: "100%" }}
+      style={{ width: size, maxWidth: "100%" }}
       // Hover slows the spin — the ring's own feedback, now that the background highlight
       // is gone. On the ring's box rather than the whole header row, so pointing at the
       // TEXT does not read as pointing at the chart.
       onPointerEnter={spin ? () => (hoverRef.current = true) : undefined}
       onPointerLeave={spin ? () => (hoverRef.current = false) : undefined}
     >
-      {/* First in DOM order so it paints beneath the arcs. It is centred on the BOX rather
-          than inset from it, because a labelled box is the ring plus 60px a side and an inset
-          bloom would be an ellipse the width of the label columns. The SVG centres the ring in
-          that same box, so a centred square of the ring's own size lands exactly on it. */}
+      {/* First in DOM order so it paints beneath the arcs. The box is the ring's own size
+          now that the label pad is gone, so a centred square of that size lands exactly on
+          the donut. */}
       {glow && <PillarBloom size={size} hue={hue} />}
       <svg
         // POSITIONED, so DOM order decides paint order and the bloom lands underneath — the
         // same fix the single ring documents. A static SVG paints in step 7 and the absolutely
         // positioned bloom in step 8, i.e. the lamp over the ring rather than under it.
         className="relative"
-        // Scales as one object in a narrow column: the arcs, the gaps and the type all shrink
-        // together, so the chart stays itself rather than reflowing into a different chart.
+        // Scales as one object in a narrow column: the arcs and the gaps shrink together,
+        // so the chart stays itself rather than reflowing into a different chart.
         width="100%"
-        viewBox={`${-padX} ${-padY} ${boxW} ${boxH}`}
+        viewBox={`0 0 ${size} ${size}`}
         aria-hidden
       >
         <LitTrack id={trackId} size={size} gradRef={gradRef} />
-        {/* EVERYTHING that belongs to the data rotates as one group — arcs, laps and
-            labels — so a turning ring is a turning object rather than paint sliding under
-            fixed furniture. The gradient it is stroked with counter-rotates (see LitTrack),
-            so the lamp stays at twelve o'clock while the object turns beneath it. */}
+        {/* EVERYTHING that belongs to the data rotates as one group, so a turning ring is a
+            turning object rather than paint sliding under fixed furniture. The gradient it
+            is stroked with counter-rotates (see LitTrack), so the lamp stays at twelve
+            o'clock while the object turns beneath it. */}
         <g ref={rotRef}>
+          {/* THE WHOLE RING IS A GHOST: one dashed full-circle track and nothing else.
+              Career with no counted goal — "no goals" is a statement about the board, and
+              dashes are already this app's word for "there is no source here". */}
+          {ghost && (
+            <path
+              d={arcPath(0, 0.9999, r)}
+              fill="none"
+              stroke={trackStroke(size, trackId)}
+              strokeWidth={stroke}
+              strokeLinecap="butt"
+              strokeDasharray={`${Math.max(2, stroke)} ${Math.max(3, stroke * 1.6)}`}
+            />
+          )}
+
+          {/* NOT LOADED YET is not NO SOURCE: a plain empty circle, never dashes. The
+              fetch landing turns this into arcs; a dashed ring would have said the wire
+              was missing and then quietly contradicted itself a moment later. */}
+          {!ghost && arcs.length === 0 && (
+            <circle
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill="none"
+              stroke={trackStroke(size, trackId)}
+              strokeWidth={stroke}
+            />
+          )}
+
           {slices.map((s, i) => (
             <g key={s.key}>
-              {/* The slice's own track. Drawn unless the slice is a bare spacer, so an
-                  empty segment reads as a segment that is empty rather than an absence —
-                  and a spacer reads as nothing, which is what it is. */}
-              {!s.bare && (
-                <path
-                  d={arcPath(s.start, s.start + s.span, r)}
-                  fill="none"
-                  stroke={trackStroke(size, trackId)}
-                  strokeWidth={stroke}
-                  strokeLinecap="butt"
-                  strokeDasharray={
-                    s.ghost
-                      ? `${Math.max(2, stroke)} ${Math.max(3, stroke * 1.6)}`
-                      : undefined
-                  }
-                />
-              )}
+              {/* The slice's own track, so an empty part reads as a part that is empty
+                  rather than as an absence. Dashed only when that part has no source. */}
+              <path
+                d={arcPath(s.start, s.start + s.span, r)}
+                fill="none"
+                stroke={trackStroke(size, trackId)}
+                strokeWidth={stroke}
+                strokeLinecap="butt"
+                strokeDasharray={
+                  s.dashed
+                    ? `${Math.max(2, stroke)} ${Math.max(3, stroke * 1.6)}`
+                    : undefined
+                }
+              />
               {/* Mounted UNCONDITIONALLY, and drawn across the whole slice with the fill
                   expressed as a dash offset rather than as a shorter path.
 
-                  Three donuts used to pop into existence when /api/rings landed while the
+                  The donuts used to pop into existence when /api/rings landed while the
                   adherence ring beside them travelled — the gap was that a shorter path is a
                   different `d`, and `d` is not animatable. pathLength normalises the slice to
                   1 whatever its real length, so the offset is just `1 - fill` and the same
@@ -929,10 +693,11 @@ export function SegmentedRing({
               <path
                 d={arcPath(s.start, s.start + s.span, r)}
                 fill="none"
-                // A slice's OWN colour when it has one — a skill's chosen hue — else one
-                // step off the pillar hue: same family, distinct members. The DATA is
-                // still the arc's length and fill; the colour only says which one this is.
-                stroke={s.color ?? segmentShade(hue, i)}
+                // One step off the pillar hue per part: same family, distinct members. The
+                // DATA is still the arc's length and fill; the colour only says which one
+                // this is, and the part list beside it takes the same step at the same
+                // index so the legend and the donut cannot disagree.
+                stroke={segmentShade(hue, i)}
                 strokeWidth={stroke}
                 // BUTT, never round: round caps add half a stroke width at each end, which
                 // would make the smallest non-zero fills read as half again their true value
@@ -945,99 +710,6 @@ export function SegmentedRing({
               />
             </g>
           ))}
-
-          {/* THE MID BAND — the second full ring, between the donut and the thin lap.
-              Social's events past its sixth: adjacent to the core commitment but not it,
-              which is what the smaller stroke at the larger radius says without a legend.
-              Same slice machinery as the donut, so a weight means one thing everywhere. */}
-          {midSlices.map((s, i) => (
-            <g key={`mid-${s.key}`}>
-              {!s.bare && (
-                <path
-                  d={arcPath(s.start, s.start + s.span, rMid)}
-                  fill="none"
-                  stroke={trackStroke(size, trackId)}
-                  strokeWidth={midStroke}
-                  strokeLinecap="butt"
-                  strokeDasharray={
-                    s.ghost
-                      ? `${Math.max(2, midStroke)} ${Math.max(3, midStroke * 1.6)}`
-                      : undefined
-                  }
-                />
-              )}
-              <path
-                d={arcPath(s.start, s.start + s.span, rMid)}
-                fill="none"
-                stroke={s.color ?? segmentShade(hue, i + 1)}
-                strokeWidth={midStroke}
-                strokeLinecap="butt"
-                pathLength={1}
-                strokeDasharray="1 1"
-                strokeDashoffset={s.span > 0 ? 1 - s.fillSpan / s.span : 1}
-                className="motion-arc"
-              />
-            </g>
-          ))}
-
-          {/* The outer laps: thinner, and set outside the donut with a gap, so they read as
-              an extra around the pillar rather than a part of it — which is exactly their
-              standing in the maths, where their weight is zero. Full base hue: a lap is an
-              extra, not a slice, so it does not join the shade family. */}
-          {laps.map((s) => (
-            <g key={`lap-${s.key}`}>
-              <path
-                d={arcPath(s.start, s.start + s.span, rLap)}
-                fill="none"
-                stroke={trackStroke(size, trackId)}
-                strokeWidth={lapStroke}
-                strokeLinecap="butt"
-              />
-              {s.fillSpan > 0 && (
-                <path
-                  d={arcPath(s.start, s.start + s.fillSpan, rLap)}
-                  fill="none"
-                  stroke={hue}
-                  strokeWidth={lapStroke}
-                  strokeLinecap="butt"
-                />
-              )}
-            </g>
-          ))}
-
-          {/* The names, riding their own arcs. Inside the rotating group so they travel
-              with their segments; each <g> is counter-rotated per frame so the TEXT stays
-              upright the whole way round. The resting transform below is the same maths at
-              angle zero, so a ring that never spins is simply a ring paused here. */}
-          {labelMeta.map((L) => {
-            const local = ((L.baseDeg - 90) * Math.PI) / 180;
-            const d = labelDist(rl, L.w, local);
-            const x = cx + d * Math.cos(local);
-            const y = cy + d * Math.sin(local);
-            return (
-              <g
-                key={`t-${L.key}`}
-                ref={(el) => {
-                  if (el) labelRefs.current.set(L.key, el);
-                  else labelRefs.current.delete(L.key);
-                }}
-                transform={`translate(${x} ${y})`}
-              >
-                <text
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={LABEL_SIZE}
-                  // Muted for a ghost: the label of a metric with no source is a statement
-                  // about the app, and it should not carry the same weight as a live one.
-                  style={{
-                    fill: L.ghost ? "var(--color-muted)" : "var(--color-ink)",
-                  }}
-                >
-                  {L.label}
-                </text>
-              </g>
-            );
-          })}
         </g>
       </svg>
       {children && (
@@ -1047,242 +719,4 @@ export function SegmentedRing({
       )}
     </div>
   );
-}
-
-/** One adhered event, as the drill-downs and the band builders both receive it. */
-export type EventItem = { date: string; title: string };
-
-/**
- * THE SOCIAL RING'S BANDS, from the fortnight's adhered events.
- *
- * Inner (main): SIX SLOTS, exactly, one per event against the owner's six-a-fortnight
- * minimum, empty slots drawn as track because the target is real. Mid: the events BEYOND
- * six, always full. Outer thin: outreach against its two.
- *
- * The inner band no longer splits on recurrence, and it no longer GROWS. Both changes
- * follow the same ruling `/api/rings` already made when it stopped scoring the metric on
- * recurring events alone: most of a social life is one-offs, so a band that only the
- * standing kind could fill was a band designed to sit unfilled — the exact shape that keeps
- * the gym off the non-negotiables. Every adhered graphite event now takes a slot, in the
- * order the lists arrive; which of them repeats is still a real fact and is still what the
- * drill-down's two lists are built from, it simply stopped deciding what the ring says.
- *
- * `Math.max(eventsRequired, …)` used to size the inner band, so a busy fortnight quietly
- * added slots and the ring stayed at exactly six-sixths' worth of colour however much
- * happened. That made the threshold invisible: eleven events drew the same full circle as
- * six, in eleven thinner arcs. Six slots, always — the circle IS the minimum, and what the
- * circle looks like when it is met never changes.
- *
- * `null` events mean the calendar could not be read: the band goes ghost, never zero — the
- * same rule the old single slice kept. EITHER list being null ghosts it, because the total
- * is what the band draws and a total missing half its input is not a total. The route
- * writes both or neither, so this only ever fires as a whole.
- */
-export function socialBands(
-  graphite: EventItem[] | null,
-  oneOff: EventItem[] | null,
-  outreach: { count: number; required: number },
-  eventsRequired: number,
-): { segments: RingSegment[]; mid: RingSegment[]; outer: RingSegment[] } {
-  // One tally. The two lists arrive split by recurrence because the drill-down reads them
-  // that way; the ring does not care, and joining them here is what keeps the ring and the
-  // caption beneath it — which prints the same combined count — from disagreeing.
-  const events =
-    graphite == null || oneOff == null ? null : graphite.length + oneOff.length;
-
-  const segments: RingSegment[] =
-    events == null
-      ? [{ key: "events", label: "Events", fill: null, weight: 1, ghost: true }]
-      : Array.from(
-          { length: eventsRequired },
-          (_, i): RingSegment => ({
-            key: `ev${i}`,
-            // One name for the band, on its first slot — six copies would be noise.
-            label: i === 0 ? "Events" : undefined,
-            fill: i < events ? 1 : 0,
-            weight: 1,
-            ghost: false,
-          }),
-        );
-
-  /**
-   * THE EXTRAS BAND — one slice per event past the sixth, and it is FULL BY CONSTRUCTION.
-   *
-   * Every slice is `fill: 1` and there is no remainder, bare or otherwise, so the band has
-   * no empty track anywhere on it. That is the entire safeguard: a band with nothing unfilled
-   * on it cannot be read as a thing to fill, cannot be got closer to, and cannot become a
-   * second target sitting outside the first. It appears at seven events and it looks the same
-   * at twenty; only the number of divisions changes, which is the one fact it exists to
-   * carry — that there were several, not merely "some". The inner six remains the only band
-   * in this pillar with a shortfall drawn on it, and therefore the only one that reads as a
-   * quota.
-   *
-   * It shares the circle rather than keeping the inner band's one-sixth unit, deliberately.
-   * A unit-sized extras band would be a partially drawn ring, i.e. a progress bar, and would
-   * put a seventh event on the same scale as the six — the very comparison the cap exists to
-   * refuse. Absent entirely below seven: a band saying "no extras" is a target announcing
-   * itself before anything has happened.
-   *
-   * This is the band the one-off events used to ride, and it is vacated rather than shared:
-   * recurrence no longer draws anything of its own, so nothing is displaced.
-   */
-  const extras = events == null ? 0 : Math.max(0, events - eventsRequired);
-  const mid: RingSegment[] = Array.from(
-    { length: extras },
-    (_, i): RingSegment => ({
-      key: `ex${i}`,
-      // Named once, and named flatly. "Extra" is what these are — not a bonus, not a
-      // surplus, not a streak; the app has no word for doing well and must not learn one.
-      label: i === 0 ? "Extra" : undefined,
-      fill: 1,
-      weight: 1,
-      ghost: false,
-    }),
-  );
-
-  const outer: RingSegment[] = Array.from(
-    { length: outreach.required },
-    (_, i): RingSegment => ({
-      key: `out${i}`,
-      label: i === 0 ? "Outreach" : undefined,
-      fill: i < outreach.count ? 1 : 0,
-      weight: 1,
-      ghost: false,
-    }),
-  );
-
-  return { segments, mid, outer };
-}
-
-/**
- * THE PORTFOLIO RING'S BANDS, one segment per SKILL worked this fortnight.
- *
- * Inner (main): the ACTIVE skills — each skill's arc is its sessions in the window, in the
- * skill's own colour, against the four-a-fortnight minimum; the shortfall is drawn as
- * track because the target is real. Mid: the PARKED skills — still done, not imperative —
- * in the same one-session unit with BARE remainder, because parked work has no quota.
- *
- * `null` means /api/rings has not landed: one plain empty slice, the same "not loaded is
- * not zero" statement the old single-metric donut made.
- */
-export function portfolioBands(
-  skills: SkillSlice[] | null,
-  required: number,
-): { segments: RingSegment[]; mid: RingSegment[] } {
-  if (skills == null)
-    return {
-      segments: [
-        { key: "pending", label: "Skills", fill: null, weight: 1, ghost: false },
-      ],
-      mid: [],
-    };
-
-  /**
-   * ONE BAND FOR EVERY SKILL, active and parked alike — the owner's ruling.
-   *
-   * It was two: active skills on the donut, parked ones on a mid band. That split drew a
-   * distinction the arithmetic never made — `skills` counts every `skill_time` row
-   * regardless of state — so the same session moved rings depending on a roster decision
-   * made weeks earlier, and the fortnight looked emptier for it. Three concentric bands
-   * also left no way to tell which label belonged to which arc, which is the other half of
-   * this change (see the coloured labels in the row beneath).
-   *
-   * Parked skills are still visibly different: they keep their own hue but are not sorted
-   * ahead of anything, and the roster screen is where that state is read. A ring is for
-   * what happened, not for what you intended to happen.
-   */
-  const skillSeg = (s: SkillSlice): RingSegment => ({
-    key: `sk${s.id}`,
-    label: s.name,
-    fill: 1,
-    weight: s.sessions,
-    ghost: false,
-    color: s.color ?? skillDefaultHex(s.id),
-  });
-
-  // Only skills with a session in the window are in `skills` at all, so this is "what was
-  // worked", not "the roster". Active first, so the two you are levelling lead the arc.
-  const worked = [
-    ...skills.filter((s) => s.state !== "parked"),
-    ...skills.filter((s) => s.state === "parked"),
-  ];
-  const total = worked.reduce((n, s) => n + s.sessions, 0);
-
-  const segments: RingSegment[] =
-    worked.length === 0
-      ? [{ key: "skills", label: "Skills", fill: 0, weight: 1, ghost: false }]
-      : [
-          ...worked.map(skillSeg),
-          // The unfilled remainder of the threshold, so a half-worked fortnight reads as
-          // half a ring rather than as a full one made of fewer arcs.
-          ...(total < required
-            ? [
-                {
-                  key: "sk-rest",
-                  fill: 0,
-                  weight: required - total,
-                  ghost: false,
-                } satisfies RingSegment,
-              ]
-            : []),
-        ];
-
-  return { segments, mid: [] };
-}
-
-/**
- * ONE constructor for a pillar's bands, shared by the Today column and the record page —
- * two surfaces drawing the same three rings must not each hold their own copy of what a
- * pillar's bands are.
- */
-export function bandsForPillar(
-  pk: PillarKey,
-  ring: PillarRingView | null,
-  data: {
-    social: EventItem[] | null;
-    oneOff: EventItem[] | null;
-    skills: SkillSlice[] | null;
-  },
-  pillarName: string,
-): { segments: RingSegment[]; mid: RingSegment[]; outer: RingSegment[] } {
-  const asSegment = (m: MetricRing): RingSegment => ({
-    key: m.key,
-    label: m.label,
-    fill: m.fill,
-    weight: m.weight,
-    ghost: m.state === "ghost",
-  });
-
-  if (pk === "social_capital") {
-    const om = ring?.metrics.find((m) => m.key === "outreach");
-    return socialBands(
-      data.social,
-      data.oneOff,
-      { count: om?.count ?? 0, required: om?.required ?? 2 },
-      METRICS.find((m) => m.key === "social_events")?.required ?? 6,
-    );
-  }
-  if (pk === "portfolio") {
-    const b = portfolioBands(
-      data.skills,
-      METRICS.find((m) => m.key === "skills")?.required ?? 4,
-    );
-    // The donut is skills and the mid band is the parked ones; the OUTER lap is project
-    // hours, on the same footing Misc and Steps have on Physical. Filtered from the ring
-    // rather than named here, so a future weight-0 metric on this pillar needs no edit.
-    return {
-      ...b,
-      outer: ring ? ring.metrics.filter((m) => m.lap).map(asSegment) : [],
-    };
-  }
-  // Physical: the metric donut it always was, misc riding the thin lap. Before the fetch
-  // lands there is one plain empty slice rather than a dashed one: dashes mean "no source
-  // exists", and "not loaded yet" is a different statement.
-  return {
-    segments: ring
-      ? ring.metrics.filter((m) => !m.lap).map(asSegment)
-      : [{ key: "pending", label: pillarName, fill: null, weight: 1, ghost: false }],
-    mid: [],
-    outer: ring ? ring.metrics.filter((m) => m.lap).map(asSegment) : [],
-  };
 }

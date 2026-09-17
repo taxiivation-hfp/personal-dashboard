@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/client";
-import { getDayView, listGoals, listSkills } from "@/lib/queries";
+import { getDayView, listGoals } from "@/lib/queries";
 import { getCalendarForDate } from "@/lib/google";
 import { isISODate, todayISO } from "@/lib/dates";
 import Today from "@/components/Today";
@@ -35,20 +35,15 @@ export default async function Page({
   const view = sp.view === "timeline" ? ("timeline" as const) : undefined;
 
   const cal = await getCalendarForDate(date);
-  const [data, goals, skills] = await Promise.all([
+  // Skills are HIDDEN, not deleted (spec §1), so nothing on this screen reads them any more
+  // and the listSkills call went with the prop. The rows, their sessions and their colours
+  // are all still in the database and queries.ts still knows how to read them.
+  const [data, goals] = await Promise.all([
     getDayView(db, date, cal.events, cal.connected),
     listGoals(db),
-    // Anchored to the date being viewed — the 14-day skill window is relative to it.
-    listSkills(db, date),
   ]);
-  // Goals and skills now live in the right column — there is no separate route.
+  // Goals live in the right column — there is no separate route.
   return (
-    <Today
-      initial={data}
-      today={today}
-      goals={goals}
-      skills={skills}
-      initialView={view}
-    />
+    <Today initial={data} today={today} goals={goals} initialView={view} />
   );
 }

@@ -34,8 +34,10 @@ and keeps its history.
 
 ## What is here
 
-One file per source file, each block an exact slice of that file at commit `c86f000` with
-its original line range:
+One file per source file, each block an exact slice of that file with its original line
+range. The `src/lib` and `src/app/api` half was taken at commit `c86f000`, the component half
+at `848d94e` (the foundation commit, which is where those files still stood when the UI pass
+opened them) — each file's own header says which.
 
 | File | Came from |
 |---|---|
@@ -45,7 +47,10 @@ its original line range:
 | `queries.ts.md` | `src/lib/queries.ts` — `eventWorkIn`, the outreach fact, the external calendar counts in `getRingCounts` |
 | `google.ts.md` | `src/lib/google.ts` — `CalEvent.recurring`, whose only reader was the Social ring |
 | `productivity.ts.md`, `productivity.test.ts.md` | Graphite's "a pillar, so no points" rationale and its test |
+| `PillarRing.tsx.md` | `src/components/PillarRing.tsx` — `socialBands`, the mid band, `EventItem`, the `social_capital` tone entries |
+| `PillarSections.tsx.md` | `src/components/PillarSections.tsx` — the Social props and the Events drill-down |
+| `Today.tsx.md` | `src/components/Today.tsx` — the event-list state and its `/api/rings` reads |
+| `Dashboard.tsx.md` | `src/components/Dashboard.tsx` — the same state on the record, and the Social entry in its pillar order |
 
-The UI half of Social (`socialBands` and the mid band in `PillarRing.tsx`, the Events drill
-in `PillarSections.tsx`, the event-list state in `Today.tsx` and `Dashboard.tsx`) is parked
-here by whoever removes it from those components, on the same one-file-per-source pattern.
+The UI half is now parked too. Nothing in `src/` references Social; `getPillars` filters the
+`social_capital` row out of every listing and the row itself is untouched.

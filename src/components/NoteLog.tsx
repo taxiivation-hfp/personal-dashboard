@@ -57,7 +57,10 @@ export const DOC_HABITS: Record<
   },
   // ASC.ND — the owner's ask, 2026-08-24: a session logger on the outreach/reading
   // model. Its notes join the written log as their own kind (see dayLog.ts).
-  ascnd: { placeholder: "What did you work on?" },
+  // "What did you do?", the owner's own wording (spec §5). The routine is stretching,
+  // skincare and posture — things you DO rather than work on, and the old verb read as a
+  // question about a project.
+  ascnd: { placeholder: "What did you do?" },
 };
 
 export default function NoteLog({

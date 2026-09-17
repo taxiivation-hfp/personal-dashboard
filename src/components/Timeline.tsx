@@ -10,6 +10,7 @@ import {
   type CSSProperties,
 } from "react";
 import type { GoalView, TimelineWindow } from "@/lib/queries";
+import HabitBox from "./HabitBox";
 import {
   timelineMonths,
   timelineGroups,
@@ -51,7 +52,8 @@ import {
  * THE FLOATING WINDOWS are rows of timeline_windows, added by the two buttons at the top
  * left. A GOAL window is one of the board's own goals, placed here BY CHOICE: this screen
  * stores which and where, never a second copy, so the card and the board can never
- * disagree about one. A TEXT window is a few of the owner's words with a tint from the
+ * disagree about one — including its STATUS, which a goal note's tick box writes straight
+ * to the goal (see `onGoalDone`). A TEXT window is a few of the owner's words with a tint from the
  * curated WINDOW_TINTS — tap to write, the swatches sit under the words while writing,
  * and removing one asks first because the words go with it. Positions are world pixels
  * from a fixed origin, so nothing shifts as months roll in on the right.
@@ -77,6 +79,14 @@ const TAP_SLOP = 4;
 const monthName = (ym: string) =>
   new Date(`${ym}-15T12:00:00`).toLocaleDateString("en-AU", { month: "short" });
 const monthYear = (ym: string) => ym.slice(0, 4);
+
+/** "2026-08-02" -> "2 Aug". Noon, never midnight: a bare ISO date parses as UTC and lands
+ *  on the day before anywhere west of Greenwich. */
+const shortDate = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+  });
 
 const json = (method: string, body: unknown) => ({
   method,
@@ -320,13 +330,19 @@ function TextEditor({
 export default function Timeline({
   today,
   goals,
+  onGoalDone,
 }: {
   /** The real today — decides which month wears the accent and where the view opens. */
   today: string;
-  /** The board's own goals, handed down so a subgoal ticked on the board is the same
+  /** The board's own goals, handed down so a subtask ticked on the board is the same
    *  object here. Which of them float is decided by timeline_windows, not by status: a
    *  goal is on the timeline while the owner has put it there. */
   goals: GoalView[];
+  /** A goal note's tick box. done=true sets status 'done' (the engine stamps
+   *  completed_at); false returns it to 'active' and clears the stamp. The caller owns the
+   *  write and the refreshed `goals`, exactly as it owns the subtask ticks — this screen
+   *  keeps no copy of a goal and must not start keeping one now. */
+  onGoalDone: (id: number, done: boolean) => Promise<void>;
 }) {
   const months = useMemo(() => timelineMonths(today), [today]);
   const groups = useMemo(() => timelineGroups(months), [months]);
@@ -906,7 +922,36 @@ export default function Timeline({
                 {g ? (
                   <>
                     <div className="flex items-start gap-2">
-                      <p className="min-w-0 flex-1 font-serif text-small leading-snug">
+                      {/* THE TICK MARKS THE GOAL DONE, from the roadmap it is planned on —
+                          the owner's ruling (spec §6). The note STAYS when it is ticked and
+                          says when: a year you are standing back from is made of the things
+                          that finished as much as the things still running, and a card that
+                          vanished on completion would leave the line telling only half the
+                          story. It unticks again too: a tick is a claim, and a claim has to
+                          be correctable or it stops being made honestly.
+                          cardDown already bails out on a button, so this can never start a
+                          drag — and the gesture machinery below needs no change for it. */}
+                      <button
+                        type="button"
+                        onClick={() => onGoalDone(g.id, g.status !== "done")}
+                        aria-pressed={g.status === "done"}
+                        aria-label={
+                          g.status === "done"
+                            ? `Reopen ${g.title}`
+                            : `Mark ${g.title} done`
+                        }
+                        className="mt-0.5 shrink-0"
+                      >
+                        <HabitBox
+                          done={g.status === "done"}
+                          tone="var(--color-accent)"
+                        />
+                      </button>
+                      <p
+                        className={`min-w-0 flex-1 font-serif text-small leading-snug ${
+                          g.status === "done" ? "text-[var(--color-muted)]" : ""
+                        }`}
+                      >
                         {g.title}
                       </p>
                       {/* Off the timeline, one tap: only the placement is forgotten, and
@@ -933,16 +978,23 @@ export default function Timeline({
                         {Math.round(g.progress * 100)}%
                       </span>
                     </div>
+                    {/* The line that says what to do next — or, on a finished goal, WHEN it
+                        finished. An undated completion still reads "✓ done": goals ticked
+                        before completed_at was ever written have no date, and a fact with no
+                        date is not a missing fact. */}
                     <p className="mt-1.5 text-micro leading-snug text-[var(--color-muted)]">
                       {g.status === "done" ? (
-                        "achieved"
+                        <>
+                          ✓ done
+                          {g.completedAt ? ` ${shortDate(g.completedAt)}` : ""}
+                        </>
                       ) : next ? (
                         <>
                           next ·{" "}
                           <span className="text-[var(--color-ink)]">{next.title}</span>
                         </>
                       ) : g.subgoals.length === 0 ? (
-                        "no subgoals yet"
+                        "no subtasks yet"
                       ) : (
                         "every step ticked"
                       )}

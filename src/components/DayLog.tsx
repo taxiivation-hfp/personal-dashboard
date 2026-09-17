@@ -5,7 +5,6 @@ import type { CSSProperties } from "react";
 import JournalDrawing from "./JournalDrawing";
 import JournalReader from "./JournalReader";
 import WorkoutLog from "./WorkoutLog";
-import SkillLog from "./SkillLog";
 import NoteLog, { DOC_HABITS } from "./NoteLog";
 import Sheet from "./Sheet";
 import { toneColor } from "./PillarRing";
@@ -41,8 +40,10 @@ import type { LogDay, LogEntry, LogKind } from "@/lib/dayLog";
  *
  * IT STILL OWNS NOTHING — but it OPENS everything. The owner's ruling, 2026-09-03: /journal
  * folded into this log, and every entry in the day reader opens ITS OWN dialog — a page in
- * the journal reader, a gym session in the workout dialog, a skill session in its logger, a
- * document habit in NoteLog. The one-row-one-writer rule survives because those dialogs ARE
+ * the journal reader, a gym session in the workout dialog, a document habit in NoteLog.
+ * (A skill session used to open its logger too; skills are HIDDEN since the pivot and no
+ * skill entry reaches this screen.) The one-row-one-writer rule survives because those
+ * dialogs ARE
  * the writers the entries always had: nothing here stores a copy or invents a second write
  * path, this screen only summons the surface that already owns the row. A drift stays
  * read-only — its reason belongs to a calendar block, which is marked where the day is
@@ -53,35 +54,49 @@ import type { LogDay, LogEntry, LogKind } from "@/lib/dayLog";
  */
 
 /**
- * The pillar a kind belongs to, and its hue is resolved through `toneColor` — the OWNER'S
- * chosen colour from /colours winning over the CSS default, the exact resolution the
- * rings run. It was `var(--color-physical)` etc. here, which is only the default half of
- * that resolution, so a recoloured pillar left its ring one hue and its tabs another —
- * two screens disagreeing about what a colour means. The curated palette is certified
- * for white on top (the chip test in CLAUDE.md), which is what lets any of these fill a
- * tab behind white text. Drift is deliberately absent: it belongs to a calendar block
- * rather than to a pillar, and its tab is drawn unfilled.
+ * A kind's pillar, for its tab's fill — resolved through `toneColor`, so the OWNER'S
+ * chosen colour from /colours wins over the CSS default, the exact resolution the rings
+ * run. It was `var(--color-physical)` etc. here, which is only the default half of that
+ * resolution, so a recoloured pillar left its ring one hue and its tabs another — two
+ * screens disagreeing about what a colour means. The curated palette is certified for
+ * white on top (the chip test in CLAUDE.md), which is what lets any of these fill a tab
+ * behind white text.
+ *
+ * null = NEUTRAL — the warm grey a habit with no pillar takes on the checklist, so a tab
+ * and a tick row can never disagree about what "no pillar" looks like. White on
+ * --color-neutral measures 4.62:1, so it passes the chip test as well.
+ *
+ * Journal and reading are neutral by the pivot (spec §5/§7); gym and ASC.ND are HEALTH;
+ * outreach is CAREER. Drift is still absent: it belongs to a calendar block rather than
+ * to a pillar, and its tab is drawn unfilled — this app does not colour a plan not
+ * happening.
  */
-const KIND_PILLAR: Record<Exclude<LogKind, "drift">, PillarKey> = {
-  journal: "portfolio",
+const KIND_PILLAR: Record<Exclude<LogKind, "drift">, PillarKey | null> = {
+  journal: null,
   gym: "physical",
-  skill: "portfolio",
-  outreach: "social_capital",
-  // Reading and ASC.ND are Portfolio habits — their rows live under that pillar on the
-  // checklist, so their tabs wear the same hue here.
-  reading: "portfolio",
-  ascnd: "portfolio",
+  outreach: "portfolio",
+  reading: null,
+  ascnd: "physical",
 };
 
 /** Pillar key -> the owner's chosen colour, or null for the default. Fetched once from
  *  /api/pillars and threaded down; `toneColor` does the resolving. */
 type PillarColors = Partial<Record<PillarKey, string | null>>;
 
+/** A kind's fill. ONE resolver, so the tile's tabs, the reader's tabs and the dialog a
+ *  row opens cannot end up three different hues for one kind. */
+const kindHue = (
+  pillar: PillarKey | null,
+  colors: PillarColors,
+): string =>
+  pillar == null
+    ? "var(--color-neutral)"
+    : toneColor(pillar, colors[pillar] ?? null);
+
 /** What a kind is CALLED where its entry carries no meta of its own. */
 const KIND_LABEL: Record<LogKind, string> = {
   journal: "journal",
   gym: "session",
-  skill: "session",
   outreach: "outreach",
   reading: "reading",
   ascnd: "ASC.ND",
@@ -174,10 +189,9 @@ function tabSkin(
       className:
         "border border-[var(--color-line-strong)] bg-[var(--color-panel)] text-[var(--color-ink)]",
     };
-  const pillar = KIND_PILLAR[e.kind];
   return {
     className: "text-white",
-    style: { background: toneColor(pillar, colors[pillar] ?? null) },
+    style: { background: kindHue(KIND_PILLAR[e.kind], colors) },
   };
 }
 
@@ -393,11 +407,9 @@ const editable = (e: LogEntry): boolean =>
     ? e.id != null
     : e.kind === "gym"
       ? e.id != null && (e.meta === "strength" || e.meta === "cardio")
-      : e.kind === "skill"
-        ? e.id != null && e.ref != null
-        : e.kind === "drift"
-          ? false
-          : e.ref != null;
+      : e.kind === "drift"
+        ? false
+        : e.ref != null;
 
 function DayReader({
   day,
@@ -901,36 +913,10 @@ export default function DayLog({
           />
         )}
 
-      {entry?.kind === "skill" && entry.id != null && entry.ref != null && (
-        <SkillLog
-          key={`s${entry.id}`}
-          name={entry.label ?? "Skill"}
-          date={entry.date}
-          today={today}
-          session={{ id: entry.id, date: entry.date, note: entry.body ?? "" }}
-          // Empty on purpose: the fortnight pane is a way BACK to other sessions, and
-          // here the log itself is that way back. It also keeps onPick unreachable.
-          recent={[]}
-          hue={toneColor("portfolio", pillarColors.portfolio ?? null)}
-          onSave={async (note, day) => {
-            await fetch(`/api/skills/${entry.ref}/time`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ id: entry.id, note, date: day }),
-            }).catch(() => {});
-            await reloadSpan();
-          }}
-          onDelete={async () => {
-            await fetch(
-              `/api/skills/${entry.ref}/time?session=${entry.id}&date=${today}`,
-              { method: "DELETE" },
-            ).catch(() => {});
-            await reloadSpan();
-          }}
-          onPick={() => {}}
-          onClose={() => setEntry(null)}
-        />
-      )}
+      {/* SKILLS ARE HIDDEN, not deleted (spec §1). `LogKind` no longer has a `skill`
+          member and dayLog.ts stops emitting one, so there is no skill row here to open
+          and the SkillLog branch that stood here is gone with it. Every skill session is
+          still in `skill_time`; SkillLog.tsx is still on disk, unedited. */}
 
       {(entry?.kind === "outreach" ||
         entry?.kind === "reading" ||
@@ -938,14 +924,13 @@ export default function DayLog({
         entry.ref != null &&
         (() => {
           const cfg = DOC_HABITS[entry.kind] ?? { placeholder: "What happened?" };
-          const pillar = KIND_PILLAR[entry.kind];
           return (
             <NoteLog
               key={`n${entry.kind}${entry.date}`}
               name={entry.label ?? KIND_LABEL[entry.kind]}
               date={entry.date}
               note={entry.body}
-              hue={toneColor(pillar, pillarColors[pillar] ?? null)}
+              hue={kindHue(KIND_PILLAR[entry.kind], pillarColors)}
               // The entry exists, so the day is ticked — that is what put it in the log.
               done
               pages={cfg.pagesLabel ? entry.value : null}

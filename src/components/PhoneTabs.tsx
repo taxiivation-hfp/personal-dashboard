@@ -1,29 +1,33 @@
 "use client";
 
-import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 
 /**
- * The three columns become three tabs below `lg`.
+ * The desktop's windows become TWO tabs below `lg`.
  *
  * Opens on TODAY — the day's work is the hero and must be what you land on. Tab state is
  * component state rather than a route, so a reload returns you there rather than wherever
  * you happened to wander.
  *
- * Desktop is untouched: this component renders nothing above `lg`, where the three-column
- * grid is already the right answer.
+ * There were three. The calendar pane went with its column on 2026-09-18 (spec §4): the
+ * phone's Today pane carries the day's BLOCKS above its checklist now, which is where a hand
+ * marking them already is, so a pane of its own would be a second place to reach for the
+ * same list.
+ *
+ * Desktop is untouched: this component renders nothing above `lg`, where the three-window
+ * row is already the right answer.
  */
 
-export type PhoneTab = "calendar" | "today" | "pillars";
+export type PhoneTab = "today" | "pillars";
 
 /**
- * The three PANES, which is what the swipe moves between.
+ * The two PANES, which is what the swipe moves between.
  *
  * Stats is deliberately not in here. It is a route, not a pane — a swipe that navigated the
  * browser would be a gesture you cannot undo with the same gesture, which is a different and
- * worse contract than the one the other three have.
+ * worse contract than the one these two have.
  */
-const ORDER: PhoneTab[] = ["calendar", "today", "pillars"];
+const ORDER: PhoneTab[] = ["today", "pillars"];
 
 /** Below this, a horizontal drag is a swipe rather than a scroll. */
 const SWIPE_PX = 56;
@@ -31,8 +35,8 @@ const SWIPE_PX = 56;
 const SWIPE_RATIO = 1.6;
 
 /**
- * Wraps the three panes and handles the swipe. Only the ACTIVE pane is mounted below
- * `lg`, so the phone never pays to render the other two.
+ * Wraps the panes and handles the swipe. Below `lg` only the ACTIVE pane is open; the other
+ * sits in a grid collapsed to 0fr, which is what lets both directions animate.
  */
 export function PhoneSwipe({
   tab,

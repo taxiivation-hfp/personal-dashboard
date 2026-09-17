@@ -9,22 +9,14 @@ import HoursTotal from "./HoursTotal";
 import StepsChart from "./StepsChart";
 import WeightEntry from "./WeightEntry";
 import CalorieLog from "./CalorieLog";
+import { SegmentedRing, toneColor } from "./PillarRing";
+import { projectedColour, SLAB_NEUTRAL } from "@/lib/eventColor";
+import type { DayHours } from "@/lib/productivity";
+import type { PillarFacts } from "@/lib/queries";
 import {
-  SegmentedRing,
-  bandsForPillar,
-  toneColor,
-  type EventItem,
-} from "./PillarRing";
-import { projectedColour, SLAB_GYM, SLAB_NEUTRAL } from "@/lib/eventColor";
-import {
-  CALENDAR_RATES,
   CALORIE_FLOOR,
-  type ProductivitySegment,
-} from "@/lib/productivity";
-import type { GoalView, RecordTask, SkillSlice } from "@/lib/queries";
-import {
-  pillarCaption,
-  type PillarFactInput,
+  PILLAR_NAME,
+  type ArcView,
   type PillarKey,
   type PillarRingView,
 } from "@/lib/rings";
@@ -40,10 +32,16 @@ import {
  * rounded that is not already rounded elsewhere.
  *
  * WHAT IT IS ALLOWED TO SAY. Counts, durations, and how far through a threshold something is.
- * What it must never say: better, worse, up, down, on track, behind. There are no averages,
- * no deltas, no target lines, no window-over-window comparison and no ranking of one day
- * against another. A dashboard that grades you is a scoreboard, and the whole app is built
- * against becoming one.
+ * What it must never say: better, worse, up, down, on track, behind. There are no deltas, no
+ * target lines, no window-over-window comparison and no ranking of one day against another.
+ * A dashboard that grades you is a scoreboard, and the whole app is built against becoming
+ * one.
+ *
+ * THERE IS NO SCORE ON IT ANY MORE, and no task history. The owner's ruling of 2026-09-18
+ * deleted the productivity points (the Hours chart is MINUTES now, stacked by category) and
+ * deleted the In flight / Achieved board — goals are read and edited on /goals and in the
+ * Career ring's drill-down, and a carrying task list was never a thing this app scored, so a
+ * record of it was a record of nothing it believes in.
  *
  * A day with no entry draws NOTHING, everywhere. Most days in a 90-day window are blank in
  * an app this new, and drawing them as zeros would report a catastrophe that never happened.
@@ -76,25 +74,21 @@ const CARD_TINTS = {
   steps: "color-mix(in oklab, var(--color-panel) 93%, var(--color-surface-3) 7%)",
 } as const;
 
-const PILLAR_NAME: Record<PillarKey, string> = {
-  social_capital: "Social",
-  physical: "Physical",
-  portfolio: "Portfolio",
-};
-const ORDER: PillarKey[] = ["social_capital", "physical", "portfolio"];
-
+/**
+ * One day of the adherence window.
+ *
+ * `hours` replaced `productivity`: the score is gone, so what a day carries is the minutes
+ * it worked and where they went. The shape is DayHours, straight off /api/adherence, which
+ * is the same function /api/productivity's drill-down calls — the chart and the sheet that
+ * explains it cannot disagree about a day because they are the same arithmetic.
+ */
 type StripDay = {
   date: string;
   pct: number;
   isToday: boolean;
-  productivity: {
-    points: number;
-    /** RAW adhered minutes — not the rate-weighted ones. "Hours worked" is a duration you
-     *  actually spent; weighting it by a colour would make it a score wearing a clock. */
-    minutes: number;
-    segments: ProductivitySegment[];
-  } | null;
+  hours: DayHours | null;
 };
+
 type TrendDay = {
   date: string;
   weight: number | null;
@@ -102,14 +96,6 @@ type TrendDay = {
   /** The phone's push for that day. null is a day it never reported — never a zero. */
   steps: number | null;
 };
-
-/** "2026-08-02" -> "2 Aug". Noon, never midnight: a bare ISO date parses as UTC and lands
- *  on the day before anywhere west of Greenwich. */
-const shortDate = (iso: string) =>
-  new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", {
-    day: "numeric",
-    month: "short",
-  });
 
 /** 640 -> "10h 40m". Time is shown as time — an abstract number would invite reading it as
  *  a score, which is the one thing these figures are not. */
@@ -120,6 +106,14 @@ function asTime(minutes: number): string {
   if (!h) return `${m}m`;
   return m ? `${h}h ${m}m` : `${h}h`;
 }
+
+/** The same figure, for the chart's own SCALE as well as its readings — where 0 is an
+ *  endpoint of an axis and not an absent figure. `—` is the right answer for a week with
+ *  no hours in it; it is the wrong answer at the foot of a range, where "—–10h 40m" says
+ *  nothing about where the chart starts. Everything else is asTime verbatim, so the axis
+ *  and the tooltip can never spell the same quantity two ways. */
+const asChartTime = (minutes: number): string =>
+  minutes <= 0 ? "0h" : asTime(minutes);
 
 export default function Dashboard({
   date,
@@ -159,11 +153,11 @@ export default function Dashboard({
   /**
    * Which day's workings are open, and from which chart.
    *
-   * The same bargain the Today strip strikes: the bar is a shape you glance at, and the
+   * The same bargain the hero ring strikes: the bar is a shape you glance at, and the
    * arithmetic is one deliberate tap away. Two charts have workings worth opening — hours,
-   * which breaks down into the calendar colours that earned it, and adherence, which breaks
-   * down into what did and did not add. Weight, calories and steps do not: behind those days
-   * is a single number, and a control that opened an empty sheet is worse than no control.
+   * which breaks down into the categories that earned it, and adherence, which breaks down
+   * into what did and did not add. Weight, calories and steps do not: behind those days is a
+   * single number, and a control that opened an empty sheet is worse than no control.
    */
   const [hoursDay, setHoursDay] = useState<string | null>(null);
   /** The WINDOW's hours, broken down by category — the figure's own workings, as opposed to
@@ -174,26 +168,15 @@ export default function Dashboard({
   const [strip, setStrip] = useState<StripDay[] | null>(null);
   const [trends, setTrends] = useState<TrendDay[] | null>(null);
   const [rings, setRings] = useState<PillarRingView[] | null>(null);
-  const [facts, setFacts] = useState<PillarFactInput | null>(null);
-  /** The band data the fortnight rings draw from — same feed the Today column reads. */
-  const [socialEvents, setSocialEvents] = useState<EventItem[] | null>(null);
-  const [oneOffEvents, setOneOffEvents] = useState<EventItem[] | null>(null);
-  const [skills14, setSkills14] = useState<SkillSlice[] | null>(null);
+  const [facts, setFacts] = useState<PillarFacts | null>(null);
   const [colors, setColors] = useState<Partial<Record<PillarKey, string | null>>>({});
   const [streak, setStreak] = useState<number | null>(null);
-  const [goals, setGoals] = useState<GoalView[] | null>(null);
-  /**
-   * EVERY task, done and open — the board's other half.
-   *
-   * Goals and tasks are deliberately different objects (a goal has subgoals and a
-   * percentage; a task is one line that either happened or has not yet), which is why they
-   * sit in two columns rather than one merged list. But they answer the same two questions
-   * the board asks, so both belong under both headings.
-   */
-  const [tasks, setTasks] = useState<RecordTask[] | null>(null);
 
   // The fortnight is fixed — it is what the rings mean — so it loads once and does not
   // move when the window control does. Only the two time series below answer to that.
+  //
+  // /api/goals and /api/tasks?all=1 are GONE with the In flight / Achieved board (spec §6).
+  // Goals live on /goals and inside the Career ring; there is no task history anywhere.
   useEffect(() => {
     let alive = true;
     fetch(`/api/rings?date=${date}`)
@@ -202,20 +185,7 @@ export default function Dashboard({
         if (!alive || d.error) return;
         setRings(d.pillars ?? []);
         setFacts(d.facts ?? null);
-        setSocialEvents(d.socialEventList ?? null);
-        setOneOffEvents(d.oneOffEventList ?? null);
-        setSkills14(d.skills14 ?? null);
       })
-      .catch(() => {});
-    fetch("/api/goals")
-      .then((r) => r.json())
-      .then((d) => alive && !d.error && setGoals(d.goals ?? []))
-      .catch(() => {});
-    // `all=1` — the record wants the finished ones too, where the planning screen wants
-    // only what is left.
-    fetch("/api/tasks?all=1")
-      .then((r) => r.json())
-      .then((d) => alive && !d.error && setTasks(d.tasks ?? []))
       .catch(() => {});
     fetch(`/api/today?date=${date}`)
       .then((r) => r.json())
@@ -278,27 +248,30 @@ export default function Dashboard({
     [strip],
   );
 
+  /**
+   * THE HOURS SERIES — minutes, stacked by category.
+   *
+   * One magnitude, not two. It used to carry a points total for the bar's height with the
+   * minutes riding alongside as a side-channel, because the record was forbidden from
+   * printing the score. With the score deleted the day's value IS its minutes, and a slab
+   * is its category's minutes — so the stack, the tooltip, the legend and the "where the
+   * hours went" sheet all read one number.
+   *
+   * A day the calendar could not be reached has `hours` null and draws NOTHING. An outage
+   * is not a day in which nothing was worked.
+   */
   const hours: ChartPoint[] = useMemo(
     () =>
       (strip ?? []).map((d) => ({
         date: d.date,
-        value: d.productivity ? d.productivity.points : null,
-        segments: d.productivity?.segments.map((s, i) => ({
-          key: `${s.kind}-${s.colorId ?? "d"}-${i}`,
-          points: s.points,
-          fill:
-            s.kind === "sessions"
-              ? SLAB_GYM
-              : s.kind === "time"
-                ? (projectedColour(s.colorId) ?? SLAB_NEUTRAL)
-                : SLAB_NEUTRAL,
-          // Taken straight off the segment, which is where the score itself decided it —
-          // so the chart's legend and the strip's swatches cannot call one slab two things.
-          label: s.label,
-          // Minutes WORKED, straight off the segment for the same reason. The hours
-          // figure's workings sum these; summing points instead would put the quarantined
-          // score on the record.
-          minutes: s.minutes,
+        value: d.hours ? d.hours.minutes : null,
+        segments: d.hours?.categories.map((c) => ({
+          // The label, because the category IS the key — one category may own two calendar
+          // colours, and keying by colour would split Work Part Time into two slabs.
+          key: c.label,
+          minutes: c.minutes,
+          fill: projectedColour(c.colorId) ?? SLAB_NEUTRAL,
+          label: c.label,
         })),
       })),
     [strip],
@@ -329,24 +302,25 @@ export default function Dashboard({
 
   /**
    * The four figures across the top. Chosen so no two answer the same question:
-   * today, this week, this fortnight, and the record so far.
+   * this week's adherence, this week's hours, this fortnight's training, and the record so
+   * far.
    */
   const week = (strip ?? []).slice(-7);
-  const weekHours = week.reduce((s, d) => s + (d.productivity?.minutes ?? 0), 0);
+  const weekHours = week.reduce((s, d) => s + (d.hours?.minutes ?? 0), 0);
   /**
    * THE SEVEN-DAY MEAN, by the owner's ruling — not the figure for the day this window ends
    * on, which is what it used to be.
    *
    * The reasoning is that a single day is a poor thing to open a RECORD with. Today's number
-   * is already the hero on the Today screen at 176px; repeating it here spent the record's
+   * is already the hero on the Today screen at 240px; repeating it here spent the record's
    * first figure restating what the previous screen just said, and it swung wildly — a
    * Sunday with one blocked hour reads nothing like the week around it.
    *
-   * NOTE THIS BENDS A DOCUMENTED RULE. "No average, no delta, no smoothing" governs the
-   * CHARTS below, and it still does: nothing here draws a mean line over a series, which is
-   * the thing that rule exists to prevent — a line you can be found wanting against, day by
-   * day. One stated figure over a named window is a different object, and it is the owner's
-   * call. Do not read it as licence to average anything else.
+   * NOTE THIS BENDS A DOCUMENTED RULE. "No delta, no smoothing" governs the CHARTS below,
+   * and it still does: nothing here draws a mean line over a series, which is the thing that
+   * rule exists to prevent — a line you can be found wanting against, day by day. One stated
+   * figure over a named window is a different object, and it is the owner's call. (The
+   * adherence TRACKER on Today prints an average for the same reason, by the same ruling.)
    *
    * Days with NO figure are excluded rather than counted as zero. `pct` is null when a day
    * had nothing scheduled and nothing to tick — there was no denominator, so there is no
@@ -359,11 +333,6 @@ export default function Dashboard({
     return Math.round(scored.reduce((a, b) => a + b, 0) / scored.length);
   })();
 
-  /** The board's task halves. Split here so the two lists cannot disagree about which is
-   *  which, and so an absent fetch reads as an empty column rather than as a crash. */
-  const openTasks = (tasks ?? []).filter((t) => t.doneOn == null);
-  const doneTasks = (tasks ?? []).filter((t) => t.doneOn != null);
-
   /** Is this record about the present? Every window here ends on `date`. */
   const onToday = today == null || date === today;
   /** The suffix every window label takes, so four figures cannot describe four different
@@ -375,35 +344,6 @@ export default function Dashboard({
         month: "short",
       })}`;
   const daysLogged = (strip ?? []).filter((d) => d.pct > 0).length;
-
-  /**
-   * Finished goals, newest first.
-   *
-   * Goals completed before this app started stamping completed_at have no date. They are
-   * still listed — the achievement is real and the missing date is the app's fault, not the
-   * owner's — and they sort last, because an undated thing cannot claim a place in a
-   * sequence.
-   */
-  const done = (goals ?? [])
-    .filter((g) => g.status === "done")
-    .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
-
-  /**
-   * What is in flight, and the ONE next thing in each.
-   *
-   * The owner's aim, in their words, is "a clear plan on what I have achieved and what I
-   * wanna achieve next". Achieved is the list below; this is the other half, and the next
-   * unticked subgoal is what makes it a plan rather than an inventory — a goal you cannot
-   * name the next step of is a wish.
-   *
-   * Ordered by how far along, furthest first. Not a ranking: the nearly-done ones are the
-   * ones a decision is actually pending on, and burying them under untouched ones is how a
-   * list of intentions turns into wallpaper.
-   */
-  const active = (goals ?? [])
-    .filter((g) => g.status === "active")
-    .map((g) => ({ g, next: g.subgoals.find((s) => !s.done) ?? null }))
-    .sort((a, b) => b.g.progress - a.g.progress);
 
   const loading = strip == null || trends == null || rings == null;
 
@@ -499,13 +439,10 @@ export default function Dashboard({
           <>
           {/* THE FIGURES. A hairline-ruled band, not a row of cards: this app answers a
               card with a rule everywhere else, and four rounded tiles with big numbers in
-              them is the one shape that would make it look like every other dashboard. */}
-          {/* FIVE, since the sessions figure became two. The last one spans both columns below
-              lg: five items in a two-column grid leaves the fifth alone beside an empty
-              cell, which is the same hole the tasks band was just moved out of, in
-              miniature. Stated on the grid rather than passed down as a prop — it is a fact
-              about this layout, not about that figure. */}
-          <div className="grid grid-cols-2 border-y border-[var(--color-line-strong)] max-lg:[&>*:last-child]:col-span-2 lg:grid-cols-5">
+              them is the one shape that would make it look like every other dashboard.
+              FOUR, and four is even — the `last-child:col-span-2` hack that squared off an
+              odd fifth is gone with the skills figure. */}
+          <div className="grid grid-cols-2 border-y border-[var(--color-line-strong)] lg:grid-cols-4">
             {/* EVERY ONE OF THESE ENDS ON `date`, and `date` is the day the record was
                 opened from — which is only usually today. The window moved the moment Today
                 learned to step back; the labels have to move with it or all four figures
@@ -523,18 +460,14 @@ export default function Dashboard({
               value={asTime(weekHours)}
               onOpen={() => setHoursTotal(true)}
             />
-            {/* TWO FIGURES, not one with a split caption — physical and skills are
-                different things done for different reasons; each block IS the way into
-                its own backlog. */}
+            {/* HEALTH, not "physical" — the display name comes from PILLAR_NAME and from
+                nowhere else (spec §7). Sessions, uncapped, and the block IS the way into
+                the log they came from. The skills figure beside it is gone: skills are
+                hidden, and a figure for something you cannot open is a dead number. */}
             <Figure
-              label={onToday ? "physical, past fortnight" : `physical, fortnight ${anchored}`}
+              label={onToday ? "Health, past fortnight" : `Health, fortnight ${anchored}`}
               value={facts ? String(facts.workoutSessions) : "—"}
               href="/sessions"
-            />
-            <Figure
-              label={onToday ? "skills, past fortnight" : `skills, fortnight ${anchored}`}
-              value={facts ? String(facts.skillSessions) : "—"}
-              href="/sessions?kind=skill"
             />
             <Figure
               label={onToday ? "days logged in a row" : `days in a row ${anchored}`}
@@ -542,8 +475,8 @@ export default function Dashboard({
             />
           </div>
 
-          {/* THE THREE PILLARS, at the size they were always meant to be read at. The same
-              segmented donuts as the Today screen, with the same labels at the same arcs —
+          {/* THE TWO PILLARS, at the size they were always meant to be read at. The same
+              segmented donuts as the Today screen, with the same arcs in the same order —
               one object, two places, so opening this never means relearning the chart. */}
           <section className="mt-10">
             <div className="section-head">
@@ -553,290 +486,88 @@ export default function Dashboard({
               </span>
             </div>
 
-            <div className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {ORDER.map((pk) => {
-                const ring = rings?.find((r) => r.pillar === pk) ?? null;
-                // The SAME bands, the SAME motion, the SAME lamp as the Today column —
-                // one object in two places, so opening the record never means relearning
-                // the chart. bandsForPillar is the single constructor both call.
-                const b = bandsForPillar(
-                  pk,
-                  ring,
-                  { social: socialEvents, oneOff: oneOffEvents, skills: skills14 },
-                  PILLAR_NAME[pk],
-                );
-                return (
-                  <div
-                    key={pk}
-                    className="flex flex-col items-center border-t border-[var(--color-line)] pt-5"
+            <div className="mt-4 grid gap-6 sm:grid-cols-2">
+              {(rings ?? []).map((p) => (
+                <div
+                  key={p.key}
+                  className="flex flex-col items-center border-t border-[var(--color-line)] pt-5"
+                >
+                  {/* A Career with no counted goal is an empty DASHED ghost labelled
+                      "no goals", never "0%" (spec §1): nothing is being neglected, there is
+                      simply nothing to pace against. */}
+                  <SegmentedRing
+                    arcs={p.arcs}
+                    ghost={p.fill == null && p.key === "portfolio"}
+                    size={170}
+                    stroke={11}
+                    tone={p.key}
+                    color={colors[p.key]}
+                    spin
+                    glow
                   >
-                    <SegmentedRing
-                      segments={b.segments}
-                      mid={b.mid}
-                      outer={b.outer}
-                      size={170}
-                      stroke={11}
-                      tone={pk}
-                      color={colors[pk]}
-                      spin
-                      glow
-                    />
-                    <p className="mt-2 text-small font-semibold">
-                      {PILLAR_NAME[pk]}
-                    </p>
-                    <p className="mt-0.5 text-micro text-[var(--color-muted)]">
-                      {facts ? pillarCaption(pk, facts) : ""}
-                    </p>
-                  </div>
-                );
-              })}
+                    {p.fill == null && p.key === "portfolio" ? (
+                      <span className="text-small text-[var(--color-muted)]">
+                        no goals
+                      </span>
+                    ) : (
+                      <span className="stat-hero text-heading">
+                        {Math.round((p.fill ?? 0) * 100)}%
+                      </span>
+                    )}
+                  </SegmentedRing>
+                  <p className="mt-2 text-small font-semibold">{p.name}</p>
+                </div>
+              ))}
             </div>
           </section>
 
-          {/* THE BOARD.
-
-              Three lists that answer three different questions — what the fortnight
-              counted, what is in flight, what is finished — set side by side rather than
-              stacked. Stacked they were a report you scroll; side by side they are a board
-              you read, which is what the owner asked this screen to be.
-
-              One column below lg, in this order, because on a phone the question you open
-              this for is almost always the first one. */}
-          <div className="mt-10 grid gap-x-8 gap-y-10 lg:grid-cols-2">
-            <div>
-            {/* EVERY METRIC, spelled out. The donuts show the shape; this shows the numbers,
-                because "3 of 8" is a thing you can act on and an arc is not. */}
-            <section className="mt-10">
-              <div className="section-head">
-                <h2 className="text-small font-semibold">Every metric</h2>
-              </div>
-              <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-                {(rings ?? []).flatMap((p) =>
-                  p.metrics.map((m) => (
-                    <li
-                      key={`${p.pillar}-${m.key}`}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5"
-                    >
-                      <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
-                        {PILLAR_NAME[p.pillar]}
-                      </span>
-                      <span className="w-24 shrink-0 text-small">{m.label}</span>
-                      {/* The fact alone — the window slides, so "day x of 14" is gone
-                          here as on the pillars. See PillarSections. */}
-                      <span className="order-last w-full text-micro tabular-nums text-[var(--color-muted)] sm:order-none sm:w-auto sm:flex-1">
-                        {m.fact}
-                      </span>
-                      <span className="h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
-                        {m.fill != null && m.fill > 0 && (
-                          <span
-                            className="motion-data block h-full w-full origin-left rounded-full"
-                            style={{
-                              transform: `scaleX(${m.fill})`,
-                              background: toneColor(p.pillar, colors[p.pillar]),
-                            }}
-                          />
-                        )}
-                      </span>
-                    </li>
-                  )),
-                )}
-              </ul>
-            </section>
-
+          {/* EVERY METRIC, spelled out. The donuts show the shape; this shows the numbers,
+              because "3 of 8" is a thing you can act on and an arc is not. Five rows for
+              Health's parts, one per counted goal for Career. */}
+          <section className="mt-10">
+            <div className="section-head">
+              <h2 className="text-small font-semibold">Every metric</h2>
             </div>
-            <div className="flex flex-col gap-10">
-            {/* WHAT IS NEXT. */}
-            <section className="mt-10">
-              <div className="section-head">
-                <h2 className="text-small font-semibold">In flight</h2>
-              </div>
-              {/* TWO COLUMNS, goals left and tasks right — the owner's ruling, and the two
-                  are genuinely different objects rather than one list split for looks. A
-                  goal carries subgoals and a percentage and a next step; a task is one line
-                  that either happened or has not yet. Merging them would have meant
-                  inventing a progress figure for something that has none. */}
-              <div className="mt-3 grid gap-x-8 gap-y-8 xl:grid-cols-2">
-              <div>
-              <p className="mb-1 text-micro text-[var(--color-muted)]">Goals</p>
-              {active.length === 0 ? (
-                <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                  No goals in flight.{" "}
-                  <a
-                    href="/goals"
-                    className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
+            <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+              {(rings ?? []).flatMap((p) => {
+                // Widened to ArcView: a ring is a union of two arc types and only the
+                // shared half is drawn here, so naming that half is honest and keeps the
+                // two branches from needing two blocks of identical markup.
+                const arcs: ArcView[] = p.arcs;
+                return arcs.map((arc) => (
+                  <li
+                    key={`${p.key}-${arc.key}`}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5"
                   >
-                    Set one
-                  </a>
-                  .
-                </p>
-              ) : (
-                <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-                  {active.map(({ g, next }) => (
-                    <li key={g.id} className="py-3">
-                      {/* STACKED, not one line. This was pillar / title / % / bar across a
-                          single row, which worked while the board was full width — at half
-                          width the 80px pillar column and the 96px bar left a two-word title
-                          wrapping mid-phrase with a hole beside it. The title now owns its
-                          own line and the meta sits under it, which is also the reading
-                          order: what the goal is, then how far along. */}
-                      <div className="flex items-baseline gap-x-3">
-                        <span className="min-w-0 flex-1 font-serif text-body">
-                          {g.title}
-                        </span>
-                        <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
-                          {Math.round(g.progress * 100)}%
-                        </span>
-                      </div>
-                      <div className="mt-1.5 flex items-center gap-3">
-                        <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
-                          {PILLAR_NAME[g.pillar]}
-                        </span>
-                        {/* The bar takes what is left rather than a fixed 96px, so it is the
-                            same length on every row whatever the column measures. */}
-                        <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--color-line)]">
-                          {g.progress > 0 && (
-                            <span
-                              className="motion-data block h-full w-full origin-left rounded-full bg-[var(--color-accent)]"
-                              style={{ transform: `scaleX(${g.progress})` }}
-                            />
-                          )}
-                        </span>
-                      </div>
-                      {/* The next step. Named plainly — "next" is the word that turns a
-                          percentage into something you can act on this afternoon. */}
-                      <p className="mt-1.5 text-micro text-[var(--color-muted)]">
-                        {next ? (
-                          <>
-                            next · <span className="text-[var(--color-ink)]">{next.title}</span>
-                          </>
-                        ) : g.subgoals.length === 0 ? (
-                          "no subgoals yet"
-                        ) : (
-                          "every step ticked"
-                        )}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              </div>
-
-              <div>
-                <p className="mb-1 text-micro text-[var(--color-muted)]">Tasks</p>
-                {openTasks.length === 0 ? (
-                  <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                    Nothing outstanding.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-                    {openTasks.map((t) => (
-                      <li
-                        key={t.id}
-                        className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
-                      >
-                        <span className="min-w-0 flex-1 font-serif text-body">
-                          {t.title}
-                        </span>
-                        {/* HOW LONG IT HAS WAITED, as a date rather than a count of days.
-                            "started 2 Aug" is a fact; "12 days late" is a verdict, and the
-                            honest-logging rule covers this list too. */}
-                        <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
-                          started {shortDate(t.due)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              </div>
-            </section>
-
-            {/* WHAT HAS BEEN ACHIEVED.
-
-                A finished goal used to disappear: every screen filters status !== 'done', so
-                the moment you completed something it left the app entirely. That is exactly
-                backwards for someone who wants a clear view of what they have achieved and
-                what is next — the achievements were the one thing being thrown away.
-
-                Newest first, with the date it was finished. No count, no rate, no "3 this
-                quarter": a list of things you have done is not a productivity figure, and
-                turning it into one is how an archive becomes a quota. */}
-            <section className="mt-10">
-              <div className="section-head">
-                <h2 className="text-small font-semibold">Achieved</h2>
-              </div>
-              <div className="mt-3 grid gap-x-8 gap-y-8 xl:grid-cols-2">
-              <div>
-              <p className="mb-1 text-micro text-[var(--color-muted)]">Goals</p>
-              {done.length === 0 ? (
-                <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                  Nothing marked done yet.
-                </p>
-              ) : (
-                <ul className="mt-3 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-                  {done.map((g) => (
-                    <li
-                      key={g.id}
-                      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
-                    >
-                      <span className="w-20 shrink-0 text-micro text-[var(--color-muted)]">
-                        {PILLAR_NAME[g.pillar]}
-                      </span>
-                      <span className="min-w-0 flex-1 font-serif text-body">
-                        {g.title}
-                      </span>
-                      <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
-                        {g.completedAt
-                          ? new Date(g.completedAt).toLocaleDateString("en-AU", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "date not recorded"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              </div>
-
-              <div>
-                <p className="mb-1 text-micro text-[var(--color-muted)]">Tasks</p>
-                {doneTasks.length === 0 ? (
-                  <p className="max-w-[62ch] pt-3 text-small leading-relaxed text-[var(--color-muted)]">
-                    No tasks ticked yet.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-                    {doneTasks.map((t) => (
-                      <li key={t.id} className="py-2.5">
-                        <p className="font-serif text-body">{t.title}</p>
-                        {/* BOTH DATES, by the owner's ruling: when it was first for, and
-                            when it was ticked. `due` is an origin and is never rewritten, so
-                            the pair is a true span — the gap between them is how long the
-                            thing waited, stated without being scored. A task started and
-                            finished on one day says so by printing one date rather than the
-                            same date twice. */}
-                        <p className="mt-0.5 text-micro tabular-nums text-[var(--color-muted)]">
-                          {t.doneOn === t.due ? (
-                            <>same day · {shortDate(t.due)}</>
-                          ) : (
-                            <>
-                              started {shortDate(t.due)} · done{" "}
-                              {shortDate(t.doneOn!)}
-                            </>
-                          )}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              </div>
-            </section>
-
-            </div>
-          </div>
+                    <span className="w-16 shrink-0 text-micro text-[var(--color-muted)]">
+                      {PILLAR_NAME[p.key]}
+                    </span>
+                    {/* The label TAKES the room rather than a fixed 6rem column: on Career
+                        it is a goal's own title, which is a sentence, not a noun. */}
+                    <span className="min-w-0 flex-1 truncate text-small">
+                      {arc.label}
+                    </span>
+                    {/* The fact alone — the window slides, so "day x of 14" is gone
+                        here as on the pillars. */}
+                    <span className="order-last w-full text-micro tabular-nums text-[var(--color-muted)] sm:order-none sm:w-auto sm:shrink-0">
+                      {arc.fact}
+                    </span>
+                    <span className="h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-[var(--color-line)]">
+                      {arc.fill != null && arc.fill > 0 && (
+                        <span
+                          className="motion-data block h-full w-full origin-left rounded-full"
+                          style={{
+                            transform: `scaleX(${arc.fill})`,
+                            background: toneColor(p.key, colors[p.key]),
+                          }}
+                        />
+                      )}
+                    </span>
+                  </li>
+                ));
+              })}
+            </ul>
+          </section>
 
           {loading ? (
             <p className="py-16 text-small text-[var(--color-muted)]">
@@ -860,11 +591,19 @@ export default function Dashboard({
               </Panel>
 
               <Panel title="Hours" tint={CARD_TINTS.hours}>
+                {/* MINUTES, printed as TIME — in the tooltip, in the slice list AND up the
+                    axis. "640" bare is the shape a score wears, which is exactly what this
+                    chart stopped being, and an axis is not exempt: with `unit=""` (the
+                    unit lives inside the formatted string) a raw scale left the card
+                    headed "Hours" printing an unnamed magnitude beside a tooltip that
+                    named one. The step is still the chart's own quarter; `format` only
+                    decides how it is spelled. */}
                 <DayChart
                   points={hours}
                   form="stacked"
                   unit=""
-                  emptyNote="No scheduled hours marked in this window."
+                  format={asChartTime}
+                  emptyNote="No blocked hours worked in this window."
                   onDay={setHoursDay}
                 />
               </Panel>
@@ -939,9 +678,7 @@ export default function Dashboard({
 
           {/* The two chart drill-downs. Mounted only while open, and keyed by date so
               tapping a second day re-reads rather than showing the first day's workings
-              under a new heading. ProductivityLog is the SAME sheet the Today strip opens —
-              one breakdown, two ways in, so the record can never explain an hour differently
-              from the screen it was marked on. */}
+              under a new heading. */}
           {hoursDay && (
             <ProductivityLog
               key={hoursDay}
@@ -999,9 +736,7 @@ export default function Dashboard({
  * One figure in the top band.
  *
  * The number is serif and large but NOT hero-sized: the 52px numeral belongs to today's
- * adherence ring and nothing else may borrow it. A fact line underneath says what the figure
- * is made of, because a number whose derivation is invisible is a number you end up
- * distrusting.
+ * adherence ring and nothing else may borrow it.
  */
 function Figure({
   label,
@@ -1039,7 +774,7 @@ function Figure({
       <p className="text-micro text-[var(--color-muted)]">{label}</p>
       <p
         // The affordance answers to EITHER way through — a sheet or a page. Keyed off
-        // `onOpen` alone, the two figures that navigate looked inert while behaving as
+        // `onOpen` alone, the figures that navigate looked inert while behaving as
         // links, which is the worst pairing of the two mistakes.
         className={`mt-1 font-serif text-heading tabular-nums ${onOpen || href ? "underline decoration-[var(--color-line-strong)] decoration-1 underline-offset-4 transition-colors group-hover:decoration-[var(--color-accent)]" : ""}`}
       >
@@ -1079,11 +814,9 @@ function Figure({
 }
 
 /**
- * One chart and the sentence that says what it is. Every chart here encodes a decision —
- * a ceiling, a floor, a gap that draws nothing — and a reader who does not know the
- * decision will misread the shape.
+ * One chart and the name that says what it is.
  *
- * A CARD now, not a ruled section. The broadsheet grid held while the whole record was one
+ * A CARD, not a ruled section. The broadsheet grid held while the whole record was one
  * sheet; four charts deep it read as one undifferentiated column, and a chart is the one
  * content here dense enough to earn its own ground. `.record-card` wears the window's own
  * treatment — bevel, radius, top light — so the cards read as smaller panes of the same

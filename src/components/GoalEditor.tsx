@@ -2,29 +2,43 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { GoalView, PillarView } from "@/lib/queries";
+import type { GoalView } from "@/lib/queries";
 
 /**
  * The one deeper screen for goals, alongside /habits.
  *
- * Weights: blank means AUTO — the subgoal takes an equal share of whatever the explicit
+ * EVERY GOAL IS A CAREER GOAL since the Health & Career pivot, so there is no pillar picker
+ * here any more: the engine files a new goal under `portfolio` and the stored `pillar_id` on
+ * the old rows is history. A picker with one option is a control that only ever asks a
+ * question already answered.
+ *
+ * Weights: blank means AUTO — the subtask takes an equal share of whatever the explicit
  * ones leave behind. That is the default, so most goals never need a number typed at all.
  *
- * Progress is NOT editable here and has no field. It is derived from which subgoals are
+ * Progress is NOT editable here and has no field. It is derived from which subtasks are
  * ticked, and letting it be set by hand is what let the stored column drift out of step
  * with the subgoals that define it.
+ *
+ * THE DEADLINE IS WHAT PUTS A GOAL IN THE CAREER RING (career.ts: status 'active' AND a
+ * deadline). It is optional and stays optional — a goal with no date is not a goal behind
+ * schedule, it is a goal with no pace to be measured against, and it still lists when Career
+ * is opened. That is why this screen edits the date and never demands one.
  */
-export default function GoalEditor({
-  initial,
-  pillars,
-}: {
-  initial: GoalView[];
-  pillars: PillarView[];
-}) {
+
+/** "2026-09-18" -> "18 Sept". The same helper Timeline.tsx carries, for the same reason:
+ *  a completion date printed as the database stores it is the one place this app would let
+ *  its schema speak. Noon, never midnight — a bare ISO date parses as UTC and lands on the
+ *  day before anywhere west of Greenwich. */
+const shortDate = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+  });
+export default function GoalEditor({ initial }: { initial: GoalView[] }) {
   const [goals, setGoals] = useState<GoalView[]>(initial);
   const [busy, setBusy] = useState(false);
   const [newGoal, setNewGoal] = useState("");
-  const [newPillar, setNewPillar] = useState<string>(pillars[0]?.key ?? "");
+  const [newDeadline, setNewDeadline] = useState("");
   const [newSub, setNewSub] = useState<Record<number, string>>({});
 
   // Every mutating route returns the refreshed list, so one round trip does both jobs.
@@ -97,11 +111,34 @@ export default function GoalEditor({
                       body: JSON.stringify({ title: e.target.value }),
                     })
                   }
-                  className="min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)]"
+                  className={`min-w-0 flex-1 border-b border-transparent bg-transparent pb-0.5 font-serif text-body outline-none transition-colors focus:border-[var(--color-accent)] ${
+                    g.status === "done" ? "text-[var(--color-muted)]" : ""
+                  }`}
                 />
+                {/* MARKING A GOAL DONE IS THE OWNER'S CALL and has to be makeable from the
+                    screen the Career drill-down links to, or "edit →" would open a page that
+                    cannot do the one thing the list beside it offers. The engine stamps
+                    completed_at on the way in and clears it on the way out, so reopening is
+                    not a second state to keep in step. A finished goal keeps its card here —
+                    listGoals returns everything but 'dropped' — because the screen that
+                    writes goals must not be the screen that loses them. */}
                 <button
                   onClick={() =>
-                    confirm(`Drop "${g.title}"? Its subgoals are kept.`) &&
+                    call(`/api/goals/${g.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        status: g.status === "done" ? "active" : "done",
+                      }),
+                    })
+                  }
+                  disabled={busy}
+                  className="shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
+                >
+                  {g.status === "done" ? "reopen" : "mark done"}
+                </button>
+                <button
+                  onClick={() =>
+                    confirm(`Drop "${g.title}"? Its subtasks are kept.`) &&
                     call(`/api/goals/${g.id}`, { method: "DELETE" })
                   }
                   disabled={busy}
@@ -111,7 +148,46 @@ export default function GoalEditor({
                 </button>
               </div>
 
-              {/* The same bar as Today, drawn the same way, so ticking a subgoal here and
+              {/* THE DEADLINE, on its own line under the title. An empty field CLEARS it
+                  (the route reads "" as null), which is how a goal leaves the ring without
+                  being finished or dropped.
+
+                  KEYED BY THE STORED VALUE, deliberately: this is an uncontrolled field, and
+                  React only writes defaultValue to the value ATTRIBUTE — which a browser
+                  ignores once the field has been typed in. Without the key, a date the
+                  server normalised or refused would leave the rejected one sitting on screen
+                  as if it had been saved. The same rule the checklist's numeric rows run
+                  under.
+
+                  A done goal prints its completion date here instead: the field would be
+                  asking when a finished thing is due. */}
+              {g.status === "done" ? (
+                <p className="mt-2 text-micro tabular-nums text-[var(--color-muted)]">
+                  {/* Goals finished before completed_at was ever written are undated. They
+                      still say they are done — an undated fact is not a missing one. */}
+                  done{g.completedAt ? ` ${shortDate(g.completedAt)}` : ""}
+                </p>
+              ) : (
+                <label className="mt-2 flex items-center gap-2 text-micro text-[var(--color-muted)]">
+                  deadline
+                  <input
+                    key={`${g.id}-${g.deadline ?? ""}`}
+                    type="date"
+                    defaultValue={g.deadline ?? ""}
+                    onBlur={(e) =>
+                      call(`/api/goals/${g.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                          deadline: e.target.value || null,
+                        }),
+                      })
+                    }
+                    className="border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-micro tabular-nums outline-none transition-colors focus:border-[var(--color-accent)]"
+                  />
+                </label>
+              )}
+
+              {/* The same bar as Today, drawn the same way, so ticking a subtask here and
                   seeing it there is plainly the one number. The track is a rule rather than a
                   recessed slab: with the cards gone, --color-panel-2 sits two points off the
                   page and the bar loses its ground.
@@ -128,7 +204,7 @@ export default function GoalEditor({
                   <li key={s.id} className="flex items-center gap-3 py-2">
                     <input
                       defaultValue={s.title}
-                      aria-label="Subgoal title"
+                      aria-label="Subtask title"
                       onBlur={(e) =>
                         e.target.value.trim() &&
                         e.target.value.trim() !== s.title &&
@@ -207,7 +283,7 @@ export default function GoalEditor({
                   onChange={(e) =>
                     setNewSub({ ...newSub, [g.id]: e.target.value })
                   }
-                  placeholder="Add a subgoal"
+                  placeholder="Add a subtask"
                   className="w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-small outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
                 />
               </form>
@@ -227,18 +303,22 @@ export default function GoalEditor({
           e.preventDefault();
           const t = newGoal.trim();
           if (!t) return;
+          // Both fields clear together, on the same submit the title always cleared on:
+          // a date left standing behind a title that has gone would quietly become the
+          // next goal's deadline.
           setNewGoal("");
-          // Sent as the pillar KEY, never a positional id — the seeded ids happen to be
-          // 1/2/3 today and relying on that breaks the moment a pillar is added.
+          setNewDeadline("");
+          // No pillar: the engine files every goal under Career. The route ignores a
+          // `pillar` field from an older client rather than refusing it.
           call("/api/goals", {
             method: "POST",
-            body: JSON.stringify({ title: t, pillar: newPillar }),
+            body: JSON.stringify({ title: t, deadline: newDeadline || null }),
           });
         }}
         className="mt-10 flex items-end gap-4"
       >
         {/* Serif, because what gets typed here is a goal title — the same words that render
-            serif everywhere else the moment it is saved. The pillar beside it is the app's
+            serif everywhere else the moment it is saved. The deadline beside it is the app's
             own vocabulary, so it stays sans. */}
         <input
           value={newGoal}
@@ -246,18 +326,15 @@ export default function GoalEditor({
           placeholder="New goal"
           className="min-w-0 flex-1 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 font-serif text-body outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
         />
-        <select
-          value={newPillar}
-          onChange={(e) => setNewPillar(e.target.value)}
-          aria-label="Pillar"
-          className="shrink-0 border-b border-[var(--color-line-strong)] bg-transparent pb-1.5 text-small outline-none transition-colors focus:border-[var(--color-accent)]"
-        >
-          {pillars.map((p) => (
-            <option key={p.key} value={p.key}>
-              {p.name.split(" ")[0]}
-            </option>
-          ))}
-        </select>
+        <label className="flex shrink-0 items-center gap-2 pb-1.5 text-micro text-[var(--color-muted)]">
+          deadline
+          <input
+            type="date"
+            value={newDeadline}
+            onChange={(e) => setNewDeadline(e.target.value)}
+            className="border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-micro tabular-nums outline-none transition-colors focus:border-[var(--color-accent)]"
+          />
+        </label>
       </form>
         </div>
       </main>
