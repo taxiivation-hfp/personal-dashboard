@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* Parked code (archive/social — the Health & Career pivot, 2026-09-18) is kept, not built:
+ * Tailwind v4 scans every un-ignored file for class candidates, so the archive is excluded
+ * here or its parked markup would keep generating CSS. */
+@source not "../../archive";
 
 /* Light beige. Premium, quiet, restrained.
  *

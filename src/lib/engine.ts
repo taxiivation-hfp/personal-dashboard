@@ -10,10 +10,15 @@
 // inaccurately, and inaccurate logs make every number here meaningless.
 
 import type { Client } from "./db/client";
-import { addDays, todayISO } from "./dates";
-import { isPaletteHex } from "./rings";
+import { addDays, isISODate, todayISO } from "./dates";
+import { isPaletteHex, isPillarKey, type PillarKey } from "./rings";
 import { isWindowTint, WINDOW_TEXT_MAX } from "./timeline";
-import { FULLY_WORKED, normaliseFraction, type BlockState } from "./worked";
+import {
+  dismissalWouldErase,
+  FULLY_WORKED,
+  normaliseFraction,
+  type BlockState,
+} from "./worked";
 
 type Tx = Awaited<ReturnType<Client["transaction"]>>;
 type Exec = Pick<Tx, "execute">;
@@ -49,6 +54,36 @@ export async function markBlock(
   },
 ): Promise<BlockState> {
   const fraction = normaliseFraction(m.worked_fraction);
+
+  /**
+   * A DISMISSAL NEVER TAKES BACK WORKED TIME — the guard, not a state machine.
+   *
+   * Dismissing means "this was never part of my day", and adherence honours it by dropping
+   * the block from both sides of the block share. On a row that earned hours that is the one
+   * move that makes the climbing figure FALL (see `dismissalWouldErase` in worked.ts for the
+   * arithmetic). Since the spec gives every row a dismiss control, including rows already
+   * marked adhered, the prior mark is read first and kept when it is worth something.
+   *
+   * It costs nothing the spec asks for: dismissal is for invites and anything never meant to
+   * be done — rows that earned nothing, which is exactly the case this lets through. The
+   * unmarked, skipped and zero-fraction-drift rows all dismiss as before.
+   *
+   * The stored state is RETURNED, which is the contract this function already has: the caller
+   * is told what the row now says rather than what it asked for, so the screen closes its row
+   * on the answer instead of drawing a dismissal the database refused.
+   */
+  if (m.state === "dismissed") {
+    const prior = await db.execute({
+      sql: "SELECT state, worked_fraction FROM block_marks WHERE date=? AND event_id=?",
+      args: [m.date, m.event_id],
+    });
+    const row = prior.rows[0] as Record<string, unknown> | undefined;
+    if (row) {
+      const was = String(row.state) as BlockState;
+      const had = row.worked_fraction == null ? null : Number(row.worked_fraction);
+      if (dismissalWouldErase({ state: was, workedFraction: had })) return was;
+    }
+  }
 
   /**
    * A DRIFT WORKED IN FULL IS AN ADHERENCE, so it is stored as one.
@@ -874,21 +909,65 @@ export async function recomputeGoalTx(
   });
 }
 
+/** The statuses a goal may hold — the schema's CHECK, stated once for the engine. */
+export const GOAL_STATUSES = ["active", "done", "paused", "dropped"] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
+export const isGoalStatus = (s: unknown): s is GoalStatus =>
+  typeof s === "string" && (GOAL_STATUSES as readonly string[]).includes(s);
+
+/**
+ * A deadline as it may be written: a real 'YYYY-MM-DD' date, or null to clear it. Anything
+ * else is REFUSED rather than coerced — a deadline decides whether a goal is in the Career
+ * ring and how full its arc is, so a guessed one is worse than none. `undefined` is not a
+ * deadline; the callers use it to mean "leave it alone".
+ */
+function checkDeadline(d: string | null): string | null {
+  if (d === null) return null;
+  if (!isISODate(d))
+    throw new Error("a goal's deadline must be a YYYY-MM-DD date");
+  return d;
+}
+
+/** The pillar every new goal is filed under — see createGoal. */
+const GOAL_PILLAR: PillarKey = "portfolio";
+
+/**
+ * Create a goal. EVERY GOAL IS A CAREER GOAL since the Health & Career pivot, so it is
+ * filed under `portfolio` — always, and here rather than in a client, so a screen that still
+ * sends a pillar cannot file one anywhere else. The deadline is optional: a goal without one
+ * lists on /goals and under Career, but takes no arc of the ring until it has one.
+ */
 export async function createGoal(
   db: Client,
-  g: { pillar_id: number; title: string; target?: string | null },
+  g: {
+    title: string;
+    target?: string | null;
+    deadline?: string | null;
+  },
 ): Promise<number> {
+  const title = g.title.trim();
+  if (!title) throw new Error("a goal needs a title");
+  const pillar = GOAL_PILLAR;
+  const deadline = checkDeadline(g.deadline ?? null);
   const r = await db.execute({
-    sql: "INSERT INTO goals (pillar_id,title,target) VALUES (?,?,?)",
-    args: [g.pillar_id, g.title.trim(), g.target?.trim() || null],
+    sql: `INSERT INTO goals (pillar_id,title,target,deadline)
+          SELECT id,?,?,? FROM pillars WHERE key=?`,
+    args: [title, g.target?.trim() || null, deadline, pillar],
   });
+  if (!r.rowsAffected) throw new Error(`pillar '${pillar}' is missing`);
   return Number(r.lastInsertRowid);
 }
 
 export async function updateGoal(
   db: Client,
   id: number,
-  patch: { title?: string; target?: string | null; status?: string },
+  patch: {
+    title?: string;
+    target?: string | null;
+    status?: GoalStatus;
+    /** A 'YYYY-MM-DD' to set, null to CLEAR, undefined to leave as it is. */
+    deadline?: string | null;
+  },
 ): Promise<void> {
   const sets: string[] = [];
   const args: (string | number | null)[] = [];
@@ -896,23 +975,36 @@ export async function updateGoal(
     (sets.push("title=?"), args.push(patch.title.trim()));
   if (patch.target !== undefined)
     (sets.push("target=?"), args.push(patch.target?.trim() || null));
+  if (patch.deadline !== undefined)
+    (sets.push("deadline=?"), args.push(checkDeadline(patch.deadline)));
   if (patch.status !== undefined) {
+    if (!isGoalStatus(patch.status))
+      throw new Error(`unknown goal status '${String(patch.status)}'`);
+    /**
+     * WHEN it was finished, stamped here and nowhere else — as the LOCAL DAY it was marked
+     * done, 'YYYY-MM-DD', which is what the timeline's note prints beside its tick.
+     *
+     * A finished goal with no date is a fact with no place in a sequence, and the owner
+     * wants "a clear plan on what I have achieved".
+     *
+     * KEPT if the goal was already done: re-marking a done goal done (a second tap, a retry)
+     * must not move the day it was finished to today. CLEARED on the way back out:
+     * un-completing a goal and leaving the stamp behind would leave a live goal claiming a
+     * completion date, which is worse than no date at all.
+     *
+     * The status is written in the same statement, so the CASE reads the row's status
+     * BEFORE this update — SQLite evaluates every SET expression against the old row.
+     */
     sets.push("status=?");
     args.push(patch.status);
-    /**
-     * WHEN it was finished, stamped here and nowhere else.
-     *
-     * The column has existed since the first schema and nothing has ever written to it, so
-     * every goal ever completed lost its date. That is the wrong way round for an app whose
-     * owner wants "a clear plan on what I have achieved": a finished goal with no date is a
-     * fact with no place in a sequence.
-     *
-     * CLEARED on the way back out. Un-completing a goal and leaving the stamp behind would
-     * leave a live goal claiming a completion date, which is worse than no date at all —
-     * the archive would list something still in progress.
-     */
-    sets.push("completed_at=?");
-    args.push(patch.status === "done" ? now() : null);
+    if (patch.status === "done") {
+      sets.push(
+        "completed_at=CASE WHEN status='done' AND completed_at IS NOT NULL THEN completed_at ELSE ? END",
+      );
+      args.push(todayISO());
+    } else {
+      sets.push("completed_at=NULL");
+    }
   }
   if (!sets.length) return;
   sets.push("updated_at=?");
@@ -1282,6 +1374,9 @@ export async function setPillarColor(
   key: string,
   hex: string | null,
 ): Promise<void> {
+  // Only the two live pillars have a colour to set — the Social row is kept as data and is
+  // not listed anywhere a colour could be chosen for it.
+  if (!isPillarKey(key)) throw new Error(`unknown pillar '${key}'`);
   if (hex !== null && !isPaletteHex(hex))
     throw new Error("colour must come from the palette");
   await db.execute({

@@ -1,127 +1,102 @@
-// Per-day productivity. PURE — no DB, no React, and exactly ONE import: worked.ts, which
-// is itself import-free. So this still runs under `node --test` with no dependencies, which
-// is the property that actually mattered; "zero imports" was only ever how it was achieved.
-// (adherence.ts has taken ./dates.ts the same way since the beginning.)
+// HOURS WORKED, BY CATEGORY. PURE — no DB, no React; its only runtime import is worked.ts,
+// which is import-free, so it runs under `node --test` with no dependencies.
 //
-// A DELIBERATE, OWNER-APPROVED EXCEPTION to CLAUDE.md's "output is never scored" — see the
-// Productivity section there before changing anything here.
+// THE SCORE IS GONE — the owner's ruling of 2026-09-18: "Quantifying productivity is
+// stupid." There are no points anywhere any more: no rate per hour, no flat figure per gym
+// session, no points per non-negotiable, no total. What survives is the honest half of it,
+// the question the score was a proxy for — WHERE DID THE WEEK'S HOURS GO? — answered in
+// minutes, which are a duration you actually spent rather than a number the app invented.
 //
-// THE EXCEPTION IS NARROW. It scores HOURS SPENT, never results produced: the only inputs
-// are duration and the event's calendar colour, so a block worked badly and a block worked
-// brilliantly score identically. Nothing about quality, or what was finished, or how much
-// was produced reaches this file.
+// The file keeps its name because /api/productivity and the drill-down still import it;
+// what it measures is hours.
 //
-// It is UNCAPPED and comparative — the exact inverse of the ring rule in rings.ts, where
-// capping is the entire mechanism. That inversion is why it must NEVER be drawn as a ring
-// or as anything else implying a target, and why the two systems share no code.
+// It feeds NOTHING: not adherence, not the rings, not the streak. It never reaches DayView.
 //
-// It feeds NOTHING: not adherence, not the rings, not the streak, not the coach. The
-// quarantine is enforced by data flow rather than discipline — the score is assembled in
-// /api/adherence and never reaches DayView, which is what the coach reads.
+// WHAT COUNTS AS AN HOUR WORKED is decided here and nowhere else:
+//   - a block in one of the four CATEGORIES below (by its calendar colour),
+//   - scaled by `workedFraction` — adhered is all of it, a partial drift its worked share,
+//     unmarked / skipped / dismissed nothing,
+//   - with a usable, non-negative duration.
+// Graphite never gets this far: it is dropped when blocks are built (adherence.ts,
+// `isBlockEvent`). Grape (gym) is simply not a category — training is logged as sessions,
+// and an hour under a bar is not an hour of work.
 
 import { workedFraction, type BlockState } from "./worked.ts";
 
-/** Google Calendar colorId. null = the calendar's default colour, which is a real tier
- *  here and not an absence — Google omits the field for default-coloured events. */
-export type ColorId = string | null;
+/**
+ * The calorie floor's HOME is rings.ts since the pivot. Re-exported here, as a re-export
+ * and never a copy, for the calorie screens that have always imported it from this module.
+ * New code should import it from rings.ts.
+ */
+export { CALORIE_FLOOR } from "./rings.ts";
 
-/** One union, defined in worked.ts beside the function that says what each state is worth.
- *  It used to be written out here verbatim, which was harmless only while nothing read
- *  across the two modules — the worked fraction reads across both. */
+/** One union, defined in worked.ts beside the function that says what each state is worth. */
 export type { BlockState };
 
-export const POINTS_PER_HOUR = 100;
-export const POINTS_PER_HABIT = 25;
+/** Google Calendar colorId. null = the calendar's default colour, which is a real category
+ *  here (Uni) and not an absence — Google omits the field for default-coloured events. */
+export type ColorId = string | null;
+
+export type HourCategoryLabel =
+  | "Work Projects"
+  | "Work Uni"
+  | "Work Part Time"
+  | "Uni";
+
+/** The categories in the order they stack, bottom-up, and are listed. */
+export const CATEGORY_ORDER: readonly HourCategoryLabel[] = [
+  "Work Projects",
+  "Work Uni",
+  "Work Part Time",
+  "Uni",
+];
 
 /**
- * A GYM SESSION, AS A FLAT FIGURE — the one thing here that is not priced by the clock.
+ * THE TABLE: which calendar colour is which category. Retuning is a one-line change here.
  *
- * The owner's ruling, and the reasoning is the sharpest argument in this file: three hours
- * under a bar is not more productive than two. An hourly rate says it is, and that is the
- * one claim about training this app should not make — it would pay for dawdling between
- * sets and dock a session that was efficient. A session happened or it did not, and it is
- * worth what a session is worth.
+ * Anything NOT listed is not an hour worked, and that is deliberate: an unrecognised colour
+ * must never silently join a category, because the failure would be invisible — a week
+ * would simply read longer than it was with nothing on screen to say why.
  *
- * So it is priced as a THING rather than as a duration — currently worth what a full-rate
- * hour is worth, which is the owner's dial and the only place to turn it. The consequence,
- * and it is intended: a two-hour session and a forty-minute one score identically, and a day
- * with two sessions scores twice one.
+ * ONE CATEGORY MAY OWN TWO COLOURS. Work Part Time holds Lavender and Tomato because the
+ * calendar genuinely holds both, and re-colouring a year of history is a worse trade than a
+ * two-row table. Everything downstream merges by LABEL, and a category shows itself in its
+ * CANONICAL colour — the first id listed for it.
+ *
+ * CHANGING THIS TABLE REWRITES HISTORY, silently: hours are recomputed from the live calendar
+ * on every read, so adding a colour makes every past adhered block of it start counting.
  */
-export const POINTS_PER_SESSION = 100;
-
-/**
- * The calorie FLOOR — a number to reach, never a ceiling to stay under.
- *
- * The owner's, and the direction is the whole point: this is someone training, for whom
- * under-eating is the failure and there is no upper bound worth drawing. It scores exactly
- * one non-negotiable's worth, because that is what it is — a daily thing you either did or
- * did not do.
- *
- * Adherence reads this constant too — the floor is one more item of its habit share,
- * earned FRACTIONALLY there (`floorCredit` in adherence.ts), by the owner's ruling. The
- * two measures deliberately keep different rules for the same line: adherence pays for
- * the part of the floor you reached, this score stays binary — a non-negotiable's worth
- * at the floor and nothing under it, because a points total you can half-hit is a target
- * by another name. One constant, two questions asked of it.
- */
-export const CALORIE_FLOOR = 2500;
-export const MINUTES_PER_HOUR = 60;
-
-/**
- * THE tuning knob, and the only one. Retuning is a one-line change here, following the
- * `rings.ts` METRICS precedent — thresholds live in a pure module on purpose so they are
- * unit-testable and so retuning never means touching a query.
- *
- * Anything not listed scores ZERO. That is deliberate: an unrecognised colour must never
- * silently inherit a rate, because the failure would be invisible — a day would simply
- * read higher than it should with nothing on screen to say why.
- */
-export const CALENDAR_RATES: {
+export const HOUR_CATEGORIES: {
   id: ColorId;
   /** Google's own name for the swatch, so the table can be checked against the UI. */
   google: string;
-  label: string;
-  /** Fraction of POINTS_PER_HOUR earned per hour. */
-  rate: number;
+  label: HourCategoryLabel;
 }[] = [
-  // WORK PROJECTS — the owner's own things, the portfolio. Full rate, and it is the only
-  // full rate: this is the work nobody scheduled for them and nobody is paying for, which
-  // is exactly why it is the first to lose a week. Basil.
-  { id: "10", google: "Basil", label: "Work Projects", rate: 1 },
-  // WORK UNI — their own study in their own time, as distinct from sitting in a timetabled
-  // class. Chosen work, so it outranks the sold and the scheduled kinds. Banana.
-  { id: "5", google: "Banana", label: "Work Uni", rate: 0.75 },
-  // WORK PART TIME — the hours sold for money. TWO IDS, one meaning, because the calendar
-  // really does hold both: Law Image and KebabX sit in Lavender, and older shifts sit in
-  // Tomato. Merging them in the table rather than re-colouring a year of history is the
-  // cheaper truth — and the stack merges by LABEL, so they draw as one slab regardless.
-  { id: "1", google: "Lavender", label: "Work Part Time", rate: 0.5 },
-  { id: "11", google: "Tomato", label: "Work Part Time", rate: 0.5 },
-  // UNI — the timetable. The calendar's DEFAULT colour: an event you scheduled without
-  // thinking about its colour, which is what a lecture in a fixed slot is.
-  { id: null, google: "default", label: "Uni", rate: 0.5 },
-  // DELIBERATELY ABSENT, both of them, and for different reasons.
-  //
-  // GRAPE (gym) scores from the LOGGED SESSION at a flat POINTS_PER_SESSION — see that
-  // constant, and `workouts` below for the guard that keeps it to one of the two. The
-  // block is just where it was going to happen.
-  //
-  // GRAPHITE (social) scores nothing here at all. Seeing people is a pillar, counted by
-  // the Social ring, and paying it productivity points as well would make an evening out
-  // a thing you can be more or less productive AT — which is the one reading this app's
-  // whole design refuses.
+  // The owner's own things, the portfolio — the work nobody scheduled and nobody is paying
+  // for, which is why it is the first to lose a week.
+  { id: "10", google: "Basil", label: "Work Projects" },
+  // Their own study in their own time, as distinct from a timetabled class.
+  { id: "5", google: "Banana", label: "Work Uni" },
+  // The hours sold for money. Two ids, one meaning.
+  { id: "1", google: "Lavender", label: "Work Part Time" },
+  { id: "11", google: "Tomato", label: "Work Part Time" },
+  // The timetable: the calendar's DEFAULT colour.
+  { id: null, google: "default", label: "Uni" },
 ];
 
-export const UNLISTED_RATE = 0;
+/** The category a colour belongs to, or null when it is not an hours category. */
+export function categoryOf(colorId: ColorId): HourCategoryLabel | null {
+  return HOUR_CATEGORIES.find((c) => c.id === colorId)?.label ?? null;
+}
 
-// WHICH MARKS COUNT AS TIME SPENT is `workedFraction` in worked.ts — one rule, five
-// readers, and the argument for it (which used to live here as COUNTED_STATES) moved there
-// with it. Nothing about it changed except that a drift can now be partial: it still pays
-// nothing for the part you drifted, an unmarked block still pays nothing at all, and a day
-// you worked but never marked still scores no time points.
+/** The colour a category is drawn in — the first id the table lists for it. */
+export function canonicalColor(label: HourCategoryLabel): ColorId {
+  return HOUR_CATEGORIES.find((c) => c.label === label)?.id ?? null;
+}
 
-export type ProductiveBlock = {
-  /** Scheduled minutes. 0 when unknown — the caller resolves null before it gets here. */
+/** One block, as far as hours are concerned. */
+export type WorkBlock = {
+  /** Scheduled minutes. The caller resolves an unknown duration to 0 before it gets here. */
   minutes: number;
   colorId: ColorId;
   /** The mark, or null when unmarked. */
@@ -130,236 +105,64 @@ export type ProductiveBlock = {
   workedFraction?: number | null;
 };
 
-export type ProductivityInput = {
-  blocks: ProductiveBlock[];
+/** One slab of a day's stacked hours bar. */
+export type CategoryMinutes = {
+  label: HourCategoryLabel;
+  /** The category's canonical colour — see HOUR_CATEGORIES. */
+  colorId: ColorId;
+  /** Minutes WORKED in this category, whole. */
+  minutes: number;
+};
+
+/** A day's hours worked. */
+export type DayHours = {
   /**
-   * Non-negotiables ticked that day, numeric ones included — an entry exists or it does not.
-   *
-   * These DO stay in the score even though adherence counts them too, and that is not a
-   * double count: adherence and productivity are two different questions asked of the same
-   * day. Ticking a non-negotiable is both "I did what I said I'd do" and "I spent time on
-   * it", and it is allowed to answer both.
+   * The day's total minutes worked — EXACTLY the sum of `categories[].minutes`, so a stack
+   * can never disagree with the figure it explains.
    */
-  habitsDone: number;
-  /**
-   * The day's calorie total, or null if nothing was logged.
-   *
-   * At or above CALORIE_FLOOR it scores one non-negotiable's worth and joins the SAME grey
-   * slab the non-negotiables occupy. One grey rather than two: both are things you ticked
-   * off a day rather than hours you scheduled, and a second achromatic slab would be a
-   * distinction the chart cannot draw and the reader cannot use.
-   */
-  calories?: number | null;
-  /**
-   * GYM SESSIONS LOGGED THAT DAY — one row per session, so two lifts and a run is 3.
-   *
-   * This is the ONE place a workout enters the score, and the exclusivity is what keeps it
-   * honest: Grape has been removed from CALENDAR_RATES, so a gym block on the calendar pays
-   * nothing on its own. Paying both would be the same training bought twice — once for
-   * scheduling it and again for doing it.
-   *
-   * Which of the two is the record was reversed on the owner's ruling, and the argument is
-   * in POINTS_PER_SESSION: an hourly rate claims three hours under a bar beat two, and that
-   * is a claim about training this app has no business making. The calendar prices time;
-   * training is not time, it is a thing that happened.
-   *
-   * The consequence worth knowing, and it is the mirror of the old one: a session you
-   * SCHEDULED but never logged scores nothing here. That is consistent with the rest of the
-   * file — `workedFraction` only pays for blocks you marked, and this only pays for sessions
-   * you wrote up. Both ask you to say what happened. The Physical ring reads the same
-   * logged row, which is the ring's job and not a second payment.
-   */
-  workouts?: number;
+  minutes: number;
+  /** Non-empty categories only, in CATEGORY_ORDER. Empty for a day with nothing worked. */
+  categories: CategoryMinutes[];
 };
 
 /**
- * One slab of the day's stacked bar.
+ * THE MINUTES A BLOCK CONTRIBUTES — 0 for anything that is not an hour worked.
  *
- * The bar is the day's productivity broken into what produced it — one slab per CATEGORY,
- * in the colour that category has in the calendar.
- *
- * It used to be one slab per COLOUR, which was the same thing while every category owned
- * exactly one swatch. Work Part Time owns two (Lavender and Tomato, because the calendar
- * really does hold both), and a bar that drew them apart would have shown one meaning as
- * two slabs and printed its name twice in the legend. The unit the reader cares about is
- * the category; the colour is how it is recognised.
+ * The disqualifications hold at ANY fraction: an unlisted colour earns nothing however
+ * diligently it was worked. A negative or non-finite duration contributes nothing rather
+ * than subtracting from the day, and a corrupt fraction is clamped by workedFraction.
  */
-export type ProductivitySegment = {
-  /**
-   * "time" is blocked calendar hours and carries that category's colour. "habits" is the
-   * things you ticked. "sessions" is training logged — not an hour, so it has no colorId
-   * and no rate, and the chart gives it its own fill (SLAB_GYM).
-   */
-  kind: "time" | "habits" | "sessions";
-  /**
-   * The category's CANONICAL colour — the first id listed for it in CALENDAR_RATES — not
-   * necessarily the id of any one event in the slab. Null on the two kinds that are not
-   * calendar time.
-   */
-  colorId: ColorId;
-  /** What this slab is called, resolved here so no screen has to look it up and none can
-   *  call the same slab two things. */
-  label: string;
-  points: number;
-  /**
-   * The minutes WORKED behind this slab, before the colour's rate. 0 on the habits slab,
-   * which is not time at all.
-   *
-   * Worked, not scheduled: a two-hour block drifted at 40% put 48 minutes into this slab
-   * and 48 is what earned the points, so 48 is what the workings must print. The 72 minutes
-   * that went elsewhere are accounted for in the drill-down's "didn't count" list, which is
-   * where every other unpaid minute of the day is already explained.
-   *
-   * Carried so the day's workings can be shown without a second implementation of this
-   * rule. A breakdown computed anywhere else would eventually disagree with the bar it is
-   * supposed to explain, and a disagreeing explanation is worse than none.
-   */
-  minutes: number;
-  /** The colour's rate, as applied. null on the habits slab, which has no rate. */
-  rate: number | null;
-};
-
-export type ProductivityScore = {
-  /** UNCAPPED. 1,125 is a valid reading. Always a number, never null. */
-  points: number;
-  timePoints: number;
-  habitPoints: number;
-  /** Logged training, at a flat rate per session — see POINTS_PER_SESSION. */
-  sessionPoints: number;
-  /** Minutes WORKED that scored anything at all, rounded. A partial drift contributes only
-   *  its worked share. */
-  minutes: number;
-  /** Those minutes after the colour rate is applied. */
-  weightedMinutes: number;
-  /**
-   * The stack, largest first. Segments always sum to `points`.
-   *
-   * Blocked time is merged BY CATEGORY rather than left one-per-event: a day of six Uni
-   * blocks would otherwise draw six identical slabs with hairlines between them, which
-   * reads as detail the chart is not carrying.
-   */
-  segments: ProductivitySegment[];
-};
-
-export function rateFor(colorId: ColorId): number {
-  const hit = CALENDAR_RATES.find((c) => c.id === colorId);
-  return hit ? hit.rate : UNLISTED_RATE;
+export function workedMinutes(b: WorkBlock): number {
+  if (categoryOf(b.colorId) == null) return 0;
+  const worked = workedFraction(b.state, b.workedFraction);
+  if (worked <= 0) return 0;
+  const m = Number.isFinite(b.minutes) ? Math.max(0, b.minutes) : 0;
+  return m * worked;
 }
 
-export function scoreDay(input: ProductivityInput): ProductivityScore {
-  let minutes = 0;
-  let weightedMinutes = 0;
-  /**
-   * Weighted minutes per CATEGORY, so the bar can be split the way the day was spent.
-   *
-   * Keyed by label rather than by colorId: Work Part Time owns two swatches, and keying by
-   * colour would draw one meaning as two slabs. `canon` remembers which colour each
-   * category shows itself in — the first id the table lists for it, so the choice is the
-   * registry's and not this loop's.
-   */
-  const byCategory = new Map<string, number>();
-  /** The same split before the rate, so a slab can say what it was made of. */
-  const rawByCategory = new Map<string, number>();
-  const canon = new Map<string, ColorId>();
-
-  for (const b of input.blocks) {
-    // 1 for an adhered block, 0 for anything unmarked or skipped, and the slider's value
-    // for a partial drift. A day with no partial drifts scores exactly as it did before.
-    const worked = workedFraction(b.state, b.workedFraction);
-    if (worked <= 0) continue;
-    const entry = CALENDAR_RATES.find((c) => c.id === b.colorId);
-    // Not merely worth zero — an unlisted colour was never productive time, so it must not
-    // inflate the raw minutes figure either. Checked AFTER the fraction and independently
-    // of it: an unlisted colour earns nothing at any fraction.
-    if (!entry || entry.rate <= 0) continue;
-    // Clamped: a malformed event with an end before its start must not subtract from
-    // the day. Then scaled by what was actually worked — the hour you drifted was never
-    // productive time either, so it must not reach the raw minutes figure any more than an
-    // unlisted colour does.
-    const m = Math.max(0, b.minutes) * worked;
-    minutes += m;
-    weightedMinutes += m * entry.rate;
-    byCategory.set(entry.label, (byCategory.get(entry.label) ?? 0) + m * entry.rate);
-    rawByCategory.set(entry.label, (rawByCategory.get(entry.label) ?? 0) + m);
-    if (!canon.has(entry.label))
-      canon.set(
-        entry.label,
-        CALENDAR_RATES.find((c) => c.label === entry.label)!.id,
-      );
+/**
+ * A day's hours worked, by category.
+ *
+ * Minutes are accumulated EXACTLY per category and rounded once each — a 50-minute block at
+ * 35% is 17.5, and rounding per block would let the slabs drift away from what they sum to.
+ * The total is then the sum of those rounded slabs.
+ */
+export function hoursForDay(blocks: WorkBlock[]): DayHours {
+  const raw = new Map<HourCategoryLabel, number>();
+  for (const b of blocks) {
+    const m = workedMinutes(b);
+    if (m <= 0) continue;
+    const label = categoryOf(b.colorId)!;
+    raw.set(label, (raw.get(label) ?? 0) + m);
   }
-
-  // Each part is rounded independently so the three always sum to `points` exactly. Adding
-  // them first and rounding once would let the parts disagree with the total on screen.
-  const timePoints = Math.round(
-    (weightedMinutes / MINUTES_PER_HOUR) * POINTS_PER_HOUR,
-  );
-  // The calorie floor counts as one more ticked thing. Below it, nothing — a floor you did
-  // not reach is not a partial credit, or it would stop being a floor.
-  const ticked =
-    input.habitsDone +
-    ((input.calories ?? 0) >= CALORIE_FLOOR ? 1 : 0);
-  const habitPoints = ticked * POINTS_PER_HABIT;
-  // Flat per session, never per hour. Clamped and floored, because a caller that has not
-  // been taught this input yet sends undefined and a corrupt one could send anything —
-  // neither may subtract from a day.
-  const sessions = Math.max(0, Math.floor(input.workouts ?? 0));
-  const sessionPoints = sessions * POINTS_PER_SESSION;
-
-  // Colour slabs are apportioned out of the ALREADY-ROUNDED timePoints, and the smallest
-  // takes the remainder. Rounding each colour independently would let the stack drift a
-  // point or two from the total it is supposed to be a picture of.
-  const cats = [...byCategory.entries()].sort((a, b) => b[1] - a[1]);
-  const segments: ProductivitySegment[] = [];
-  let assigned = 0;
-  cats.forEach(([label, wm], i) => {
-    const pts =
-      i === cats.length - 1
-        ? timePoints - assigned
-        : Math.round((wm / weightedMinutes) * timePoints);
-    assigned += pts;
-    const colorId = canon.get(label) ?? null;
-    if (pts > 0)
-      segments.push({
-        kind: "time",
-        colorId,
-        label,
-        points: pts,
-        // Accumulated exactly and rounded once, here. A partial drift can put a fractional
-        // number of minutes into a slab (a 50-minute block at 35% is 17.5), and rounding
-        // per block instead would let the slabs drift away from the total they explain.
-        minutes: Math.round(rawByCategory.get(label) ?? 0),
-        rate: rateFor(colorId),
-      });
-  });
-  // Training sits between the hours and the ticks in the stack: it is not blocked time, but
-  // it is more than a box — it keeps its own slab rather than joining the grey, because the
-  // owner asked to SEE it and two achromatic slabs cannot be told apart at 80px tall.
-  if (sessionPoints > 0)
-    segments.push({
-      kind: "sessions",
-      colorId: null,
-      label: "Gym",
-      points: sessionPoints,
-      minutes: 0,
-      rate: null,
-    });
-  if (habitPoints > 0)
-    segments.push({
-      kind: "habits",
-      colorId: null,
-      label: "Non-negotiables",
-      points: habitPoints,
-      minutes: 0,
-      rate: null,
-    });
-
+  const categories: CategoryMinutes[] = [];
+  for (const label of CATEGORY_ORDER) {
+    const minutes = Math.round(raw.get(label) ?? 0);
+    if (minutes > 0)
+      categories.push({ label, colorId: canonicalColor(label), minutes });
+  }
   return {
-    points: timePoints + sessionPoints + habitPoints,
-    timePoints,
-    habitPoints,
-    sessionPoints,
-    minutes: Math.round(minutes),
-    weightedMinutes,
-    segments,
+    minutes: categories.reduce((s, c) => s + c.minutes, 0),
+    categories,
   };
 }

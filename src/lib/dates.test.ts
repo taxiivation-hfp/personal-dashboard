@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addDays, daysBetween, sinceLabel } from "./dates.ts";
+import { addDays, daysBetween, localDateOf, sinceLabel } from "./dates.ts";
 
 test("addDays walks back 13 days for a 14-day inclusive window", () => {
   assert.equal(addDays("2026-08-05", -13), "2026-07-23");
@@ -81,4 +81,25 @@ test("sinceLabel is timezone-free: the same instant written two ways reads the s
   // a Z. The gap between two instants is the same number of minutes however either end is
   // written, which is why this function takes no timezone.
   assert.equal(sinceLabel("2026-08-10T15:00:00+11:00", at(47)), "47m ago");
+});
+
+// ---------------------------------------------------------------- localDateOf
+//
+// Goals' created_at is a UTC instant. The Career ring paces a goal from the LOCAL day it was
+// made, and 9am in Melbourne is still the previous day in UTC.
+
+test("localDateOf moves a UTC instant onto the Melbourne day it fell on", () => {
+  // 23:30 UTC on the 17th is 09:30 AEST on the 18th.
+  assert.equal(localDateOf("2026-09-17T23:30:00Z", "Australia/Melbourne"), "2026-09-18");
+  assert.equal(localDateOf("2026-09-17T13:00:00.508Z", "Australia/Melbourne"), "2026-09-17");
+});
+
+test("localDateOf leaves a bare date alone — it already names a local day", () => {
+  assert.equal(localDateOf("2026-09-18", "America/Los_Angeles"), "2026-09-18");
+});
+
+test("localDateOf is null for nothing and for nonsense, never a guessed day", () => {
+  assert.equal(localDateOf(null), null);
+  assert.equal(localDateOf(undefined), null);
+  assert.equal(localDateOf("yesterday"), null);
 });

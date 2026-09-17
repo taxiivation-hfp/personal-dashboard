@@ -30,14 +30,14 @@ test("within a day the journal leads and drift reasons trail", () => {
   const day = groupByDay([
     e({ kind: "drift", title: "Mandarin" }),
     e({ kind: "reading", title: "Deep Work, ch. 2" }),
-    e({ kind: "skill", title: "Piano" }),
+    e({ kind: "ascnd", title: "Stretch, jaw, posture" }),
     e({ kind: "journal", title: "A long Tuesday" }),
     e({ kind: "gym", title: "Push" }),
     e({ kind: "outreach", title: "Messaged Sam" }),
   ])[0];
   assert.deepEqual(
     day.entries.map((x) => x.kind),
-    ["journal", "gym", "skill", "outreach", "reading", "drift"],
+    ["journal", "gym", "outreach", "reading", "ascnd", "drift"],
   );
 });
 

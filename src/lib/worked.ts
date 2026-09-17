@@ -72,6 +72,38 @@ export function normaliseFraction(
 }
 
 /**
+ * WOULD DISMISSING THIS BLOCK TAKE BACK TIME ALREADY EARNED? True when the mark already on
+ * the row is worth hours — an adherence, or a drift carrying a worked fraction above 0.
+ *
+ * A dismissal is not a fourth state of a block that happened: it means the row was never part
+ * of the day — an invite, a birthday, something never meant to be done. Adherence honours
+ * that by dropping dismissed blocks from BOTH sides of the block share, which is right for a
+ * row that earned nothing and wrong for one that earned something: dismissing an adhered hour
+ * out of a two-hour day takes its worked hour out of the numerator and its scheduled hour out
+ * of the denominator, and the figure FALLS. The spec puts a dismiss control on every row,
+ * including rows already marked — so one stray tap could drop a live day's figure by 25
+ * points, and `markBlock` clears `worked_fraction` on the way, so the worked time is not even
+ * recoverable by re-marking.
+ *
+ * "Nothing can make the figure fall, and no fraction may" is the rule this protects, and it
+ * is the same clamp argument `workedFraction` already runs under — which is why the question
+ * is asked THROUGH `workedFraction` rather than by re-listing the states: whatever a state is
+ * worth to the day, it is worth exactly that here.
+ *
+ * `engine.markBlock` is the one enforcer (rules live in the engine, and a rule enforced in a
+ * component is one every other caller walks past); it leaves the stored mark alone and
+ * returns it, which the RESULTING-state contract already covers.
+ */
+export function dismissalWouldErase(
+  prev:
+    | { state: BlockState | null; workedFraction?: number | null }
+    | null
+    | undefined,
+): boolean {
+  return !!prev && workedFraction(prev.state ?? null, prev.workedFraction) > 0;
+}
+
+/**
  * The step the slider moves in, as a fraction. 5% — six minutes on a two-hour block.
  *
  * Finer is precision you do not have about an afternoon. The UI is the only consumer, but

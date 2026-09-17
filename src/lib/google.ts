@@ -4,8 +4,10 @@
 // mode with yourself as a test user (skips verification).
 
 import type { Client } from "./db/client";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { covers, rangeKey, sliceByDate } from "./calRange";
-import { getDb } from "./db/client";
+import { getDb, isLocalDatabase } from "./db/client";
 import { dayBoundsRFC3339, rfc3339, addDays, APP_TZ } from "./dates";
 
 const SCOPE = "https://www.googleapis.com/auth/calendar.events";
@@ -87,23 +89,119 @@ export type CalEvent = {
    * always been in the response and was simply being dropped by the map below.
    */
   colorId: string | null;
-  /**
-   * Is this event an instance of a REPEATING series?
-   *
-   * `recurringEventId` is present on every instance Google expands out of a series and
-   * absent on a one-off, so this is the API stating the fact directly rather than the app
-   * inferring it. Like `colorId` it costs nothing to ask for — neither request sends a
-   * `fields=` mask, so it has always been in the response and was simply being dropped.
-   *
-   * It exists because the Social ring needs to tell a standing commitment (Church, a weekly
-   * night out) from a one-off (a farewell, a lunch), and COLOUR CANNOT CARRY THAT. The
-   * calendar UI's palette is wider than the eleven legacy ids this API reports, so Graphite
-   * and Birch both arrive as colorId 8 — measured over 180 days of the owner's calendar,
-   * where id 8 held Church and Nathan's Farewell side by side. Recurrence was what the two
-   * colours were standing in for all along; this reads it off the source instead.
-   */
-  recurring: boolean;
+  // `recurring` (from Google's recurringEventId) is gone with its only reader, the Social
+  // ring — parked verbatim in archive/social/google.ts.md.
 };
+
+/**
+ * One Google Calendar event resource -> a CalEvent, or null when it has no start.
+ *
+ * The ONE mapping, shared by the live reads and the dev fixture below, so a fixture file is
+ * written in exactly the shape Google returns and can never exercise a different path.
+ */
+export function toCalEvent(e: Record<string, unknown>): CalEvent | null {
+  const start = e.start as { dateTime?: string; date?: string } | undefined;
+  const end = e.end as { dateTime?: string; date?: string } | undefined;
+  const startsAt = start?.dateTime ?? start?.date ?? null;
+  if (!startsAt) return null;
+  return {
+    id: String(e.id),
+    summary: String(e.summary ?? "(busy)"),
+    start: startsAt,
+    end: end?.dateTime ?? end?.date ?? null,
+    allDay: Boolean(start?.date && !start?.dateTime),
+    colorId: e.colorId == null ? null : String(e.colorId),
+  };
+}
+
+/** The LOCAL date an event starts on — its bucket. An 09:00 Melbourne block is the previous
+ *  day in UTC and would land on the wrong day otherwise. An all-day event's bare date is
+ *  already a local day and is kept as it is. */
+function localStartDate(startsAt: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(startsAt)) return startsAt;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(startsAt));
+}
+
+/** Group event resources by local start date, keeping only [fromDate, toDate]. */
+function bucketByDate(
+  items: Record<string, unknown>[],
+  fromDate: string,
+  toDate: string,
+): Map<string, CalEvent[]> {
+  const byDate = new Map<string, CalEvent[]>();
+  for (const item of items) {
+    const ev = toCalEvent(item);
+    if (!ev) continue;
+    const localDate = localStartDate(ev.start!);
+    if (localDate < fromDate || localDate > toDate) continue;
+    const list = byDate.get(localDate) ?? [];
+    list.push(ev);
+    byDate.set(localDate, list);
+  }
+  return byDate;
+}
+
+// ---- Dev-only calendar fixture ----
+
+/**
+ * A LOCAL CALENDAR for development, so the blocks list can be seen without Google — the
+ * Health & Career pivot spec, §10.
+ *
+ * Honoured ONLY when all three hold: NODE_ENV is not "production", the database this process
+ * writes to is a LOCAL FILE, and `DEV_CALENDAR_FIXTURE` names a JSON file (relative to the
+ * project root, or absolute). The file holds Google event resources, either as
+ * `{ "items": [...] }` — the shape the Events API returns — or as a bare array. While it is
+ * on, `getCalendarForDate` and `getCalendarRange` read it instead of Google and report
+ * `connected: true`; writes to Google are untouched.
+ *
+ * THE DATABASE CONDITION IS THE POINT, not belt and braces. A fixture event is markable:
+ * tapping Adhered on one writes a `block_marks` row keyed to an invented event id. Gated on
+ * NODE_ENV alone, `DEV_CALENDAR_FIXTURE=… npm run dev` — or that line added to `.env.local`,
+ * the natural place to put it — would serve fabricated blocks while writing to PRODUCTION
+ * Turso, because `.env.local` on this machine has pointed `DATABASE_URL` there before
+ * (2026-09-03, CLAUDE.md). Marks keyed to events no calendar has would then sit in the live
+ * database for good. Paired to a `file:` database they cannot be made at all.
+ *
+ * Ignoring the variable is SAID, once per process, rather than done quietly: a fixture that
+ * silently does nothing reads as a broken fixture, and the next move is to try harder to turn
+ * it on. The sanctioned command already satisfies both conditions.
+ *
+ * Read fresh on every call (no cache), so editing the file shows on the next request. With
+ * the variable unset — and always in production — nothing here runs and behaviour is exactly
+ * what it was.
+ */
+let fixtureWarned = false;
+
+function devFixturePath(): string | null {
+  const p = process.env.DEV_CALENDAR_FIXTURE;
+  if (!p) return null;
+  if (process.env.NODE_ENV === "production" || !isLocalDatabase()) {
+    if (!fixtureWarned) {
+      fixtureWarned = true;
+      console.warn(
+        `DEV_CALENDAR_FIXTURE is set but IGNORED: it is honoured only outside production ` +
+          `and only against a file: database (DATABASE_URL is ` +
+          `"${process.env.DATABASE_URL ?? "unset"}"). Fake events must never be markable ` +
+          `into Turso. Run: DATABASE_URL=file:./data/pivot.db NEXT_DIST_DIR=.next-build/pivot npx next dev -p 3001`,
+      );
+    }
+    return null;
+  }
+  return resolve(process.cwd(), p);
+}
+
+function readFixture(path: string): Record<string, unknown>[] {
+  const data: unknown = JSON.parse(readFileSync(path, "utf8"));
+  const items = Array.isArray(data)
+    ? data
+    : ((data as { items?: unknown } | null)?.items ?? []);
+  return Array.isArray(items) ? (items as Record<string, unknown>[]) : [];
+}
 
 // ---- OAuth ----
 
@@ -293,20 +391,9 @@ export async function listEvents(
     maxResults: "50",
   });
   const data = await api(db, `/calendars/primary/events?${q.toString()}`);
-  return (data?.items ?? []).map((e: Record<string, unknown>) => {
-    const start = e.start as { dateTime?: string; date?: string } | undefined;
-    const end = e.end as { dateTime?: string; date?: string } | undefined;
-    return {
-      id: String(e.id),
-      summary: String(e.summary ?? "(busy)"),
-      start: start?.dateTime ?? start?.date ?? null,
-      end: end?.dateTime ?? end?.date ?? null,
-      allDay: Boolean(start?.date && !start?.dateTime),
-      colorId: e.colorId == null ? null : String(e.colorId),
-      // Present only on an instance of a repeating series — see the CalEvent field.
-      recurring: e.recurringEventId != null,
-    };
-  });
+  return ((data?.items ?? []) as Record<string, unknown>[])
+    .map(toCalEvent)
+    .filter((e): e is CalEvent => e != null);
 }
 
 /**
@@ -399,41 +486,24 @@ export async function listEventsRange(
     maxResults: "250",
   });
   const data = await api(db, `/calendars/primary/events?${q.toString()}`);
-  const byDate = new Map<string, CalEvent[]>();
-  for (const e of (data?.items ?? []) as Record<string, unknown>[]) {
-    const start = e.start as { dateTime?: string; date?: string } | undefined;
-    const end = e.end as { dateTime?: string; date?: string } | undefined;
-    const startsAt = start?.dateTime ?? start?.date ?? null;
-    if (!startsAt) continue;
-    // Bucket by the LOCAL date, not the UTC one — an 09:00 Melbourne block is the
-    // previous day in UTC and would land on the wrong strip segment.
-    const localDate = new Intl.DateTimeFormat("en-CA", {
-      timeZone: APP_TZ,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date(startsAt));
-    const ev: CalEvent = {
-      id: String(e.id),
-      summary: String(e.summary ?? "(busy)"),
-      start: startsAt,
-      end: end?.dateTime ?? end?.date ?? null,
-      allDay: Boolean(start?.date && !start?.dateTime),
-      colorId: e.colorId == null ? null : String(e.colorId),
-      // Present only on an instance of a repeating series — see the CalEvent field.
-      recurring: e.recurringEventId != null,
-    };
-    const list = byDate.get(localDate) ?? [];
-    list.push(ev);
-    byDate.set(localDate, list);
-  }
-  return byDate;
+  // Bucketed by the LOCAL start date, not the UTC one — see bucketByDate.
+  return bucketByDate(
+    (data?.items ?? []) as Record<string, unknown>[],
+    fromDate,
+    toDate,
+  );
 }
 
 export async function getCalendarRange(
   fromDate: string,
   toDate: string,
 ): Promise<{ connected: boolean; byDate: Map<string, CalEvent[]> }> {
+  const fixture = devFixturePath();
+  if (fixture)
+    return {
+      connected: true,
+      byDate: bucketByDate(readFixture(fixture), fromDate, toDate),
+    };
   if (!googleConfigured()) return { connected: false, byDate: new Map() };
   const db = await getDb();
   if (!(await isConnected(db))) return { connected: false, byDate: new Map() };
@@ -579,6 +649,13 @@ function isAuthFailure(e: unknown): boolean {
 export async function getCalendarForDate(
   date: string,
 ): Promise<{ connected: boolean; configured: boolean; events: CalEvent[] }> {
+  const fixture = devFixturePath();
+  if (fixture)
+    return {
+      connected: true,
+      configured: true,
+      events: bucketByDate(readFixture(fixture), date, date).get(date) ?? [],
+    };
   if (!googleConfigured())
     return { connected: false, configured: false, events: [] };
   const db = await getDb();

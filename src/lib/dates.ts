@@ -28,6 +28,31 @@ export function isISODate(s: unknown): s is string {
   );
 }
 
+/**
+ * The LOCAL date an instant fell on, as 'YYYY-MM-DD' in the app timezone — or null when the
+ * value cannot be read.
+ *
+ * For the database's `created_at`-style stamps, which are UTC instants: a goal created at
+ * 9am in Melbourne is stamped the previous day in UTC, and slicing the first ten characters
+ * would file it under the wrong day. A value that is ALREADY a bare date is returned as it
+ * is — it names a local day, and re-parsing it as UTC midnight would move it.
+ */
+export function localDateOf(
+  value: string | null | undefined,
+  tz: string = APP_TZ,
+): string | null {
+  if (value == null) return null;
+  if (isISODate(value)) return value;
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(t));
+}
+
 /** Shift a 'YYYY-MM-DD' by n days (UTC math on the date parts — safe for date-only). */
 export function addDays(iso: string, n: number): string {
   const [y, m, d] = iso.split("-").map(Number);

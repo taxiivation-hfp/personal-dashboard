@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   FULLY_WORKED,
   WORKED_STEP,
+  dismissalWouldErase,
   normaliseFraction,
   workedFraction,
   type BlockState,
@@ -84,6 +85,43 @@ test("anything normalisable reads back unchanged", () => {
   for (const v of [0, 0.05, 0.4, 0.95, 1, -3, 7]) {
     assert.equal(workedFraction("drifted", normaliseFraction(v)), workedFraction("drifted", v));
   }
+});
+
+// ---------------------------------------------------------------- dismissing a worked block
+
+// Adherence drops a dismissed block from BOTH sides of the block share, so dismissing one
+// that earned hours is the one tap that could make the climbing figure fall. Every row gets a
+// dismiss control, so this is reachable from any marked row, not a corner case.
+
+test("a dismissal is refused on a mark that earned hours", () => {
+  assert.equal(dismissalWouldErase({ state: "adhered", workedFraction: null }), true);
+  assert.equal(dismissalWouldErase({ state: "drifted", workedFraction: 0.05 }), true);
+  assert.equal(dismissalWouldErase({ state: "drifted", workedFraction: 1 }), true);
+});
+
+test("a dismissal goes through on anything that earned nothing", () => {
+  assert.equal(dismissalWouldErase(undefined), false, "an unmarked row");
+  assert.equal(dismissalWouldErase(null), false);
+  assert.equal(dismissalWouldErase({ state: null, workedFraction: null }), false);
+  assert.equal(dismissalWouldErase({ state: "skipped", workedFraction: null }), false);
+  assert.equal(dismissalWouldErase({ state: "dismissed", workedFraction: null }), false);
+  // A drift nobody was asked about, and one answered with none of it: both earned nothing.
+  assert.equal(dismissalWouldErase({ state: "drifted", workedFraction: null }), false);
+  assert.equal(dismissalWouldErase({ state: "drifted", workedFraction: 0 }), false);
+});
+
+// It must not be a second copy of the state table: whatever a mark is worth to the day is
+// exactly what it is worth here, junk in the column included.
+test("what earns nothing dismisses, for every state and every stored fraction", () => {
+  const states: (BlockState | null)[] = [null, "adhered", "drifted", "skipped", "dismissed"];
+  for (const s of states)
+    for (const f of [null, undefined, 0, 0.05, 1, -1, 2, NaN]) {
+      assert.equal(
+        dismissalWouldErase({ state: s, workedFraction: f }),
+        workedFraction(s, f) > 0,
+        `${String(s)} / ${String(f)}`,
+      );
+    }
 });
 
 // ---------------------------------------------------------------- the dials

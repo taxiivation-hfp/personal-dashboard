@@ -1,10 +1,9 @@
 import { getDb } from "@/lib/db/client";
 import { listGoals } from "@/lib/queries";
-import { updateGoal, deleteGoal } from "@/lib/engine";
+import { updateGoal, deleteGoal, isGoalStatus } from "@/lib/engine";
+import { isISODate } from "@/lib/dates";
 
 export const runtime = "nodejs";
-
-const STATUSES = new Set(["active", "done", "paused", "dropped"]);
 
 async function goalId(ctx: {
   params: Promise<{ id: string }>;
@@ -13,6 +12,17 @@ async function goalId(ctx: {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+/**
+ * Edit a goal: any of `{ title, target, status, deadline }`; an absent field is left alone.
+ *
+ * - `status: "done"` MARKS IT DONE and stamps `completed_at` with today's local date (kept if
+ *   it was already done); `status: "active"` returns it to active and clears the stamp.
+ *   'paused' and 'dropped' are accepted as before.
+ * - `deadline: "YYYY-MM-DD"` sets it; `deadline: null` or `""` CLEARS it.
+ *
+ * Deliberately no `progress`: it is DERIVED from completed subgoal weights and must never be
+ * settable, or the stored column drifts out of step with the subgoals that define it.
+ */
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -21,17 +31,24 @@ export async function PATCH(
     const id = await goalId(ctx);
     if (id == null) return Response.json({ error: "bad id" }, { status: 400 });
     const b = await req.json();
-    if (b.status !== undefined && !STATUSES.has(String(b.status))) {
+    if (b.status !== undefined && !isGoalStatus(b.status)) {
       return Response.json({ error: "bad status" }, { status: 400 });
     }
+    let deadline: string | null | undefined;
+    if (b.deadline !== undefined) {
+      deadline = b.deadline === null || b.deadline === "" ? null : b.deadline;
+      if (deadline !== null && !isISODate(deadline))
+        return Response.json(
+          { error: "deadline must be a YYYY-MM-DD date" },
+          { status: 400 },
+        );
+    }
     const db = await getDb();
-    // Deliberately no `progress`: it is DERIVED from completed subgoal weights and must
-    // never be settable, or the stored column drifts out of step with the subgoals that
-    // define it — which is exactly what happened before.
     await updateGoal(db, id, {
-      title: b.title,
+      title: typeof b.title === "string" ? b.title : undefined,
       target: b.target,
       status: b.status,
+      deadline,
     });
     return Response.json({ goals: await listGoals(db) });
   } catch (e) {

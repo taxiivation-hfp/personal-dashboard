@@ -1,14 +1,13 @@
 import type { CalEvent } from "./google";
 // Explicit .ts extensions so `node --test` can resolve these modules. The type-only import
 // above is erased, so every runtime dependency here is itself testable with zero setup:
-// dates and worked are import-free, rings is import-free, and productivity imports only
-// worked. The two floor constants are imported from their HOMES rather than restated —
-// the checklist row, the chart's floor line and this figure must never disagree about
-// where a line sits, and a copied number is how they would start to.
+// dates, worked and rings are import-free. The two floor constants are imported from their
+// HOME, rings.ts, rather than restated — the checklist row, the chart's floor line, the
+// Health ring and this figure must never disagree about where a line sits, and a copied
+// number is how they would start to.
 import { APP_TZ } from "./dates.ts";
 import { workedFraction, type BlockState } from "./worked.ts";
-import { STEPS_FLOOR } from "./rings.ts";
-import { CALORIE_FLOOR } from "./productivity.ts";
+import { CALORIE_FLOOR, STEPS_FLOOR } from "./rings.ts";
 
 /**
  * Adherence maths.
@@ -55,10 +54,9 @@ export type Block = {
   /**
    * Scheduled length in minutes, or null when the event has no usable end.
    *
-   * FOR SCORING ONLY. The calendar column shows the allocated span as written
-   * ("10am–12pm") and never a duration — no "2h", no "3h left". This field exists so
-   * productivity.ts can weigh an hour, and it is deliberately withheld from the API's
-   * block summary so the frontend cannot render it by accident.
+   * FOR THE ARITHMETIC. Adherence weighs blocks by the hour and productivity.ts sums
+   * hours worked from it. It is deliberately withheld from /api/adherence's per-day block
+   * summary, which lists spans as written ("10am–12pm") and never a duration.
    */
   minutes: number | null;
 };
@@ -209,6 +207,32 @@ const durationMinutes = (
   return Math.max(0, Math.round((b - a) / 60000));
 };
 
+/**
+ * GRAPHITE — Google's `colorId "8"`. IGNORED EVERYWHERE, by the owner's ruling of
+ * 2026-09-18.
+ *
+ * Graphite used to mean a social event, counted by the Social ring. Social is gone, and
+ * socialising "comes naturally in between blocks" — so an event in this colour is not a
+ * block: it is not on the day's list to mark, it is not blocked hours in adherence, and it
+ * is not hours worked. Past days re-read without them; that is accepted.
+ *
+ * The Events API reports only the eleven legacy colour ids, so Birch arrives as 8 as well.
+ * That was measured on the owner's calendar and is accepted with the rule.
+ */
+export const GRAPHITE_COLOR_ID = "8";
+
+/**
+ * Is this calendar event a TIME BLOCK? THE ONE PLACE that decides — every reader of blocks
+ * (the day's list, adherence on Today and on the strip, hours worked, the drill-downs) gets
+ * them from `buildBlocks`, which asks this.
+ *
+ * Not a block: an ALL-DAY entry (a condition of the day, not eight hours of work you failed
+ * to do) and a GRAPHITE event (see above).
+ */
+export function isBlockEvent(e: Pick<CalEvent, "allDay" | "colorId">): boolean {
+  return !e.allDay && e.colorId !== GRAPHITE_COLOR_ID;
+}
+
 /** Merge live calendar events with stored marks into the day's block list. */
 export function buildBlocks(
   dateISO: string,
@@ -220,7 +244,7 @@ export function buildBlocks(
   nowMs = Date.now(),
 ): Block[] {
   return events
-    .filter((e) => !e.allDay) // all-day entries are not time blocks
+    .filter(isBlockEvent)
     .map((e) => {
       const m = marks.get(e.id);
       return {
@@ -254,8 +278,7 @@ export function buildBlocks(
  * Calories join the same even split — five habits make seven items — but earn their share
  * FRACTIONALLY, by `floorCredit`: half the step floor is half a share. They are the only
  * fractional items because they are the only ones that ARE quantities; a tick has no
- * halves. The productivity score keeps its own binary calorie rule — two measures, two
- * questions, deliberately not one arithmetic.
+ * halves.
  *
  * `floors` is REQUIRED, not defaulted. A caller that forgot it would silently compute a
  * different denominator for the same day, and two screens disagreeing about one figure is

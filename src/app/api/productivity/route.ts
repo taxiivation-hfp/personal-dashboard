@@ -1,17 +1,13 @@
 import { getDb } from "@/lib/db/client";
 import { getCalendarForDate } from "@/lib/google";
 import { buildBlocks, type BlockState } from "@/lib/adherence";
-import { caloriesForDate } from "@/lib/queries";
-import { weekdayBit, workoutsOn } from "@/lib/engine";
 import { isISODate, todayISO } from "@/lib/dates";
 import {
-  CALENDAR_RATES,
-  CALORIE_FLOOR,
-  POINTS_PER_HABIT,
-  POINTS_PER_HOUR,
-  POINTS_PER_SESSION,
-  rateFor,
-  scoreDay,
+  CATEGORY_ORDER,
+  canonicalColor,
+  categoryOf,
+  hoursForDay,
+  workedMinutes,
 } from "@/lib/productivity";
 import { workedFraction } from "@/lib/worked";
 
@@ -19,36 +15,37 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * ONE DAY'S PRODUCTIVITY, WITH ITS WORKINGS.
+ * ONE DAY'S HOURS WORKED, WITH ITS WORKINGS — the breakdown the record's hours chart opens.
  *
- * The strip draws the score as a height and prints no number, deliberately — an uncapped
- * figure with no ceiling beside it invites a comparison it cannot support. This is the
- * other half of that bargain: the bar stays a shape, and the arithmetic behind it is one
- * tap away for anyone who wants to audit it. An explanation you open on purpose is not a
- * scoreboard; a number sitting on a chart is.
+ * MINUTES BY CATEGORY and the "didn't count" list. NO POINTS: the productivity score is gone
+ * (the owner's ruling of 2026-09-18), and with it the per-hour rates, the flat gym figure
+ * and the non-negotiable points. The route keeps its path because the drill-down already
+ * calls it.
  *
- * WHAT DID NOT COUNT IS THE POINT OF IT. A day full of scheduled hours can score nothing —
- * unmarked blocks pay nothing, skipped and drifted pay nothing, and a colour the table has
- * never been taught pays nothing. Every one of those is invisible on the bar, which is
- * exactly the shape of "my gym is not in there and I cannot see why". So the ignored blocks
- * are returned WITH THEIR REASON, and they are the honest half of the answer.
+ * WHAT DID NOT COUNT IS THE POINT OF IT. A day full of scheduled hours can hold no hours
+ * worked — unmarked blocks, skipped and drifted ones, and colours that are not a category
+ * all add nothing, and every one of those is invisible on a bar. So they are returned WITH
+ * THEIR REASON. Graphite events are not in either list: they are not blocks at all
+ * (buildBlocks drops them).
  *
- * A route of its own rather than more fields on /api/adherence: that endpoint answers for
- * up to 366 days at a time and this is a drill-down into one. It also stays off DayView,
- * which is what keeps the score structurally invisible to the coach — see CLAUDE.md.
+ * Response:
+ *   date, calendarConnected
+ *   hours        DayHours | null   — { minutes, categories: [{ label, colorId, minutes }] };
+ *                                    null when the calendar could not be reached
+ *   categories   [{ label, colorId }] in stacking order, for a legend on an empty day
+ *   ignored      [{ title, minutes, colorId, state, reason }] — the minutes that did not
+ *                count (for a partial drift, only the part that went elsewhere)
  */
 
 /**
- * Why a scheduled block earned nothing — or, for a partial drift, why part of it did not.
+ * Why a scheduled block added nothing — or, for a partial drift, why part of it did not.
  * The words the screen prints, decided here so the rule and its explanation cannot drift
  * apart.
  *
- * THE ORDER IS THE ARGUMENT, and the PARTIAL branch must come last. A block that earns
- * nothing at any fraction — no usable duration, or a colour the table has never been taught
- * — must say so rather than report which share of it went elsewhere, because that share is
- * not why it scored nothing and a reason pointing at the wrong fix is worse than a vague
- * one. Everything above the partial branch is in its original order, so every case that
- * predates the slider reads exactly as it always did.
+ * THE ORDER IS THE ARGUMENT, and the PARTIAL branch must come last. A block that adds
+ * nothing at any fraction — no usable duration, or a colour that is not a category — must
+ * say so rather than report which share of it went elsewhere, because that share is not why
+ * it added nothing.
  */
 function ignoredReason(
   state: BlockState | null,
@@ -64,19 +61,14 @@ function ignoredReason(
         : state === "skipped"
           ? "skipped — it did not happen"
           : "dismissed";
-  if (!minutes) return "no duration — an all-day event is not eight hours of work";
-  // GRAPE GETS ITS OWN SENTENCE. It is unlisted like any other unscored colour, but saying
-  // so would send the reader looking for a missing rate when nothing is missing: gym is
-  // priced per logged session on purpose, so the block is not where its points live. A
-  // reason that points at the wrong fix is worse than a vague one.
-  if (colorId === "3")
-    return "gym is scored from the logged session, not from the block";
-  if (rateFor(colorId) <= 0)
-    return "this colour is not in the table, so it scores nothing";
+  if (!minutes) return "no duration";
+  // Grape gets its own words: training is logged as sessions, and an hour under a bar is not
+  // an hour of work — saying "not a category" would send the reader looking for a missing
+  // row when nothing is missing.
+  if (colorId === "3") return "gym is not counted as hours worked";
+  if (categoryOf(colorId) == null) return "this colour is not an hours category";
   // A PARTIAL DRIFT IS IN BOTH HALVES OF THIS SCREEN, and that is correct: the minutes you
-  // worked are drawn on the bar, and the minutes you did not are explained here. Stated
-  // without scolding, exactly as an unmarked block is — the slider is a record of an
-  // afternoon, not a mark out of ten.
+  // worked are in the categories, and the minutes you did not are explained here.
   if (worked < 1)
     return `drifted — the other ${Math.round((1 - worked) * 100)}% went elsewhere`;
   return null;
@@ -110,64 +102,30 @@ export async function GET(req: Request) {
     );
 
     const blocks = buildBlocks(date, cal.events, marks);
-
-    // The same tally adherence uses, so the non-negotiable count on this screen is the one
-    // the ring counted. Habit config is read as it is NOW — the schedule is not versioned.
-    const habitRows = await db.execute(
-      "SELECT id, days_mask FROM habits WHERE active=1",
-    );
-    const bit = weekdayBit(date);
-    const scheduled = habitRows.rows
-      .map((r) => ({ id: Number(r.id), mask: Number(r.days_mask) }))
-      .filter((h) => (h.mask & bit) !== 0);
-    const tickRows = await db.execute({
-      sql: "SELECT habit_id FROM habit_entries WHERE date=? AND value > 0",
-      args: [date],
+    const asWork = (b: (typeof blocks)[number]) => ({
+      minutes: b.minutes ?? 0,
+      colorId: b.colorId,
+      state: b.state,
+      workedFraction: b.workedFraction,
     });
-    const ticked = new Set(tickRows.rows.map((r) => Number(r.habit_id)));
-    const habitsDone = scheduled.filter((h) => ticked.has(h.id)).length;
 
-    const cal_ = await caloriesForDate(db, date);
-    // The logged sessions themselves, not just a count — the breakdown names each one, and
-    // "Strength, Cardio" is the answer to "which 100 points is that".
-    const gym = await workoutsOn(db, date);
-
-    // null when Google could not be reached — the same gate /api/adherence applies, and for
-    // the same reason: a score built from non-negotiables alone while every scheduled hour
-    // silently counted as zero would be a wrong number rather than an absent one.
-    const score = cal.connected
-      ? scoreDay({
-          blocks: blocks.map((b) => ({
-            minutes: b.minutes ?? 0,
-            colorId: b.colorId,
-            state: b.state,
-            workedFraction: b.workedFraction,
-          })),
-          habitsDone,
-          calories: cal_.total,
-          workouts: gym.length,
-        })
-      : null;
+    // null when Google could not be reached — the same gate /api/adherence applies: an
+    // outage must read as "no data", not as a day with nothing worked.
+    const hours = cal.connected ? hoursForDay(blocks.map(asWork)) : null;
 
     const ignored = blocks
       .filter((b) => b.state !== "dismissed")
       .map((b) => {
         const worked = workedFraction(b.state, b.workedFraction);
-        /**
-         * The share of this block that actually EARNED something — which is not the same as
-         * the share you worked. An hour of an unlisted colour pays nothing however
-         * diligently it was worked, so a block disqualified by its colour or by having no
-         * duration forfeits all of itself and not merely the part you drifted.
-         */
-        const paid = b.minutes && rateFor(b.colorId) > 0 ? worked : 0;
+        // The share of the block that COUNTED — which is not the share you worked: a block
+        // disqualified by its colour or its duration forfeits all of itself.
+        const counted =
+          b.minutes && b.minutes > 0 ? workedMinutes(asWork(b)) / b.minutes : 0;
         return {
           title: b.title,
-          // THE MINUTES THAT DID NOT COUNT, not the minutes that were scheduled. For
-          // everything except a partial drift that is the whole block, exactly as before;
-          // for a partial drift it is the part that went elsewhere, which is the only part
-          // this list is about.
+          // THE MINUTES THAT DID NOT COUNT, not the minutes that were scheduled.
           minutes:
-            b.minutes == null ? null : Math.round(b.minutes * (1 - paid)),
+            b.minutes == null ? null : Math.round(b.minutes * (1 - counted)),
           colorId: b.colorId,
           state: b.state,
           reason: ignoredReason(b.state, b.colorId, b.minutes, worked),
@@ -178,27 +136,12 @@ export async function GET(req: Request) {
     return Response.json({
       date,
       calendarConnected: cal.connected,
-      score,
-      // The label each colour carries in the score, so the screen never invents one — the
-      // strip's legend and this breakdown read the same table.
-      rates: CALENDAR_RATES,
+      hours,
+      categories: CATEGORY_ORDER.map((label) => ({
+        label,
+        colorId: canonicalColor(label),
+      })),
       ignored,
-      habits: {
-        done: habitsDone,
-        scheduled: scheduled.length,
-        points: habitsDone * POINTS_PER_HABIT,
-        // The floor scores one more ticked thing, and joins the same grey slab.
-        calories: cal_.total,
-        calorieFloor: CALORIE_FLOOR,
-        calorieCounted: (cal_.total ?? 0) >= CALORIE_FLOOR,
-      },
-      // The logged sessions by kind, so the breakdown can name what it is paying for.
-      sessions: gym.map((w) => w.kind),
-      constants: {
-        perHour: POINTS_PER_HOUR,
-        perHabit: POINTS_PER_HABIT,
-        perSession: POINTS_PER_SESSION,
-      },
     });
   } catch (e) {
     return Response.json(

@@ -1,27 +1,53 @@
-// Pillar sufficiency rings. PURE — no DB, no React, zero imports, so this runs under
-// `node --test` with no dependencies.
+// Pillar rings — HEALTH and CAREER. PURE — no DB, no React, zero imports, so this runs
+// under `node --test` with no dependencies.
 //
-// THE CORE RULE: a ring fills toward a SUFFICIENCY THRESHOLD and CAPS there. It cannot
-// be improved by doing more — 8 strength sessions and 20 render identically, and 15k
-// steps fills the steps ring exactly as much as 7k. That cap is the whole mechanism:
-// because you cannot win by overdoing one pillar, the only board that looks good is a
-// well-rounded one.
+// TWO PILLARS, by the owner's ruling of 2026-09-18 (the Health & Career pivot). Social is
+// gone from every screen and every calculation; its code is parked verbatim under
+// archive/social/. The database keys stay `physical` and `portfolio` — renaming a live key
+// is churn — and the names people read come from PILLAR_NAME below, and only from there.
 //
-// A SECOND, INNER CAP applies to some metrics only: `perDayCapped` says whether a day can
-// contribute more than once. Steps is capped by nature (15k ≡ 7k) and a habit can only be
-// ticked once. Gym is NOT, by the owner's ruling — two lifts on a Tuesday are two things
-// that happened. That ruling makes the Physical ring easier to fill than the days rule it
-// replaced, and the threshold was deliberately left at 8 anyway.
+// THE CORE RULE still holds: a part fills toward a threshold and CAPS there. Eight strength
+// sessions and twenty fill Strength identically, and overdoing one part never fills another
+// — the pillar is a weighted mean of CAPPED fills. What changed is the drawing: a ring is
+// now a SEGMENTED DONUT of one thickness, split into arcs sized by weight, with no outer
+// laps, no mid band and no overdrive. So the only things this module hands a screen are
+// what that drawing needs: each arc's share of the circle, its capped fill, and the real,
+// uncapped number printed beside it.
 //
-// Thresholds are the owner's MINIMUMS, not stretch goals, and they are configured here
-// on purpose so retuning is a one-line change.
+// HEALTH fills from five parts defined in HEALTH_METRICS. CAREER fills from goals and its
+// maths lives in career.ts; both produce the same drawing-ready shape, PillarRingView.
 //
-// There is no progression here. No XP, no levels, no points, no streaks on rings, no
-// fortnight-over-fortnight comparison. A thin ring means NEGLECTED, never failed.
+// Thresholds are the owner's MINIMUMS, not stretch goals. There is no progression here: no
+// XP, no levels, no points, no ring streaks, no fortnight-over-fortnight comparison. A thin
+// ring means NEGLECTED, never failed.
 
-/** Also re-exported from queries.ts, so existing `@/lib/queries` imports keep working.
- *  It lives HERE because this module must stay import-free to be testable. */
-export type PillarKey = "social_capital" | "physical" | "portfolio";
+/**
+ * The two pillars, by their DATABASE keys. Also re-exported from queries.ts.
+ *
+ * `social_capital` is no longer a member. Its `pillars` row stays in the database (goals,
+ * habits and tasks reference it), and every reader that turns a stored key into a
+ * PillarKey goes through `isPillarKey`, so a row still filed under Social is filtered or
+ * mapped rather than cast into a key this type does not have.
+ */
+export type PillarKey = "physical" | "portfolio";
+
+/** The order pillars are listed and drawn in. */
+export const PILLAR_ORDER: readonly PillarKey[] = ["physical", "portfolio"];
+
+/**
+ * THE display names — the single source. `pillars.name` in the database is kept in step by
+ * the pivot migration, but nothing should print it: a name that lives in two places is a
+ * name that eventually says two things.
+ */
+export const PILLAR_NAME: Record<PillarKey, string> = {
+  physical: "Health",
+  portfolio: "Career",
+};
+
+/** Is a stored key one of the two live pillars? The one gate between a database string and
+ *  a PillarKey. */
+export const isPillarKey = (k: unknown): k is PillarKey =>
+  k === "physical" || k === "portfolio";
 
 /**
  * The pillar palette the owner may choose from.
@@ -47,7 +73,6 @@ export const PILLAR_PALETTE: { name: string; hex: string }[] = [
 
 /** The CSS variable each pillar falls back to when it has no chosen colour. */
 export const PILLAR_DEFAULT_VAR: Record<PillarKey, string> = {
-  social_capital: "var(--color-social)",
   physical: "var(--color-physical)",
   portfolio: "var(--color-portfolio)",
 };
@@ -57,504 +82,325 @@ export const isPaletteHex = (hex: string): boolean =>
 
 /** A skill's fallback hue when the owner has not chosen one: cycled from the palette by
  *  id, so it is STABLE — a skill keeps the same colour across sessions and screens until
- *  a choice is made, and two skills only collide once there are more than eight. */
+ *  a choice is made, and two skills only collide once there are more than eight. Skills
+ *  are hidden since the pivot; their data and colours are kept. */
 export const skillDefaultHex = (id: number): string =>
   PILLAR_PALETTE[Math.abs(id) % PILLAR_PALETTE.length]!.hex;
 
+/** The rolling window: 14 days ending on the day being viewed, both ends inclusive. */
 export const WINDOW_DAYS = 14;
-
-export type MetricSource =
-  | "habit"
-  | "gym"
-  | "skill_session"
-  | "health_steps"
-  | "calendar_social"
-  | "calendar_project_hours";
 
 /**
  * Workout kinds.
  *
- * MISC IS GONE, by the owner's ruling, and the reason is duplication rather than dislike:
- * what Misc actually held was bouldering and calisthenic skills, and Calisthenics is a
- * SKILL under Portfolio. Now that skills log sessions rather than hours the two were the
- * same row written in two places, and a thing you log twice is a thing you eventually log
- * in whichever place you remember — which makes both counts wrong.
- *
- * `gym_sessions.kind` still ACCEPTS 'misc' at the database level; the CHECK constraint is
- * untouched. Nothing writes it any more and no metric counts it, so any surviving row is
- * inert rather than corrupt.
+ * MISC IS GONE, by the owner's ruling: it held bouldering and calisthenic skills, which were
+ * the same row written in two places. `gym_sessions.kind` still ACCEPTS 'misc' at the
+ * database level; nothing writes it and no metric counts it, so any surviving row is inert.
  */
 export type WorkoutKind = "strength" | "cardio";
 export const WORKOUT_KINDS: WorkoutKind[] = ["strength", "cardio"];
 
 /**
- * The daily step floor, in one place because three unrelated things read it.
- *
- * It is NO LONGER what the ring counts — see the steps metric — but it is still the line
- * the checklist row dashes against and the chart draws its floor at. Those are per-day
- * statements and stay per-day; only the ring changed.
+ * The daily STEP floor. The checklist row dashes against it, the chart draws its floor line
+ * at it, adherence pays a fraction of a share toward it, and the Health ring's fortnight
+ * target is derived from it. One number, four readers, no copies.
  */
-const STEPS_DAILY = 7000;
+export const STEPS_FLOOR = 7000;
 
-/** How far past its threshold a ring may visibly run. Visual only — see metricOverdrive. */
-export const OVERDRIVE_CAP = 2;
+/**
+ * The daily CALORIE floor — a number to reach, never a ceiling to stay under. This is
+ * someone training, for whom under-eating is the failure.
+ *
+ * It moved HERE from productivity.ts with the pivot, because rings.ts must stay import-free
+ * and the Health ring now reads it. adherence.ts imports it from here (a fractional share
+ * of the habit half), productivity.ts re-exports it for the calorie screens that already
+ * import it from there. One constant, no copied numbers.
+ */
+export const CALORIE_FLOOR = 2500;
+
+export type HealthMetricKey =
+  | "strength"
+  | "cardio"
+  | "ascnd"
+  | "steps"
+  | "calories";
+
+export type MetricSource = "gym" | "habit" | "health_steps" | "calories";
+
+/**
+ * How a part's real number is printed beside it. The owner's lines are the spec:
+ *   count      "2 of 8"        — sessions against a threshold
+ *   days       "11/14"         — days ticked against the window
+ *   thousands  "84k of 98k"    — a fortnight's TOTAL, grouped to thousands
+ */
+export type FactStyle = "count" | "days" | "thousands";
 
 export type Metric = {
-  key: string;
-  pillar: PillarKey;
+  key: HealthMetricKey;
+  /** What the part is called on screen. */
   label: string;
   source: MetricSource;
-  /** Habit-sourced metrics only. Looked up by system_key, never by name — the owner can
+  /** Habit-sourced parts only. Looked up by system_key, never by name — the owner can
    *  rename their non-negotiables. */
   systemKey?: string;
-  /** A day qualifies at or above this. Carries the per-day cap: 15k steps ≡ 7k. */
-  dailyThreshold?: number;
-  /** Which workout row this metric counts. Only for source 'gym'. */
+  /** Which workout row this part counts. Only for source 'gym'. */
   workoutKind?: WorkoutKind;
+  /** The daily floor a fortnight TOTAL is derived from. Steps and calories only. */
+  dailyThreshold?: number;
+  /** What fills the arc. Always a real threshold now — nothing in a ring is "tracked but
+   *  not scored" any more. */
+  required: number;
   /**
-   * Qualifying days/sessions needed to fill.
-   *
-   * null with a live source means TRACKED BUT NOT SCORED — the count is shown as a plain
-   * fact, no ring is drawn, and it is excluded from the pillar mean. A thing you log that
-   * is deliberately never a target.
-   */
-  required: number | null;
-  /**
-   * The noun printed in the fact line, and ONLY that.
-   *
-   * It used to double as the cap semantics, which was a trap: renaming a metric's noun
-   * silently changed how it was counted and dropped it out of a test invariant. The cap
-   * now lives in `perDayCapped`, and these two must be allowed to disagree — `misc` reads
-   * "sessions" and always did, even while it was being counted by day.
-   */
-  unit: "days" | "sessions" | "hours" | "steps";
-  /**
-   * Whether one date can contribute at most once.
-   *
-   * TRUE for things capped by nature: a habit is ticked once, and 15k steps is the same
-   * day as 7k. FALSE for gym and skills, where a second session is a second thing that
-   * happened. This is what `queries.ts` switches COUNT(DISTINCT date) vs COUNT(*) on.
+   * Whether one date can contribute at most once. TRUE for a habit (ticked once a day);
+   * FALSE for gym, where a second session is a second thing that happened, and for the two
+   * totals, which are sums. `queries.ts` switches COUNT(DISTINCT date) vs COUNT(*) on it.
    */
   perDayCapped: boolean;
-  /**
-   * Share of the pillar's mean. Default 1 — an unweighted pillar behaves exactly as an
-   * equal mean, so nothing else had to change when this was added.
-   */
+  /** The part's share of the pillar, as the owner wrote it (a percentage). The view
+   *  normalises it, so the arcs always make one whole circle. */
   weight: number;
-  /** False when no writer for this source exists yet. NEVER inferred from row count —
-   *  zero rows in the window is a real, meaningful zero. */
-  sourceReady: boolean;
+  fact: FactStyle;
 };
 
-export const METRICS: Metric[] = [
-  {
-    key: "outreach",
-    pillar: "social_capital",
-    label: "Outreach",
-    source: "habit",
-    systemKey: "outreach",
-    required: 2, // 1 / week
-    unit: "days",
-    perDayCapped: true, // a non-negotiable is ticked once
-    weight: 1,
-    sourceReady: true,
-  },
+/**
+ * HEALTH — the owner's five parts, 2026-09-18.
+ *
+ * | Part           | Weight | Fill                              |
+ * | Strength       | 40     | strength sessions ÷ 8             |
+ * | Cardio         | 15     | cardio sessions ÷ 2               |
+ * | ASC.ND routine | 15     | days ticked ÷ 14                  |
+ * | Steps          | 15     | SUM(steps) ÷ STEPS_FLOOR × 14     |
+ * | Calories       | 15     | SUM(kcal) ÷ CALORIE_FLOOR × 14    |
+ *
+ * STEPS AND CALORIES ARE FORTNIGHT TOTALS — the owner's ruling, both. One big day covers
+ * quiet ones, and an unlogged day adds 0. That is a real change of meaning from a
+ * consistency measure, and it is why the DAILY floors stay drawn on the checklist rows and
+ * the charts, where consistency is still the question. The targets are DERIVED as floor ×
+ * window so retuning a daily line moves the fortnight with it.
+ *
+ * The cap is per part: a 40k-step Saturday can fill Steps and nothing else, and no amount of
+ * strength reaches 100 while cardio sits empty.
+ */
+export const HEALTH_METRICS: Metric[] = [
   {
     key: "strength",
-    pillar: "physical",
     label: "Strength",
     source: "gym",
     workoutKind: "strength",
-    required: 8, // the owner's stated minimum, held at 8 across the days->sessions move
-    unit: "sessions",
-    perDayCapped: false, // two lifts on a Tuesday are two things that happened
-    // Physical is a WEIGHTED mean, 0.8 strength / 0.2 cardio. Eight strength days and no
-    // cardio reads 80%, not 50% — the bulk of the intent was met, and the empty cardio
-    // ring still shows what was skipped.
-    weight: 0.8,
-    sourceReady: true,
+    required: 8,
+    // Two lifts on a Tuesday are two things that happened.
+    perDayCapped: false,
+    weight: 40,
+    fact: "count",
   },
   {
     key: "cardio",
-    pillar: "physical",
     label: "Cardio",
     source: "gym",
     workoutKind: "cardio",
-    required: 2, // a floor, not a target
-    unit: "sessions",
+    required: 2,
     perDayCapped: false,
-    weight: 0.2,
-    sourceReady: true,
+    weight: 15,
+    fact: "count",
+  },
+  {
+    // The owner's daily stretching / skincare / posture routine — the ASC.ND document habit,
+    // moved to Health by the pivot migration. Counted by system_key, so a rename changes
+    // nothing.
+    key: "ascnd",
+    label: "ASC.ND routine",
+    source: "habit",
+    systemKey: "ascnd",
+    required: WINDOW_DAYS,
+    perDayCapped: true,
+    weight: 15,
+    fact: "days",
   },
   {
     key: "steps",
-    pillar: "physical",
     label: "Steps",
     source: "health_steps",
-    /**
-     * The daily floor, kept HERE because the checklist row and the chart's floor line read
-     * it through STEPS_FLOOR. It no longer gates the ring — see `required`.
-     */
-    dailyThreshold: STEPS_DAILY,
-    /**
-     * TOTAL STEPS ACROSS THE FORTNIGHT, not qualifying days — the owner's ruling.
-     *
-     * This ring used to count days that reached 7k, which made it a CONSISTENCY measure:
-     * 6,900 steps scored exactly what 0 did, and a 20k Saturday scored exactly what 7,001
-     * did. Two of the owner's real weeks read as near-empty rings while the actual distance
-     * walked was most of the fortnight's target, because the walking was not evenly shaped.
-     *
-     * Summing says the honest thing for this particular quantity: steps ACCUMULATE. A long
-     * day genuinely is more walking, and nothing about a body cares which date it fell on.
-     *
-     * Derived as floor x window rather than written as 98,000, so retuning the daily line
-     * moves the fortnight target with it and the two can never disagree.
-     *
-     * KNOWN AND ACCEPTED: this is the one metric where a single big day can carry several
-     * quiet ones. That is a real change in meaning, not an oversight — it is why the daily
-     * floor stays drawn on the checklist and the chart, where consistency is still the
-     * question being asked.
-     */
-    required: STEPS_DAILY * WINDOW_DAYS,
-    unit: "steps",
-    /**
-     * FALSE now, and it has to be: `perDayCapped` switches the counter between
-     * COUNT(DISTINCT date) and a per-row aggregate, and a sum that de-duplicated by date
-     * would throw away every step after the first row of each day. health_logs holds one
-     * row per date by construction, so this flag is documentation more than arithmetic —
-     * but the two must still agree, which is the whole reason it stopped being inferred
-     * from `unit`.
-     */
+    dailyThreshold: STEPS_FLOOR,
+    required: STEPS_FLOOR * WINDOW_DAYS,
+    // A SUM. De-duplicating by date would throw away every step after a day's first row.
     perDayCapped: false,
-    weight: 0,
-    // LIVE: an iOS Shortcut POSTs the day's count to /api/health, which upserts
-    // health_logs. Weight stays 0, so it draws as a thin outer lap and never moves the
-    // Physical mean — a phone sensor must not be able to cap the pillar. It still ghosts
-    // whenever the count is unresolved.
-    sourceReady: true,
+    weight: 15,
+    fact: "thousands",
   },
   {
-    key: "social_events",
-    pillar: "social_capital",
-    // "Events", not "Social events": the label is printed at its own arc on the Social
-    // donut, where the pillar name is already overhead and the longer form overran the box
-    // by 16px. Shorter is also just better here — the context is never in doubt.
-    label: "Events",
-    source: "calendar_social",
-    // Graphite in the calendar means a weekly-occurring social event — Church, a night
-    // out. Counted from the calendar rather than ticked, because they are already
-    // scheduled there and a second place to record them is a second place to forget.
-    // ADHERED events only, since the marks pivot: an event on the calendar you drifted
-    // from is not a social fortnight you had.
-    required: 6, // ~6 / 14 days, the owner's revised minimum (was 2)
-    unit: "sessions",
+    key: "calories",
+    label: "Calories",
+    source: "calories",
+    dailyThreshold: CALORIE_FLOOR,
+    required: CALORIE_FLOOR * WINDOW_DAYS,
+    // A SUM of calorie_entries.kcal. The log holds several entries a day by design.
     perDayCapped: false,
-    weight: 1,
-    sourceReady: true,
-  },
-  {
-    key: "project_hours",
-    pillar: "portfolio",
-    label: "Projects",
-    source: "calendar_project_hours",
-    /**
-     * HOURS BLOCKED FOR THE OWNER'S OWN PROJECTS, from the calendar — Basil, the one
-     * full-rate category in productivity.ts. Adhered only, exactly as the social events
-     * are: an hour you blocked and drifted from is not project work you did.
-     *
-     * The first metric measured in HOURS rather than in things that happened, and the
-     * reason is what the pillar is for. Skills counts sessions because turning up is the
-     * unit — a lesson is a lesson. Portfolio work has no session shape; it is the thing
-     * that quietly gets none of the week, so the honest question is how much of the week
-     * it got.
-     */
-    required: 14, // 14h / 14 days — an hour a day, the owner's minimum
-    unit: "hours",
-    perDayCapped: false,
-    /**
-     * WEIGHT 0, so this is a thin lap around the donut and never moves Portfolio's fill.
-     *
-     * The owner asked for an outer ring, and that is what an outer ring means here — the
-     * same standing Misc and Steps have. It also keeps a real property: Portfolio's fill
-     * stays a statement about SKILLS, so blocking six hours and touching nothing cannot
-     * fill the pillar. The lap says the hours were there; the donut says what came of them.
-     */
-    weight: 0,
-    sourceReady: true,
-  },
-  {
-    key: "skills",
-    pillar: "portfolio",
-    label: "Skills",
-    source: "skill_session",
-    required: 4, // 4 sessions / 14 days
-    // SESSIONS, not days, by the owner's ruling: several of these (ice skating,
-    // badminton, dancing) are social activities, so three on one Saturday is three
-    // things that happened, not cramming. The outer cap still bounds the ring.
-    unit: "sessions",
-    perDayCapped: false,
-    weight: 1,
-    sourceReady: true,
+    weight: 15,
+    fact: "thousands",
   },
 ];
 
-/**
- * What a qualifying step day is, read FROM the registry above.
- *
- * The checklist row, the record's chart and the ring must never disagree about where the
- * line sits, and the way that used to be guaranteed was every caller writing its own
- * `METRICS.find(m => m.key === "steps")` — which is one lookup per caller and one chance
- * each to fall out of step. Derived once, here, beside the metric it comes from.
- *
- * A FLOOR to reach, exactly as calories are: 15k steps is the same day as 7k, so there is
- * no upper bound worth drawing and nothing above the line scores twice.
- */
-export const STEPS_FLOOR: number =
-  METRICS.find((m) => m.key === "steps")?.dailyThreshold ?? 7000;
-
-const PILLAR_ORDER: PillarKey[] = ["social_capital", "physical", "portfolio"];
-
-/** What a reader returns for one metric. `resolved` is whether the SOURCE wired up —
- *  independent of how many rows it found. */
+/** What a reader returns for one metric. `resolved` is whether the SOURCE answered —
+ *  independent of how many rows it found. Zero rows is a real zero. */
 export type RawCount = { count: number; resolved: boolean };
 
-/** How a metric is displayed. Derived, never declared — see the order of checks. */
-export type MetricState = "scored" | "unscored" | "ghost";
+// ---------------------------------------------------------------- the drawing-ready view
 
-export type MetricRing = {
+/**
+ * ONE ARC of a segmented donut, and one line of the part list beside it.
+ *
+ * Everything a screen needs to draw the arc and print its line, with no arithmetic of its
+ * own: the arc's length is `weight × circumference` (the weights of one ring sum to 1), the
+ * lit part is `fill × arcLength`, and the line is `${label} ${fact}`.
+ */
+export type ArcView = {
+  /** Stable React key: the metric key on Health, `goal-<id>` on Career. */
   key: string;
-  pillar: PillarKey;
+  /** "Strength" on Health; the goal's title on Career. */
   label: string;
-  count: number;
-  required: number | null;
-  state: MetricState;
-  /** 0..1, or null for unscored and ghost. NEVER 0 to mean "no source". */
-  fill: number | null;
-  /**
-   * Work past the threshold, 0..1 as a fraction of one extra lap, or null.
-   *
-   * VISUAL ONLY. It never reaches the pillar mean — see buildRings.
-   */
-  overdrive: number | null;
-  /** The count printed under the ring. The arc caps; this never does. */
-  fact: string;
-  /**
-   * "day 9 of 14" while the window is still filling, else null.
-   *
-   * Split out of `fact` so the row can place the two independently — the Log button sits
-   * between them. Day one must not read like a fortnight of neglect, which is why this
-   * exists at all.
-   */
-  window: string | null;
-  /** Which workout row this metric counts, when it counts one. Carried through so the UI
-   *  can tell which rows get a Log button without re-deriving it from the key. */
-  workoutKind?: WorkoutKind;
-  /**
-   * The metric's share of the pillar's mean, copied from the registry.
-   *
-   * Carried through so the segmented donut can give each metric an ARC LENGTH — Strength
-   * owns most of Physical's circle and Cardio a fifth. Without it the view would have to
-   * re-import METRICS and match on key, which is the registry leaking into the UI.
-   *
-   * It is the WEIGHT, not the value: what a metric is worth, never how well it went.
-   */
+  /** This arc's share of the circle, 0..1. The arcs of one ring sum to 1. */
   weight: number;
   /**
-   * Draw this one as a thin lap OUTSIDE the donut instead of a slice of it.
-   *
-   * True for a metric with a floor of its own that must never move the pillar's average —
-   * Misc, at one session a fortnight. Derived here rather than in the view so the registry
-   * stays the only place that knows what a weight of 0 means; the alternative was the UI
-   * re-importing METRICS and matching on key.
-   *
-   * A weight-0 metric with NO floor is not a lap — it has nothing to fill toward, so it
-   * stays an unscored slice. Neither is a ghost: "no source yet" is a statement about the
-   * app, and it belongs on the ring where the missing metric would have been.
+   * 0..1, CAPPED — or null for a GHOST arc (its source did not answer), drawn dashed and
+   * left out of the pillar's mean. Null is never 0: a broken wire is not a fortnight of
+   * nothing.
    */
-  lap: boolean;
-};
-
-export type PillarRingView = {
-  pillar: PillarKey;
-  /** Weighted mean of the scored fills. null when nothing in the pillar resolved. */
   fill: number | null;
-  metrics: MetricRing[];
+  /** The real number, never capped: "11 of 8", "11/14", "84k of 98k", "60% · due 30 Sep". */
+  fact: string;
 };
 
-/** !sourceReady is checked FIRST: steps has required:12 but no writer, so it is a ghost,
- *  not unscored. The order of these two checks is load-bearing. */
-export function metricState(m: Metric, hasSource: boolean): MetricState {
-  if (!hasSource) return "ghost";
-  return m.required == null || m.required < 1 ? "unscored" : "scored";
-}
+/** A Health arc: the metric's own facts ride along for the Log buttons and dialogs. */
+export type HealthArc = ArcView & {
+  key: HealthMetricKey;
+  /** The raw count behind `fact` (sessions, days, steps, kcal). */
+  count: number;
+  required: number;
+  /** Strength / cardio rows carry their kind, so a screen knows which get a Log button
+   *  without matching on the key. null on the other three. */
+  workoutKind: WorkoutKind | null;
+};
 
+/** A Career arc: one counted goal. Built in career.ts. */
+export type CareerArc = ArcView & {
+  goalId: number;
+  /** YYYY-MM-DD. Every counted goal has one — a goal without a deadline is not in the ring. */
+  deadline: string;
+  /** The goal's real progress, 0..1 (goals.ts). `fill` is progress against pace, not this. */
+  progress: number;
+  /** How much of the goal the calendar expects done by the viewed day, 0..1. */
+  expected: number;
+};
+
+export type HealthRingView = {
+  key: "physical";
+  name: string;
+  /** Weighted mean of the capped arc fills, 0..1; null only if every arc is a ghost. */
+  fill: number | null;
+  arcs: HealthArc[];
+};
+
+export type CareerRingView = {
+  key: "portfolio";
+  name: string;
+  /**
+   * Mean of the arc fills, 0..1 — or null when NO goal counts, which is drawn as an empty
+   * dashed ghost labelled "no goals", never as "0%".
+   */
+  fill: number | null;
+  /** One EQUAL arc per counted goal, soonest deadline first. Empty when fill is null. */
+  arcs: CareerArc[];
+};
+
+/** The one shape both pillar rings are drawn from, discriminated by `key`. */
+export type PillarRingView = HealthRingView | CareerRingView;
+
+// ---------------------------------------------------------------- the maths
+
+/** min(1, count / required), or null when the source did not answer. Never NaN. */
 export function metricFill(
   count: number,
-  required: number | null,
-  hasSource: boolean,
+  required: number,
+  resolved: boolean,
 ): number | null {
-  if (!hasSource) return null;
-  if (required == null || required < 1) return null;
-  return Math.min(1, count / required);
+  if (!resolved) return null;
+  if (!(required > 0) || !Number.isFinite(count)) return null;
+  return Math.min(1, Math.max(0, count / required));
 }
 
 /**
- * The fraction of a second lap, 0..1, or null when there is nothing past the threshold.
+ * The weighted mean of CAPPED fills, over the arcs that have one. Ghosts are EXCLUDED, never
+ * counted as 0 — a part with no source would otherwise cap the pillar below full forever,
+ * which no behaviour could fix. null when nothing has a fill.
  *
- * This exists so extra work is ACKNOWLEDGED without being REWARDED. It is deliberately
- * kept out of the pillar mean: with Strength weighted 0.8, an uncapped fill of 1.25 would
- * give 0.8 × 1.25 + 0.2 × 0 = 100%, so ten strength days and zero cardio would fill
- * Physical completely and overdoing one thing would exactly cancel neglecting another.
- * That is the failure the cap exists to prevent, so the cap stays in the maths and the
- * acknowledgement lives in the pixels.
+ * It consumes `fill`, which is capped at 1, and that is load-bearing: an uncapped strength
+ * fill could cancel an empty cardio arc, and the cap is what keeps a well-rounded fortnight
+ * the only full ring.
  */
-export function metricOverdrive(
-  count: number,
-  required: number | null,
-  hasSource: boolean,
+export function weightedFill(
+  arcs: { weight: number; fill: number | null }[],
 ): number | null {
-  if (!hasSource || required == null || required < 1) return null;
-  const ratio = count / required;
-  if (ratio <= 1) return null;
-  return Math.min(1, (ratio - 1) / (OVERDRIVE_CAP - 1));
+  let total = 0;
+  let sum = 0;
+  for (const a of arcs) {
+    if (a.fill == null || !(a.weight > 0)) continue;
+    total += a.weight;
+    sum += a.fill * a.weight;
+  }
+  return total > 0 ? sum / total : null;
 }
 
 /**
- * 45231 -> "45,231", 7.4 -> "7.4", 8 -> "8".
+ * 84,512 -> "84k", 7,450 -> "7.4k", 850 -> "850".
  *
- * Written out rather than `toLocaleString`, which depends on the ICU build and would make
- * this module's tests environment-sensitive — the one thing an import-free, dependency-free
- * module exists to avoid.
- *
- * It earns its place with the steps metric: that fact line now reads in the tens of
- * thousands, and "45231 of 98000 steps" is a number you have to count digits in.
+ * FLOORED, never rounded: a line reading "98k of 98k" over an arc that is not full would be
+ * the text claiming more than the ring does. Written out rather than `toLocaleString` so
+ * this module's output never depends on the ICU build.
  */
-const grouped = (n: number): string => {
-  const [whole, frac] = String(n).split(".");
-  return (
-    whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (frac ? `.${frac}` : "")
-  );
-};
-
-function factLine(m: Metric, count: number, state: MetricState): string {
-  if (state === "ghost") return "no data source yet";
-  // Unscored: a count, and an explicit statement that it is not being measured against
-  // anything. Saying "no data source yet" here would be a lie — there IS data.
-  if (state === "unscored") return `${grouped(count)} ${m.unit} · not scored`;
-  return `${grouped(count)} of ${grouped(m.required as number)} ${m.unit}`;
+export function compactThousands(n: number): string {
+  const v = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+  if (v < 1000) return String(v);
+  if (v < 10_000) return `${Math.floor(v / 100) / 10}k`;
+  return `${Math.floor(v / 1000)}k`;
 }
 
-/** Day one must not read like a fortnight of neglect: while the window is still filling,
- *  say so plainly rather than letting a thin ring imply failure. Null once it is full. */
-function windowLine(state: MetricState, observedDays: number): string | null {
-  if (state !== "scored" || observedDays >= WINDOW_DAYS) return null;
-  return `day ${observedDays} of ${WINDOW_DAYS}`;
+/** The printed number for one part, in the owner's own formats. The arc caps; this never
+ *  does — "11 of 8" is a true sentence. */
+export function factFor(m: Metric, count: number): string {
+  if (m.fact === "days") return `${count}/${m.required}`;
+  if (m.fact === "thousands")
+    return `${compactThousands(count)} of ${compactThousands(m.required)}`;
+  return `${count} of ${m.required}`;
 }
 
-export function buildRings(
+/**
+ * The HEALTH ring from raw counts keyed by metric key. A key that is absent is treated as an
+ * unresolved source (a ghost), never as a zero.
+ */
+export function buildHealthRing(
   counts: Record<string, RawCount>,
-  observedDays: number,
-): PillarRingView[] {
-  return PILLAR_ORDER.map((pillar) => {
-    const mine = METRICS.filter((m) => m.pillar === pillar);
-
-    const metrics: MetricRing[] = mine.map((m) => {
-      const raw = counts[m.key] ?? { count: 0, resolved: false };
-      const hasSource = m.sourceReady && raw.resolved;
-      const state = metricState(m, hasSource);
-      return {
-        key: m.key,
-        pillar: m.pillar,
-        label: m.label,
-        count: raw.count,
-        required: m.required,
-        state,
-        fill: metricFill(raw.count, m.required, hasSource),
-        overdrive: metricOverdrive(raw.count, m.required, hasSource),
-        fact: factLine(m, raw.count, state),
-        window: windowLine(state, observedDays),
-        workoutKind: m.workoutKind,
-        weight: m.weight,
-        lap: state === "scored" && m.weight <= 0,
-      };
-    });
-
-    // WEIGHTED mean over scored metrics only. A metric with no source, or one that is
-    // tracked but not scored, is EXCLUDED — never counted as 0. Counting steps as zero
-    // would cap Physical permanently and read as a failure no behaviour could fix.
-    //
-    // Note this consumes `fill`, which is capped at 1. Overdrive is deliberately absent:
-    // letting it in would mean extra strength could cancel absent cardio.
-    const live = metrics
-      .map((r, i) => ({ r, weight: mine[i].weight }))
-      .filter((x) => x.r.fill !== null && x.weight > 0);
-
-    const totalWeight = live.reduce((s, x) => s + x.weight, 0);
-    const fill = totalWeight
-      ? live.reduce((s, x) => s + (x.r.fill as number) * x.weight, 0) /
-        totalWeight
-      : null;
-
-    return { pillar, fill, metrics };
+): HealthRingView {
+  const totalWeight = HEALTH_METRICS.reduce((s, m) => s + m.weight, 0);
+  const arcs: HealthArc[] = HEALTH_METRICS.map((m) => {
+    const raw = counts[m.key] ?? { count: 0, resolved: false };
+    const count = raw.resolved ? raw.count : 0;
+    return {
+      key: m.key,
+      label: m.label,
+      weight: totalWeight > 0 ? m.weight / totalWeight : 0,
+      fill: metricFill(count, m.required, raw.resolved),
+      // A ghost prints a dash, the app's word for "nobody measured" — never "0 of 14",
+      // which would be a zero the source did not say.
+      fact: raw.resolved ? factFor(m, count) : "—",
+      count,
+      required: m.required,
+      workoutKind: m.workoutKind ?? null,
+    };
   });
-}
-
-/**
- * What a pillar's fortnight actually held, in plain words, under its name.
- *
- * The counterpart to the ring above it, and deliberately a DIFFERENT KIND of statement. The
- * ring answers "how full", which is capped, weighted and bounded at a threshold; this
- * answers "what happened", which is raw and must never cap. A caption derived from the ring
- * would inherit the cap and print "8 sessions" on a fortnight of twenty.
- *
- * It is a count, not a verdict. No comparison with the last fortnight, no "up from", no
- * adjective — the same prohibition the coach runs under.
- *
- * PURE, so it is testable without a database, and so the wording lives beside the registry
- * rather than in a component where it would drift.
- */
-export type PillarFactInput = {
-  /** Portfolio: skill SESSIONS in the window. Was total minutes — skills stopped being
-   *  measured in hours, so the caption counts the same thing the ring does. */
-  skillSessions: number;
-  /** Physical: gym_sessions ROWS in the window, all three kinds. */
-  workoutSessions: number;
-  /** Social: outreach non-negotiable ticks in the window. */
-  outreach: number;
-  /**
-   * Social: graphite calendar events in the window.
-   *
-   * UNDEFINED when Google could not be reached, and that distinction is the whole reason
-   * this is not a number. A zero would claim the fortnight held no social events, which is
-   * a different and possibly false statement — the same rule the ghost ring runs under.
-   */
-  socialEvents?: number;
-};
-
-/** "90" -> "1.5", "120" -> "2", "0" -> "0". One decimal, no trailing zero. */
-const asHours = (minutes: number): string =>
-  String(Math.round((minutes / 60) * 10) / 10);
-
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
-
-export function pillarCaption(
-  pillar: PillarKey,
-  f: PillarFactInput,
-): string {
-  if (pillar === "portfolio") {
-    // "no sessions", not "0 sessions": the zero is true, and saying it as a word rather
-    // than a figure keeps it from reading as a score of nought.
-    if (f.skillSessions <= 0) return "no sessions logged past fortnight";
-    return `${f.skillSessions} ${plural(f.skillSessions, "session", "sessions")} logged past fortnight`;
-  }
-
-  if (pillar === "physical") {
-    if (f.workoutSessions <= 0) return "no sessions logged past fortnight";
-    return `${f.workoutSessions} ${plural(f.workoutSessions, "session", "sessions")} logged past fortnight`;
-  }
-
-  const out = `${f.outreach} ${plural(f.outreach, "outreach", "outreaches")} sent`;
-  // Say the calendar is unreachable rather than print a number that would be a guess.
-  if (f.socialEvents == null) return `${out}, events unavailable`;
-  return `${out}, ${f.socialEvents} ${plural(f.socialEvents, "event", "events")}`;
+  return {
+    key: "physical",
+    name: PILLAR_NAME.physical,
+    fill: weightedFill(arcs),
+    arcs,
+  };
 }

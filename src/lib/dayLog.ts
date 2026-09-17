@@ -16,11 +16,15 @@
 // terms as rings.ts, goals.ts and dates.ts. The SQL lives in queries.ts; what lives here is
 // the merge and the ordering, which is the part with rules in it.
 
-/** What a single written thing IS. The discriminator every consumer switches on. */
+/**
+ * What a single written thing IS. The discriminator every consumer switches on.
+ *
+ * NO `skill` KIND since the Health & Career pivot (2026-09-18): skills are hidden, so the log
+ * does not return skill sessions. The sessions themselves are kept in skill_time, untouched.
+ */
 export type LogKind =
   | "journal"
   | "gym"
-  | "skill"
   | "outreach"
   | "reading"
   | "ascnd"
@@ -90,11 +94,10 @@ export type LogDay = { date: string; entries: LogEntry[] };
 const ORDER: Record<LogKind, number> = {
   journal: 0,
   gym: 1,
-  skill: 2,
-  outreach: 3,
-  reading: 4,
-  ascnd: 5,
-  drift: 6,
+  outreach: 2,
+  reading: 3,
+  ascnd: 4,
+  drift: 5,
 };
 
 /**

@@ -26,6 +26,18 @@ function assertProductionDatabase(): void {
   }
 }
 
+/**
+ * Is the database this process writes to a LOCAL FILE, rather than Turso?
+ *
+ * The one place that answers it, read off the same `url` every query uses — so nothing can
+ * ask the question of a different variable than the client was built from. It exists for the
+ * dev calendar fixture (google.ts): fabricated events must never be markable into production,
+ * and `NODE_ENV` alone cannot say which database a dev server is pointed at. `.env.local` on
+ * this machine has pointed `DATABASE_URL` at Turso before (2026-09-03), which is exactly the
+ * case this answers.
+ */
+export const isLocalDatabase = (): boolean => url.startsWith("file:");
+
 type G = typeof globalThis & { __db?: Client; __dbReady?: Promise<Client> };
 const g = globalThis as G;
 
@@ -96,6 +108,17 @@ async function ensure(c: Client): Promise<Client> {
       `ALTER TABLE block_marks ADD COLUMN worked_fraction REAL
          CHECK (worked_fraction IS NULL
                 OR (worked_fraction >= 0 AND worked_fraction <= 1))`,
+    );
+  }
+  // A goal's optional deadline — the Health & Career pivot (2026-09-18, spec §9). Nullable
+  // with no default, so every existing goal simply has no deadline and stays out of the
+  // Career ring until one is set. Like worked_fraction above, a nullable ADD COLUMN cannot
+  // lose a row, so it needs no migrate.mjs block and no backup step. The GLOB is the same
+  // date CHECK every other date column carries; engine.ts validates the date properly.
+  if (!(await has("goals", "deadline"))) {
+    await c.execute(
+      `ALTER TABLE goals ADD COLUMN deadline TEXT
+         CHECK (deadline IS NULL OR deadline GLOB '????-??-??')`,
     );
   }
 
@@ -232,7 +255,7 @@ async function ensure(c: Client): Promise<Client> {
         // instance) is seeded from HERE, not from the migration script.
         //
         // system_key is load-bearing, not decoration: the Journal row opens the drawing
-        // dialog ONLY as system_key='journal', outreach feeds the Social ring, weight is
+        // dialog ONLY as system_key='journal', outreach opens its document, weight is
         // the number field. This seed used to omit the column, and the first deployed
         // Turso instance was born from it — every system row silently disarmed, the
         // Journal row a plain tickbox. Steps is seeded already-retired (active=0), the
@@ -246,6 +269,9 @@ async function ensure(c: Client): Promise<Client> {
            ((SELECT id FROM pillars WHERE key='social_capital'),'One outreach message',1,'manual',6,1,'outreach','check',NULL),
            ((SELECT id FROM pillars WHERE key='physical'),'Steps',8000,'health',7,0,'steps','check',NULL),
            ((SELECT id FROM pillars WHERE key='physical'),'Weight',1,'manual',8,1,'weight','number','kg')`,
+        // Seeded with the PRE-PIVOT pillars and filing on purpose: pivot_health_career_v1
+        // below runs on a brand-new database too, so a fresh instance lands exactly where a
+        // migrated one does, through the same statements.
         // Marks v2 as already applied so migrate.mjs doesn't re-run its reshape.
         `INSERT INTO app_meta (key,value) VALUES ('timezone','Australia/Melbourne'),('habits_v2','1')`,
       ],
@@ -255,7 +281,7 @@ async function ensure(c: Client): Promise<Client> {
 
   // System keys, HEALED. A database seeded before the seed above carried system_key —
   // the live Turso instance is one — has a Journal row that cannot open the drawing
-  // dialog, an outreach row the Social ring cannot find, and no Weight row at all,
+  // dialog, an outreach row its document logger cannot find, and no Weight row at all,
   // while everything else works. Stamps NULLs by canonical name only and latches, so a
   // deliberate rename or reassignment is never overruled on a later boot. Mirrors the
   // adherence_v1 / rings_v1 / round3_v1 blocks in scripts/migrate.mjs, which never run
@@ -367,6 +393,73 @@ async function ensure(c: Client): Promise<Client> {
        WHERE pillar_id IS NOT (SELECT id FROM pillars WHERE key='portfolio')`);
     await c.execute(
       "INSERT INTO app_meta (key,value) VALUES ('skills_portfolio_v1','1')",
+    );
+  }
+
+  /**
+   * THE HEALTH & CAREER PIVOT — the owner's rulings of 2026-09-18
+   * (docs/superpowers/specs/2026-09-18-health-career-pivot-design.md, §9).
+   *
+   * Two pillars now. The DATABASE KEYS STAY (`physical`, `portfolio`) — renaming a live key
+   * is churn — so this renames what the rows say and re-files the checklist's colours:
+   *
+   *   pillars   physical -> "Health", Moss #467c6c (the live Rust sat on top of the amber
+   *             accent); portfolio -> "Career", Plum #7d5a72. The social_capital row is NOT
+   *             touched and NOT deleted: goals, habits and tasks still point at it, and the
+   *             app filters it out of every pillar listing.
+   *   habits    ASC.ND -> Health. Outreach -> Career, renamed "Outreach". Calendar (no
+   *             pillar) -> Career. Reading -> renamed "Read", no pillar. Journal -> no
+   *             pillar. Tidy room -> no pillar.
+   *
+   * CAREER'S COLOUR IS SET WITH COALESCE, not written over. §9 names a colour only for
+   * `physical` — the live Rust had to go — but §1 fixes Career = Plum, and `pillars.color`
+   * is NULLABLE: the seed inserts the rows with no colour and `/colours` can clear one back
+   * to the CSS token, which still falls back to Iris. A null colour would draw Career in the
+   * wrong hue on any database but the owner's (where the row already holds #7d5a72). COALESCE
+   * fills the hole and never overrules a colour the owner picked from the palette.
+   *
+   * MATCHED BY system_key WHERE ONE EXISTS, so a habit the owner renamed is still found;
+   * otherwise by EXACT NAME — and, for `Calendar`, the pillar §9 names it with (NULL), since
+   * the spec puts that condition there and nowhere else. `Tidy room` is stated flatly ("name
+   * `Tidy room` -> pillar NULL") and is applied flatly: the block is LATCHED, so a pillar
+   * predicate would be a one-shot match that leaves the row coloured forever on any database
+   * where it had already been re-filed. A habit's pillar only sets its tick colour — no
+   * figure reads it — so nothing here changes adherence or any history.
+   *
+   * No deletes. One batch, so a failure part-way leaves nothing applied and nothing latched,
+   * and the next boot tries again. LATCHED, like habits_aug24_v1: applied once, so a later
+   * rename or re-pillar is never overruled on the next boot. Placed LAST, after the seed and
+   * the aug24 block, so a brand-new database lands here too.
+   *
+   * The goals.deadline column is added above with the other idempotent column adds.
+   */
+  const pivot = await c.execute(
+    "SELECT 1 FROM app_meta WHERE key='pivot_health_career_v1'",
+  );
+  if (!pivot.rows.length) {
+    const stamp = "strftime('%Y-%m-%dT%H:%M:%SZ','now')";
+    const pillar = (key: string) => `(SELECT id FROM pillars WHERE key='${key}')`;
+    await c.batch(
+      [
+        `UPDATE pillars SET name='Health', color='#467c6c', updated_at=${stamp}
+          WHERE key='physical'`,
+        `UPDATE pillars SET name='Career', color=COALESCE(color,'#7d5a72'), updated_at=${stamp}
+          WHERE key='portfolio'`,
+        `UPDATE habits SET pillar_id=${pillar("physical")}, updated_at=${stamp}
+          WHERE system_key='ascnd'`,
+        `UPDATE habits SET pillar_id=${pillar("portfolio")}, name='Outreach', updated_at=${stamp}
+          WHERE system_key='outreach'`,
+        `UPDATE habits SET pillar_id=${pillar("portfolio")}, updated_at=${stamp}
+          WHERE name='Calendar' AND pillar_id IS NULL`,
+        `UPDATE habits SET name='Read', pillar_id=NULL, updated_at=${stamp}
+          WHERE system_key='reading'`,
+        `UPDATE habits SET pillar_id=NULL, updated_at=${stamp}
+          WHERE system_key='journal'`,
+        `UPDATE habits SET pillar_id=NULL, updated_at=${stamp}
+          WHERE name='Tidy room'`,
+        "INSERT INTO app_meta (key,value) VALUES ('pivot_health_career_v1','1')",
+      ],
+      "write",
     );
   }
 

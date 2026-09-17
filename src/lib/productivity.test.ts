@@ -1,438 +1,170 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  CALENDAR_RATES,
-  UNLISTED_RATE,
-  POINTS_PER_HABIT,
-  POINTS_PER_SESSION,
   CALORIE_FLOOR,
-  rateFor,
-  scoreDay,
+  CATEGORY_ORDER,
+  HOUR_CATEGORIES,
+  canonicalColor,
+  categoryOf,
+  hoursForDay,
+  workedMinutes,
   type BlockState,
-  type ProductiveBlock,
-  type ProductivityInput,
+  type WorkBlock,
 } from "./productivity.ts";
+import { CALORIE_FLOOR as RINGS_CALORIE_FLOOR } from "./rings.ts";
 
-const red = (
+const block = (
+  colorId: string | null,
   minutes: number,
   state: BlockState | null = "adhered",
-): ProductiveBlock => ({
-  minutes,
-  colorId: "11",
-  state,
-});
-/** Basil — Work Projects, and the only FULL-rate tier: the work nobody scheduled and
- *  nobody is paying for. */
-const basil = (
-  minutes: number,
-  state: BlockState | null = "adhered",
-): ProductiveBlock => ({
-  minutes,
-  colorId: "10",
-  state,
-});
-/** Banana — Work Uni, the owner's own study, at three quarters. */
-const banana = (minutes: number): ProductiveBlock => ({
-  minutes,
-  colorId: "5",
-  state: "adhered",
-});
+  workedFraction: number | null = null,
+): WorkBlock => ({ minutes, colorId, state, workedFraction });
+
+/** Basil — Work Projects. */
+const basil = (m: number, s: BlockState | null = "adhered") => block("10", m, s);
+/** Banana — Work Uni. */
+const banana = (m: number) => block("5", m);
 /** The calendar default — Uni. Google omits colorId entirely for these. */
-const uni = (minutes: number): ProductiveBlock => ({
-  minutes,
-  colorId: null,
-  state: "adhered",
-});
-/** Grape — the owner's colour for a gym block. It scores NOTHING: training is priced per
- *  logged session now, not by the hour. See POINTS_PER_SESSION. */
-const grape = (minutes: number): ProductiveBlock => ({
-  minutes,
-  colorId: "3",
-  state: "adhered",
-});
-const day = (o: Partial<ProductivityInput> = {}) =>
-  scoreDay({ blocks: [], habitsDone: 0, ...o });
+const uni = (m: number) => block(null, m);
 
-test("the five categories carry the rates the owner set", () => {
-  assert.equal(rateFor("10"), 1); // Basil    — Work Projects
-  assert.equal(rateFor("5"), 0.75); // Banana   — Work Uni
-  assert.equal(rateFor("1"), 0.5); // Lavender — Work Part Time
-  assert.equal(rateFor("11"), 0.5); // Tomato   — Work Part Time, same category
-  assert.equal(rateFor(null), 0.5); // default  — Uni
-});
+// ---------------------------------------------------------------- the table
 
-// Two swatches, one meaning. The calendar really holds both, so the table does too — and
-// the stack merges them, which the segment test below pins.
-test("Lavender and Tomato are the SAME category", () => {
-  const l = CALENDAR_RATES.find((c) => c.id === "1");
-  const t = CALENDAR_RATES.find((c) => c.id === "11");
-  assert.ok(l && t);
-  assert.equal(l.label, "Work Part Time");
-  assert.equal(t.label, l.label);
-});
-
-test("one slab per CATEGORY, not per colour", () => {
-  // An hour of Lavender and an hour of Tomato is two hours of one thing.
-  const s = day({
-    blocks: [
-      { minutes: 60, colorId: "1", state: "adhered" },
-      { minutes: 60, colorId: "11", state: "adhered" },
-    ],
-  });
-  const time = s.segments.filter((x) => x.kind === "time");
-  assert.equal(time.length, 1, "one slab");
-  assert.equal(time[0].label, "Work Part Time");
-  assert.equal(time[0].minutes, 120);
-  assert.equal(s.points, 100); // 2h at half rate
-});
-
-// GRAPHITE IS NOT A TIER. Seeing people is a pillar, counted by the Social ring; paying it
-// productivity points as well would make an evening out a thing you can be productive AT.
-test("social hours score nothing here", () => {
-  assert.equal(rateFor("8"), UNLISTED_RATE);
-  assert.equal(day({ blocks: [{ minutes: 180, colorId: "8", state: "adhered" }] }).points, 0);
-});
-
-test("the calendar default is the Uni tier", () => {
-  assert.equal(rateFor(null), 0.5);
-});
-
-test("an unlisted colour scores zero, not a fallback rate", () => {
-  for (const id of ["7", "2", "4", "6", "9", "", "nonsense"])
-    assert.equal(rateFor(id), UNLISTED_RATE);
-  assert.equal(UNLISTED_RATE, 0);
-});
-
-test("60 minutes at the full rate is 100 points", () => {
-  const s = day({ blocks: [basil(60)] });
-  assert.equal(s.points, 100);
-  assert.equal(s.timePoints, 100);
-});
-
-test("Work Uni runs at three quarters", () => {
-  assert.equal(day({ blocks: [banana(60)] }).points, 75);
-  assert.equal(day({ blocks: [banana(120)] }).points, 150);
-});
-
-test("Work Part Time runs at half", () => {
-  assert.equal(day({ blocks: [red(60)] }).points, 50);
-});
-
-test("Uni runs at half rate", () => {
-  assert.equal(day({ blocks: [uni(60)] }).points, 50);
-  assert.equal(day({ blocks: [uni(120)] }).points, 100);
-});
-
-test("time scores linearly", () => {
-  assert.equal(day({ blocks: [basil(30)] }).points, 50);
-});
-
-test("an unproductive colour contributes no points AND no minutes", () => {
-  const s = day({ blocks: [{ minutes: 480, colorId: "7", state: "adhered" }] });
-  assert.equal(s.points, 0);
-  // Not merely worth zero — it was never productive time in the first place, so it does
-  // not inflate the minutes figure either.
-  assert.equal(s.minutes, 0);
-});
-
-// ---------------------------------------------------------------- a partial drift
-
-// The state table is pinned in worked.test.ts. These test what the SCORE does with it.
-
-test("a drift worked in part is paid for that part, at its colour's rate", () => {
-  // 2h of Basil at 40% = 48 minutes at the full rate.
-  const s = day({
-    blocks: [{ minutes: 120, colorId: "10", state: "drifted", workedFraction: 0.4 }],
-  });
-  assert.equal(s.points, 80);
-  assert.equal(s.minutes, 48, "the minutes worked, not the minutes scheduled");
-});
-
-test("the slab prints the minutes that earned it, so it cannot disagree with the bar", () => {
-  const s = day({
-    blocks: [{ minutes: 120, colorId: "10", state: "drifted", workedFraction: 0.4 }],
-  });
-  const [slab] = s.segments.filter((x) => x.kind === "time");
-  assert.equal(slab.minutes, 48);
-  assert.equal(slab.points, s.points);
-  assert.equal(slab.label, "Work Projects");
-});
-
-// The behaviour of every drift written before the slider existed — and the reason a day of
-// unmarked or drifted blocks still scores nothing at all.
-test("a drift with no fraction still pays nothing, exactly as it always did", () => {
-  assert.equal(day({ blocks: [basil(120, "drifted")] }).points, 0);
-  assert.equal(
-    day({ blocks: [{ minutes: 120, colorId: "10", state: "drifted", workedFraction: 0 }] })
-      .points,
-    0,
+test("the four categories and the colours the owner filed them under", () => {
+  assert.equal(categoryOf("10"), "Work Projects"); // Basil
+  assert.equal(categoryOf("5"), "Work Uni"); // Banana
+  assert.equal(categoryOf("1"), "Work Part Time"); // Lavender
+  assert.equal(categoryOf("11"), "Work Part Time"); // Tomato — same category
+  assert.equal(categoryOf(null), "Uni"); // default
+  assert.deepEqual(
+    [...CATEGORY_ORDER],
+    ["Work Projects", "Work Uni", "Work Part Time", "Uni"],
   );
-  assert.equal(day({ blocks: [basil(120, null)] }).points, 0, "unmarked is unknown");
-  assert.equal(day({ blocks: [basil(120, "skipped")] }).points, 0);
 });
 
-// The order in the loop is load-bearing: an unlisted colour is disqualified whatever the
-// slider says, and must not inflate the minutes figure by its worked share either.
-test("an unlisted colour scores nothing at ANY fraction", () => {
-  for (const f of [0.25, 0.5, 1]) {
-    const s = day({
-      blocks: [{ minutes: 480, colorId: "7", state: "drifted", workedFraction: f }],
-    });
-    assert.equal(s.points, 0, `fraction ${f}`);
-    assert.equal(s.minutes, 0, `fraction ${f} must not inflate minutes`);
+test("a category shows itself in its canonical colour — the first listed", () => {
+  assert.equal(canonicalColor("Work Part Time"), "1");
+  assert.equal(canonicalColor("Uni"), null);
+  for (const label of CATEGORY_ORDER)
+    assert.equal(
+      canonicalColor(label),
+      HOUR_CATEGORIES.find((c) => c.label === label)!.id,
+    );
+});
+
+test("the table is well formed: every colour once, every category listed", () => {
+  const ids = HOUR_CATEGORIES.map((c) => c.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(
+    [...new Set(HOUR_CATEGORIES.map((c) => c.label))].sort(),
+    [...CATEGORY_ORDER].sort(),
+  );
+});
+
+// Graphite never reaches here (buildBlocks drops it), and Grape is training, not work. Any
+// other colour is simply not a category — never a fallback.
+test("graphite, grape and every unlisted colour are not hours", () => {
+  for (const id of ["8", "3", "7", "2", "4", "6", "9", "", "nonsense"]) {
+    assert.equal(categoryOf(id), null, id);
+    assert.equal(workedMinutes(block(id, 180)), 0, id);
   }
-  // Gym is the same rule with its own explanation: the block never pays, the session does.
-  assert.equal(
-    day({ blocks: [{ minutes: 120, colorId: "3", state: "drifted", workedFraction: 1 }] })
-      .points,
-    0,
+});
+
+// ---------------------------------------------------------------- what counts
+
+test("an adhered block counts all of its minutes", () => {
+  assert.deepEqual(hoursForDay([basil(90)]), {
+    minutes: 90,
+    categories: [{ label: "Work Projects", colorId: "10", minutes: 90 }],
+  });
+});
+
+test("a drift worked in part counts that part", () => {
+  // 2h of Basil at 40% = 48 minutes.
+  const h = hoursForDay([block("10", 120, "drifted", 0.4)]);
+  assert.equal(h.minutes, 48);
+  assert.equal(h.categories[0]!.minutes, 48);
+});
+
+test("unmarked, skipped, dismissed and an unanswered drift count nothing", () => {
+  for (const state of [null, "skipped", "dismissed", "drifted"] as const)
+    assert.equal(hoursForDay([basil(120, state)]).minutes, 0, String(state));
+  assert.equal(hoursForDay([block("10", 120, "drifted", 0)]).minutes, 0);
+});
+
+test("an unlisted colour counts nothing at ANY fraction", () => {
+  for (const f of [0.25, 0.5, 1])
+    assert.equal(workedMinutes(block("7", 480, "drifted", f)), 0, String(f));
+});
+
+test("a corrupt fraction cannot count more than the block, or less than nothing", () => {
+  assert.equal(workedMinutes(block("10", 60, "drifted", 9)), 60);
+  assert.equal(workedMinutes(block("10", 60, "drifted", -4)), 0);
+});
+
+test("a negative or unreadable duration cannot subtract from the day", () => {
+  assert.equal(hoursForDay([basil(-120), basil(60)]).minutes, 60);
+  assert.equal(hoursForDay([basil(NaN), basil(60)]).minutes, 60);
+});
+
+// ---------------------------------------------------------------- the stack
+
+test("one slab per CATEGORY, not per colour: Lavender and Tomato merge", () => {
+  const h = hoursForDay([block("1", 60), block("11", 60)]);
+  assert.deepEqual(h.categories, [
+    { label: "Work Part Time", colorId: "1", minutes: 120 },
+  ]);
+});
+
+test("slabs come in the category order, and empty categories are left out", () => {
+  const h = hoursForDay([uni(60), block("1", 30), basil(45), uni(15)]);
+  assert.deepEqual(
+    h.categories.map((c) => c.label),
+    ["Work Projects", "Work Part Time", "Uni"],
   );
-});
-
-test("a fully worked drift scores exactly what adhering to it would", () => {
-  const full = day({
-    blocks: [{ minutes: 120, colorId: "10", state: "drifted", workedFraction: 1 }],
-  });
-  assert.equal(full.points, day({ blocks: [basil(120)] }).points);
-});
-
-// Fractional minutes are real — a 50-minute block at 35% is 17.5 — and they must be
-// accumulated exactly and rounded once, or the slabs stop summing to the total.
-test("fractional worked minutes still sum to the total they explain", () => {
-  const s = day({
-    blocks: [
-      { minutes: 50, colorId: "10", state: "drifted", workedFraction: 0.35 },
-      { minutes: 50, colorId: "5", state: "drifted", workedFraction: 0.35 },
-      { minutes: 50, colorId: "1", state: "drifted", workedFraction: 0.35 },
-    ],
-  });
-  const sum = s.segments.reduce((n, x) => n + x.points, 0);
-  assert.equal(sum, s.points, "the stack is a picture of the total");
-  assert.ok(Number.isInteger(s.minutes), "the reported figure is whole");
-});
-
-test("a corrupt fraction cannot buy more than the block is worth", () => {
-  const s = day({
-    blocks: [{ minutes: 60, colorId: "10", state: "drifted", workedFraction: 9 }],
-  });
-  assert.equal(s.points, 100, "clamped to the block");
-  const neg = day({
-    blocks: [{ minutes: 60, colorId: "10", state: "drifted", workedFraction: -4 }],
-  });
-  assert.equal(neg.points, 0, "and never negative");
-});
-
-test("each non-negotiable is 25", () => {
-  assert.equal(POINTS_PER_HABIT, 25);
-  assert.equal(day({ habitsDone: 4 }).points, 100);
-});
-
-// THE DOUBLE-COUNT GUARD, from the other side. Training is paid for ONCE, and it is the
-// logged session that pays — so a Grape block on the calendar must be worth nothing on its
-// own, or the same training would be bought twice: once for scheduling it, again for doing
-// it. This is the inverse of the arrangement that shipped first; see POINTS_PER_SESSION.
-test("a gym BLOCK on the calendar scores nothing — Grape is not in the table", () => {
-  assert.equal(
-    CALENDAR_RATES.find((c) => c.id === "3"),
-    undefined,
-    "Grape must not be in the rate table",
+  assert.deepEqual(
+    h.categories.map((c) => c.minutes),
+    [45, 30, 75],
   );
-  assert.equal(rateFor("3"), UNLISTED_RATE);
-  assert.equal(day({ blocks: [grape(180)] }).points, 0);
-});
-
-test("a logged SESSION is a FLAT figure, whatever the calendar says", () => {
-  // Asserted against the constant, not against a literal. The figure is the owner's dial
-  // and has already been turned once; what must never change is that it is FLAT.
-  assert.equal(day({ workouts: 1 }).points, POINTS_PER_SESSION);
-  // The whole argument for a flat figure: three hours under a bar is not more productive
-  // than two, so the block's length must not reach the score at all.
-  assert.equal(day({ workouts: 1, blocks: [grape(120)] }).points, POINTS_PER_SESSION);
-  assert.equal(day({ workouts: 1, blocks: [grape(360)] }).points, POINTS_PER_SESSION);
-});
-
-test("two sessions in a day score twice one — a day can hold two lifts and a run", () => {
-  assert.equal(day({ workouts: 2 }).points, 2 * POINTS_PER_SESSION);
-  assert.equal(day({ workouts: 3 }).points, 3 * POINTS_PER_SESSION);
-});
-
-test("sessions get their own slab, and it is neither time nor a tick", () => {
-  const s = day({ workouts: 2, habitsDone: 1, blocks: [basil(60)] });
-  const seg = s.segments.find((x) => x.kind === "sessions");
-  assert.ok(seg, "there is a sessions slab");
-  assert.equal(seg.points, 2 * POINTS_PER_SESSION);
-  // Not an hour: it carries no colour and no rate, and adds nothing to the minutes figure.
-  assert.equal(seg.colorId, null);
-  assert.equal(seg.rate, null);
-  assert.equal(seg.minutes, 0);
-  assert.equal(s.minutes, 60);
-  assert.equal(s.sessionPoints, 2 * POINTS_PER_SESSION);
-});
-
-test("a stale caller that omits workouts still scores, and scores nothing for them", () => {
-  // Parsed rather than written as a literal: this is the shape a caller that was never
-  // updated would send, and the input is optional so it must simply be worth zero.
-  const s = scoreDay(JSON.parse('{"blocks":[],"habitsDone":2}'));
-  assert.equal(s.sessionPoints, 0);
-  assert.equal(s.points, 2 * POINTS_PER_HABIT);
-});
-
-test("a nonsense session count can never subtract from a day", () => {
-  assert.equal(scoreDay(JSON.parse('{"blocks":[],"habitsDone":0,"workouts":-4}')).points, 0);
-  assert.equal(
-    scoreDay(JSON.parse('{"blocks":[],"habitsDone":0,"workouts":2.7}')).points,
-    2 * POINTS_PER_SESSION,
-  );
-});
-
-// The property the whole feature turns on. This is the DELIBERATE inversion of the ring
-// cap: a ring caps so you cannot win by overdoing one thing, because its job is to make a
-// well-rounded fortnight the only good-looking board. This does not cap, because its job
-// is the opposite — a raw comparative reading of hours actually spent.
-test("the score is UNCAPPED", () => {
-  const s = day({ blocks: [basil(360), uni(120)], habitsDone: 5, workouts: 3 });
-  assert.equal(s.points, 600 + 100 + 5 * POINTS_PER_HABIT + 3 * POINTS_PER_SESSION);
-  assert.ok(s.points > 100);
-});
-
-test("only adhered blocks count as time spent", () => {
-  const notWorked: (BlockState | null)[] = ["drifted", "skipped", null];
-  for (const state of notWorked)
-    assert.equal(day({ blocks: [basil(60, state)] }).points, 0);
-});
-
-test("dismissed never counts, whatever its colour", () => {
-  assert.equal(day({ blocks: [basil(60, "dismissed")] }).points, 0);
-});
-
-test("a mixed day counts only the adhered minutes", () => {
-  const s = day({ blocks: [basil(60), basil(60, "drifted")] });
-  assert.equal(s.minutes, 60);
-  assert.equal(s.points, 100);
-});
-
-test("the parts always sum to the total", () => {
-  const s = day({ blocks: [basil(45), uni(25)], habitsDone: 3 });
-  assert.equal(s.timePoints + s.habitPoints, s.points);
-});
-
-test("points are whole numbers", () => {
-  assert.equal(day({ blocks: [basil(45)] }).points, 75);
-  assert.equal(day({ blocks: [uni(25)] }).points, 21); // 20.83 rounds
-  assert.ok(Number.isInteger(day({ blocks: [uni(25)] }).points));
-});
-
-test("weighted minutes are reported alongside raw", () => {
-  const s = day({ blocks: [basil(60), uni(60)] });
-  assert.equal(s.minutes, 120);
-  assert.equal(s.weightedMinutes, 90);
-  assert.equal(s.timePoints, 150);
-});
-
-test("a negative duration cannot subtract from the day", () => {
-  assert.equal(day({ blocks: [basil(-120), basil(60)] }).points, 100);
 });
 
 // The bar is a PICTURE of the total. If the slabs sum to something else, the picture lies.
-test("the stacked segments always sum to the total", () => {
-  const s = day({
-    blocks: [red(45), uni(25), grape(90)],
-    habitsDone: 3,
-  });
+test("the total is exactly the sum of the slabs, even with fractional minutes", () => {
+  const h = hoursForDay([
+    block("10", 50, "drifted", 0.35),
+    block("5", 50, "drifted", 0.35),
+    block("1", 50, "drifted", 0.35),
+    block(null, 50, "drifted", 0.35),
+  ]);
   assert.equal(
-    s.segments.reduce((t, x) => t + x.points, 0),
-    s.points,
+    h.minutes,
+    h.categories.reduce((s, c) => s + c.minutes, 0),
   );
+  for (const c of h.categories) assert.ok(Number.isInteger(c.minutes));
 });
 
-test("blocked time is merged by colour, not left one slab per event", () => {
-  const s = day({ blocks: [uni(60), uni(60), red(60)] });
-  const time = s.segments.filter((x) => x.kind === "time");
-  assert.equal(time.length, 2, "two colours, two slabs — not three events, three slabs");
+test("a mixed day counts only the worked minutes", () => {
+  const h = hoursForDay([basil(60), basil(60, "drifted"), banana(30), block("3", 90)]);
+  assert.equal(h.minutes, 90);
 });
 
-test("non-negotiables are their own slab, and carry no colour", () => {
-  const s = day({ habitsDone: 2 });
-  assert.deepEqual(
-    s.segments.map((x) => x.kind),
-    ["habits"],
-  );
-  for (const x of s.segments) assert.equal(x.colorId, null);
+test("an empty day is a real zero with no slabs", () => {
+  assert.deepEqual(hoursForDay([]), { minutes: 0, categories: [] });
 });
 
-// Adherence counts them too, and that is NOT a double count — see the note on
-// ProductivityInput. Two different questions asked of the same day.
-test("non-negotiables stay in the score even though adherence counts them", () => {
-  assert.equal(day({ habitsDone: 4 }).points, 100);
-});
+// ---------------------------------------------------------------- the score is gone
 
-test("an empty day has no slabs at all", () => {
-  assert.deepEqual(day().segments, []);
-});
-
-test("the rate table is well formed", () => {
-  const ids = CALENDAR_RATES.map((c) => c.id);
-  assert.equal(
-    new Set(ids).size,
-    ids.length,
-    "each colorId appears exactly once",
-  );
-  for (const c of CALENDAR_RATES) {
-    assert.ok(c.rate >= 0 && c.rate <= 1, `${c.label} rate is in range`);
+test("there are no points anywhere in a day's hours", () => {
+  const h = hoursForDay([basil(60), uni(60)]) as Record<string, unknown>;
+  assert.ok(!("points" in h));
+  for (const c of h.categories as Record<string, unknown>[]) {
+    assert.ok(!("points" in c));
+    assert.ok(!("rate" in c));
   }
 });
 
-// Unlike adherence, which returns null when nothing is due yet, zero here is a TRUE
-// statement: no productive hours were spent. Do not "fix" this to null.
-test("an empty day scores a real zero", () => {
-  const s = day();
-  assert.equal(s.points, 0);
-  assert.equal(s.timePoints, 0);
-  assert.equal(s.habitPoints, 0);
-  assert.equal(s.minutes, 0);
-});
-
-// --- the calorie floor ---------------------------------------------------------------------
-
-test("the calorie floor scores one non-negotiable's worth, and only at or above it", () => {
+// The calorie floor's home is rings.ts; this module only re-exports it for the screens that
+// always imported it from here. A copy would be a second number that could drift.
+test("CALORIE_FLOOR here IS the rings constant, not a copy", () => {
+  assert.equal(CALORIE_FLOOR, RINGS_CALORIE_FLOOR);
   assert.equal(CALORIE_FLOOR, 2500);
-  assert.equal(day({ calories: 2499 }).points, 0);
-  assert.equal(day({ calories: 2500 }).points, POINTS_PER_HABIT);
-  assert.equal(day({ calories: 4000 }).points, POINTS_PER_HABIT);
-});
-
-// A FLOOR, not a gauge. Partial credit below the line would make it a target you can
-// half-hit, which is a different and softer thing than a floor.
-test("below the floor is nothing, never a partial credit", () => {
-  for (const kcal of [0, 1, 1250, 2499])
-    assert.equal(day({ calories: kcal }).points, 0);
-  assert.equal(day({ calories: null }).points, 0);
-  assert.equal(day({}).points, 0);
-});
-
-test("the floor joins the non-negotiables slab rather than growing a second grey", () => {
-  const s = day({ habitsDone: 2, calories: 3000 });
-  assert.deepEqual(
-    s.segments.map((x) => x.kind),
-    ["habits"],
-  );
-  // Three ticked things: two non-negotiables and the floor.
-  assert.equal(s.habitPoints, 3 * POINTS_PER_HABIT);
-  assert.equal(
-    s.segments.reduce((t, x) => t + x.points, 0),
-    s.points,
-  );
-});
-
-// The CONSTANT now also feeds adherence's habit share — fractionally, via floorCredit in
-// adherence.ts, the owner's ruling — but that is adherence reading the same line for
-// itself, never this score leaking into that figure. What must stay true here is the
-// quarantine: the floor's POINTS exist only in this score, and scoreDay hands adherence
-// nothing to read.
-test("the floor's points stay in this score — nothing here reaches adherence", () => {
-  const withFloor = day({ blocks: [red(60)], habitsDone: 1, calories: 3000 });
-  const without = day({ blocks: [red(60)], habitsDone: 1 });
-  assert.equal(withFloor.points - without.points, POINTS_PER_HABIT);
-  // scoreDay returns no adherence figure at all — the quarantine is structural.
-  assert.ok(!("pct" in withFloor));
 });

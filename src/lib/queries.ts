@@ -13,18 +13,20 @@ import {
 } from "./adherence";
 import { rfc3339, todayISO } from "./dates";
 import type { CalEvent } from "./google";
-import { addDays, daysBetween } from "./dates";
+import { addDays, localDateOf } from "./dates";
 import { deriveWeights } from "./goals";
 import {
-  METRICS,
+  HEALTH_METRICS,
+  PILLAR_NAME,
+  PILLAR_ORDER,
   STEPS_FLOOR,
   WINDOW_DAYS,
+  isPillarKey,
   type RawCount,
   type PillarKey,
 } from "./rings";
 import { carriedDays, tasksFor, type DayTask } from "./tasks";
 import { CALORIE_STREAK_FLOOR, streakEnding } from "./streaks";
-import { workedFraction } from "./worked";
 
 // PillarKey now lives in rings.ts, which must stay import-free to be testable under
 // `node --test`. Re-exported here so every existing `import { PillarKey } from
@@ -34,8 +36,13 @@ export type { PillarKey };
 const num = (v: unknown) => (v == null ? 0 : Number(v));
 const str = (v: unknown) => (v == null ? null : String(v));
 
+/**
+ * A pillar ROW — its key, display name and chosen colour. Only the two live pillars are ever
+ * returned (see getPillars); the Social row stays in the database and never reaches a screen.
+ */
 export type PillarView = {
   key: PillarKey;
+  /** From PILLAR_NAME — "Health" / "Career" — never from the stored `pillars.name`. */
   name: string;
   priority: string;
   color: string | null;
@@ -44,6 +51,11 @@ export type PillarView = {
 export type HabitView = {
   id: number;
   name: string;
+  /**
+   * The habit's pillar, for its tick colour — or null for a neutral habit. A habit still
+   * filed under a retired pillar (a past day's habit_overrides row dressed as Social, say)
+   * reads null: neutral, never a key the app no longer has a colour for.
+   */
   pillar: PillarKey | null;
   days_mask: number;
   done: boolean;
@@ -55,12 +67,12 @@ export type HabitView = {
   /** The logged number for a numeric habit; null when nothing is entered. */
   value: number | null;
   /**
-   * The document behind this non-negotiable — outreach, today.
+   * The document behind this non-negotiable — outreach, reading and ASC.ND.
    *
    * ONE PER DAY, which is the shape of the thing rather than a limitation: habit_entries is
-   * UNIQUE (habit_id, date) and the outreach metric is `perDayCapped: true`, so a second
-   * message on a Tuesday is the same Tuesday however many were sent. Consistency in reaching
-   * the floor is what is counted; volume past it deliberately is not.
+   * UNIQUE (habit_id, date), so a second message on a Tuesday is the same Tuesday however
+   * many were sent. Consistency in reaching the floor is what is counted; volume past it
+   * deliberately is not.
    *
    * null means nothing written — which is NOT the same as unticked. A tick with no note is a
    * day you did it and said nothing about it, and that stays a perfectly good tick.
@@ -86,20 +98,34 @@ export type SubgoalView = {
   done: boolean;
 };
 
+/**
+ * A goal. EVERY GOAL IS A CAREER GOAL since the Health & Career pivot, so there is no
+ * `pillar` here: the stored `goals.pillar_id` is history, and a screen that filtered goals by
+ * it would hide a live Career goal that happened to be filed under Physical years ago.
+ *
+ * Satisfies `CareerGoal` (career.ts), so the Career ring can be rebuilt from a client's own
+ * goals state with `buildCareerRing(goals, today)` and never disagree with /api/rings.
+ */
 export type GoalView = {
   id: number;
-  pillar: PillarKey;
   title: string;
   target: string | null;
   /** Derived: the sum of completed subgoal weights. Never inferred from activity, and
    *  deliberately never read from the stale goals.progress column. */
   progress: number;
+  /** 'active' | 'done' | 'paused' ('dropped' goals are never listed). */
   status: string;
   subgoals: SubgoalView[];
   /** True ONLY when explicit overrides exceed 100%. An all-auto goal is well-formed. */
   overAllocated: boolean;
-  /** When it was marked done, or null. A finished goal with no date is a fact with no
-   *  place in a sequence — see updateGoal. */
+  /** The goal's optional deadline, 'YYYY-MM-DD', or null. Only an ACTIVE goal WITH a
+   *  deadline takes an arc of the Career ring. */
+  deadline: string | null;
+  /** The LOCAL date ('YYYY-MM-DD', app timezone) the goal was created — the start of its
+   *  pace. */
+  createdAt: string;
+  /** The LOCAL date it was marked done, 'YYYY-MM-DD', or null. Cleared when a goal leaves
+   *  'done'. A finished goal with no date is a fact with no place in a sequence. */
   completedAt: string | null;
 };
 
@@ -305,50 +331,8 @@ export async function allDayTasks(db: Client): Promise<RecordTask[]> {
 /** One past day of the calorie log, for the dialog's sidebar. */
 export type CalorieDay = { date: string; total: number; entries: CalorieEntry[] };
 
-/** What a marked calendar event was worth over a window: its state, and how much of it was
- *  worked. */
-export type EventWork = { state: BlockState; worked: number };
-
-/**
- * Marked calendar events over a window, by event id — the state AND the worked fraction.
- *
- * It used to be `adheredEventIds`, a bare Set of ids marked 'adhered', because the two ring
- * consumers wanted the same thing from it. They no longer do, and the split is the whole
- * reason this returns a map:
- *
- *   - THE SOCIAL RING wants `state === 'adhered'`, strictly. An event on the calendar you
- *     drifted from is not a social fortnight you had, and the fraction has nothing to say
- *     about it — a social event is a thing that happened, not a quantity of hours, so half
- *     an evening out is not half a social event.
- *   - THE PORTFOLIO LAP wants `worked`, because it is measured in HOURS, and an hour worked
- *     is an hour worked wherever it is read.
- *
- * One query rather than two over the same rows, and one place where a fifth reader of the
- * state table would otherwise have appeared.
- */
-export async function eventWorkIn(
-  db: Client,
-  from: string,
-  to: string,
-): Promise<Map<string, EventWork>> {
-  const r = await db.execute({
-    sql: `SELECT event_id,state,worked_fraction FROM block_marks
-          WHERE date BETWEEN ? AND ?`,
-    args: [from, to],
-  });
-  const m = new Map<string, EventWork>();
-  for (const x of r.rows) {
-    const state = String(x.state) as BlockState;
-    m.set(String(x.event_id), {
-      state,
-      worked: workedFraction(
-        state,
-        x.worked_fraction == null ? null : Number(x.worked_fraction),
-      ),
-    });
-  }
-  return m;
-}
+// eventWorkIn (adhered calendar events over a window, for the Social ring and the Basil
+// project-hours lap) is gone with both of its readers — parked in archive/social/.
 
 /** One skill's slice of the Portfolio ring: who it is, how it stands, and how many
  *  sessions the window holds. Only skills with at least one session appear — the ring is
@@ -512,26 +496,47 @@ export function habitTallyFor(
   return { scheduled, done };
 }
 
+/**
+ * Pillar ids <-> keys, for the LIVE pillars only.
+ *
+ * The Social row (`social_capital`) stays in the database — goals, habits and tasks point at
+ * it — but it is not a PillarKey any more, so it is left out of both maps rather than cast
+ * into one. A row filed under it therefore resolves to no pillar (null) wherever this is
+ * read.
+ */
 export async function pillarMaps(db: Client) {
   const r = await db.execute("SELECT id,key FROM pillars");
   const byId = new Map<number, PillarKey>();
-  const byKey = new Map<string, number>();
+  const byKey = new Map<PillarKey, number>();
   for (const p of r.rows) {
-    byId.set(num(p.id), String(p.key) as PillarKey);
-    byKey.set(String(p.key), num(p.id));
+    const key = String(p.key);
+    if (!isPillarKey(key)) continue;
+    byId.set(num(p.id), key);
+    byKey.set(key, num(p.id));
   }
   return { byId, byKey };
 }
 
+/**
+ * The two live pillars, Health then Career — for /colours, /api/pillars and DayView.pillars.
+ *
+ * FILTERED to PILLAR_ORDER: the Social row is data, not a pillar. Named from PILLAR_NAME,
+ * the one source of display names; `pillars.name` is kept in step by the pivot migration but
+ * is not what is shown.
+ */
 export async function getPillars(db: Client): Promise<PillarView[]> {
-  const r = await db.execute(
-    "SELECT key,name,priority,color FROM pillars ORDER BY sort_order",
-  );
-  return r.rows.map((p) => ({
-    key: String(p.key) as PillarKey,
-    name: String(p.name),
-    priority: String(p.priority),
-    color: str(p.color),
+  const r = await db.execute("SELECT key,priority,color FROM pillars");
+  const rows = new Map<PillarKey, { priority: string; color: string | null }>();
+  for (const p of r.rows) {
+    const key = String(p.key);
+    if (isPillarKey(key))
+      rows.set(key, { priority: String(p.priority), color: str(p.color) });
+  }
+  return PILLAR_ORDER.filter((k) => rows.has(k)).map((key) => ({
+    key,
+    name: PILLAR_NAME[key],
+    priority: rows.get(key)!.priority,
+    color: rows.get(key)!.color,
   }));
 }
 
@@ -854,9 +859,16 @@ export async function getDayView(
   };
 }
 
+/**
+ * Every goal that has not been dropped, oldest first.
+ *
+ * No pillar join and no pillar order: every goal is a Career goal (see GoalView). The dates
+ * come back as LOCAL days — `created_at` is stored as a UTC instant, and a goal made at 9am
+ * in Melbourne must start its pace on that day, not on the UTC one before it.
+ */
 export async function listGoals(db: Client): Promise<GoalView[]> {
   const r = await db.execute(
-    "SELECT g.id,g.title,g.target,g.status,g.completed_at,p.key AS pk FROM goals g JOIN pillars p ON g.pillar_id=p.id WHERE g.status != 'dropped' ORDER BY p.sort_order, g.id",
+    "SELECT id,title,target,status,deadline,created_at,completed_at FROM goals WHERE status != 'dropped' ORDER BY id",
   );
   const subs = await db.execute(
     "SELECT id,goal_id,title,weight,done FROM subgoals ORDER BY goal_id, sort_order, id",
@@ -882,16 +894,20 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
     // column can never drift out of step with the subgoals that define it. (It already
     // had: row 1 stored 0.0833 while deriving 0.)
     const w = deriveWeights(raw);
+    const created = str(g.created_at);
     return {
       id: num(g.id),
-      pillar: String(g.pk) as PillarKey,
       title: String(g.title),
       target: str(g.target),
       progress: w.progress,
       status: String(g.status),
       subgoals: raw.map((s, i) => ({ ...s, effectiveWeight: w.effective[i] })),
       overAllocated: w.overAllocated,
-      completedAt: str(g.completed_at),
+      deadline: str(g.deadline),
+      // The column is NOT NULL with a default, so an unreadable stamp is corruption; the
+      // first ten characters are the least-wrong day to fall back on.
+      createdAt: localDateOf(created) ?? (created ?? "").slice(0, 10),
+      completedAt: localDateOf(str(g.completed_at)),
     };
   });
 }
@@ -962,31 +978,20 @@ export async function listSkills(
 }
 
 /**
- * Raw counts for every ring metric over [from, to] inclusive.
+ * The raw fortnight behind the Health figures — "N sessions" on /stats.
  *
- * `resolved` says whether the SOURCE wired up — never whether it found rows. Zero rows
- * in the window is a real, meaningful zero and must stay distinguishable from a metric
- * that has no source at all, or a first day reads as a fortnight of neglect.
- */
-/**
- * The plain-words fortnight, one line per pillar.
+ * Separate from getRingCounts on purpose. That answers "how full is the ring", a capped,
+ * weighted sufficiency question; this answers "what actually happened", a raw count that
+ * must never cap.
  *
- * Separate from getRingCounts on purpose. That function answers "how full is the ring",
- * which is a capped, weighted, sufficiency question; this answers "what actually happened",
- * which is a raw count and must never cap. Deriving one from the other would have meant the
- * caption inheriting the ring's cap and printing "8 sessions" on a fortnight of twenty.
- *
- * Grape calendar events are deliberately NOT counted here. The owner logs sessions by hand
- * and does not want them counted twice; the caption follows the ring's rule.
+ * Since the Health & Career pivot this is Health's only fact: the Social outreach count and
+ * the Portfolio skill-session count left with their pillars (the Social half is parked in
+ * archive/social/; skills are hidden and their data kept). Grape calendar events are
+ * deliberately NOT counted — the owner logs sessions by hand and does not want them twice.
  */
 export type PillarFacts = {
-  /** Portfolio: skill SESSIONS in the window. Was summed minutes — skills log documents
-   *  now, not hours, so the caption counts what the ring counts. */
-  skillSessions: number;
-  /** Physical: gym_sessions ROWS in the window. Sessions, not days. */
+  /** Health: gym_sessions ROWS in the window, every kind. Sessions, not days. */
   workoutSessions: number;
-  /** Social: outreach non-negotiable ticks in the window. */
-  outreach: number;
 };
 
 export async function getPillarFacts(
@@ -994,75 +999,53 @@ export async function getPillarFacts(
   from: string,
   to: string,
 ): Promise<PillarFacts> {
-  const [skillRows, sessions, out] = await Promise.all([
-    // SESSIONS, not summed minutes — skills stopped being measured in hours. Rows that
-    // still carry a `minutes` value are pre-ruling history and count as one session each,
-    // which is what they always were.
-    db.execute({
-      sql: "SELECT COUNT(*) AS n FROM skill_time WHERE date BETWEEN ? AND ?",
-      args: [from, to],
-    }),
-    db.execute({
-      sql: "SELECT COUNT(*) AS n FROM gym_sessions WHERE date BETWEEN ? AND ?",
-      args: [from, to],
-    }),
-    db.execute({
-      sql: `SELECT COUNT(DISTINCT e.date) AS n
-              FROM habit_entries e
-              JOIN habits h ON h.id = e.habit_id
-             WHERE h.system_key = 'outreach' AND e.value > 0
-               AND e.date BETWEEN ? AND ?`,
-      args: [from, to],
-    }),
-  ]);
+  const sessions = await db.execute({
+    sql: "SELECT COUNT(*) AS n FROM gym_sessions WHERE date BETWEEN ? AND ?",
+    args: [from, to],
+  });
   // num() at the boundary, every time: libSQL returns aggregates as BigInt and
   // `bigint / number` throws.
-  return {
-    skillSessions: num(skillRows.rows[0].n),
-    workoutSessions: num(sessions.rows[0].n),
-    outreach: num(out.rows[0].n),
-  };
+  return { workoutSessions: num(sessions.rows[0].n) };
 }
 
+/**
+ * Raw counts for every HEALTH part over [from, to] inclusive, keyed by metric key — what
+ * `buildHealthRing` (rings.ts) draws from.
+ *
+ * `resolved` says whether the SOURCE answered — never whether it found rows. Zero rows in
+ * the window is a real, meaningful zero and must stay distinguishable from a part that has
+ * no source at all.
+ *
+ * Every source is in the database now. The calendar-sourced parts (Social's events, the
+ * Basil project-hours lap) are gone, so this needs nothing from Google and a calendar outage
+ * can no longer ghost a Health arc.
+ */
 export async function getRingCounts(
   db: Client,
   from: string,
   to: string,
-  /**
-   * Counts this function cannot get from the database.
-   *
-   * Calendar events are never persisted — they are read live from Google — so a metric
-   * sourced from them has to be counted by the caller that already holds the range. Keyed
-   * by metric key; a key that is absent is treated as an unresolved source rather than a
-   * zero, so a Google outage reads as "no data" instead of "you did nothing".
-   */
-  external: Record<string, number | undefined> = {},
 ): Promise<Record<string, RawCount>> {
   const out: Record<string, RawCount> = {};
 
-  for (const m of METRICS) {
-    if (!m.sourceReady) {
-      out[m.key] = { count: 0, resolved: false };
-      continue;
-    }
-
+  for (const m of HEALTH_METRICS) {
     if (m.source === "habit") {
       const h = await db.execute({
         sql: "SELECT id FROM habits WHERE system_key=? AND active=1",
         args: [m.systemKey!],
       });
       if (!h.rows.length) {
-        // A metric declared ready whose wire is broken. Ghost it so the screen still
-        // works, but say so loudly — silently ghosting hides a bug behind a state that
-        // looks intentional.
+        // A part whose habit is missing or retired. Ghost it so the screen still works,
+        // but say so loudly — silently ghosting hides a bug behind a state that looks
+        // intentional.
         console.error(
-          `[rings] metric "${m.key}" is sourceReady but system_key "${m.systemKey}" resolved to no active habit`,
+          `[rings] metric "${m.key}": system_key "${m.systemKey}" resolved to no active habit`,
         );
         out[m.key] = { count: 0, resolved: false };
         continue;
       }
-      // value > 0: the column is a REAL defaulting to 1 and nothing constrains it to be
-      // truthy, so a 0 row would otherwise count as a tick.
+      // DISTINCT date: a habit is ticked once a day (habit_entries is UNIQUE per day
+      // anyway). value > 0: the column is a REAL defaulting to 1 and nothing constrains it
+      // to be truthy, so a 0 row would otherwise count as a tick.
       const r = await db.execute({
         sql: "SELECT COUNT(DISTINCT date) AS n FROM habit_entries WHERE habit_id=? AND date BETWEEN ? AND ? AND value > 0",
         args: [num(h.rows[0].id), from, to],
@@ -1071,22 +1054,10 @@ export async function getRingCounts(
       continue;
     }
 
-    // Both calendar-sourced metrics come from the caller: Google events are never
-    // persisted, so whoever already holds the range counts them. An absent key is an
-    // UNRESOLVED source rather than a zero — a Google outage must read "no data", not
-    // "you did nothing".
-    if (m.source === "calendar_social" || m.source === "calendar_project_hours") {
-      const n = external[m.key];
-      out[m.key] = n == null ? { count: 0, resolved: false } : { count: n, resolved: true };
-      continue;
-    }
-
     if (m.source === "gym") {
-      // Driven by the metric's own perDayCapped flag rather than hard-coded. Gym now
-      // counts SESSIONS — two lifts on a Tuesday are two things that happened — which is
-      // the owner's ruling. Keeping the switch here rather than in the SQL means the noun
-      // printed in the fact line and the way it is counted can never drift apart again;
-      // `misc` spent its whole life declaring "sessions" while being counted by date.
+      // Driven by the metric's own perDayCapped flag rather than hard-coded. Gym counts
+      // SESSIONS — two lifts on a Tuesday are two things that happened — by the owner's
+      // ruling.
       const agg = m.perDayCapped ? "COUNT(DISTINCT date)" : "COUNT(*)";
       const r = await db.execute({
         sql: `SELECT ${agg} AS n FROM gym_sessions WHERE kind=? AND date BETWEEN ? AND ?`,
@@ -1098,17 +1069,11 @@ export async function getRingCounts(
 
     if (m.source === "health_steps") {
       /**
-       * TOTAL STEPS in the window — a SUM, not a count of qualifying days.
+       * TOTAL STEPS in the window — a SUM, not a count of qualifying days. A day the phone
+       * never pushed adds 0.
        *
-       * This used to be `COUNT(*) ... AND steps >= dailyThreshold`, which scored 6,900
-       * steps identically to zero and a 20k day identically to 7,001. Steps accumulate,
-       * so the ring now asks how far you actually walked. `m.dailyThreshold` is still the
-       * daily floor the checklist and the chart draw; it deliberately no longer filters
-       * here, and the metric's own `required` carries floor x window.
-       *
-       * COALESCE because SUM over no rows is NULL, and `num(null)` is not 0 — an empty
-       * window must read as a real zero, not as a broken source. `resolved` stays true
-       * for the same reason it always did: the table answered.
+       * COALESCE because SUM over no rows is NULL, and an empty window must read as a real
+       * zero, not as a broken source. `resolved` stays true: the table answered.
        */
       const r = await db.execute({
         sql: "SELECT COALESCE(SUM(steps), 0) AS n FROM health_logs WHERE date BETWEEN ? AND ?",
@@ -1118,18 +1083,14 @@ export async function getRingCounts(
       continue;
     }
 
-    if (m.source === "skill_session") {
+    if (m.source === "calories") {
       /**
-       * ROWS, because a row IS a session now.
-       *
-       * This counted DISTINCT (skill_id, date), which silently capped each skill at one a
-       * day while the metric declared `perDayCapped: false` and printed "sessions" — the
-       * exact label-versus-counter disagreement that Misc carried for its whole life and
-       * that the perDayCapped split exists to prevent. Two sittings at the piano on one
-       * Saturday are two sessions, the same ruling gym runs under.
+       * TOTAL KCAL in the window, from the food LOG — the owner's ruling: one big day
+       * covers quiet ones, and a day with nothing logged adds 0. Not health_logs.calories,
+       * which is a dead snapshot column.
        */
       const r = await db.execute({
-        sql: "SELECT COUNT(*) AS n FROM skill_time WHERE date BETWEEN ? AND ?",
+        sql: "SELECT COALESCE(SUM(kcal), 0) AS n FROM calorie_entries WHERE date BETWEEN ? AND ?",
         args: [from, to],
       });
       out[m.key] = { count: num(r.rows[0].n), resolved: true };
@@ -1142,20 +1103,9 @@ export async function getRingCounts(
   return out;
 }
 
-/** How much of the 14-day window has actually been observed. Caps at WINDOW_DAYS. */
-export async function getObservedDays(
-  db: Client,
-  anchor: string,
-): Promise<number> {
-  const r = await db.execute(
-    "SELECT value FROM app_meta WHERE key='rings_since'",
-  );
-  if (!r.rows.length) return WINDOW_DAYS;
-  return Math.max(
-    1,
-    Math.min(WINDOW_DAYS, daysBetween(String(r.rows[0].value), anchor) + 1),
-  );
-}
+// getObservedDays ("day 3 of 14" while the window filled) is gone: the rings have observed
+// far more than a fortnight since `rings_since`, no screen printed it, and the segmented
+// donut has no fact line to put it in. The app_meta row is left where it is.
 
 // logSkillTime moved to engine.ts — it is a write, and every write in this app runs
 // transactionally in the engine.
@@ -1164,6 +1114,9 @@ export async function getObservedDays(
 
 /**
  * Every WRITTEN thing, for the most recent `limit` days that hold one, ending at `before`.
+ *
+ * SKILL SESSIONS ARE NOT READ since the Health & Career pivot — skills are hidden, so a day
+ * whose only writing is a skill session does not appear at all. The rows stay in skill_time.
  *
  * Paged BY DAY rather than by row, because the screen is grouped by day: a row limit would
  * cut the 12th in half and the next page would open mid-Tuesday. The dates are chosen first
@@ -1184,13 +1137,12 @@ export async function logDays(
     sql: `SELECT date FROM (
             SELECT date FROM journal_entries WHERE date <= ?
             UNION SELECT date FROM gym_sessions WHERE date <= ?
-            UNION SELECT date FROM skill_time  WHERE date <= ?
             UNION SELECT e.date FROM habit_entries e JOIN habits h ON h.id = e.habit_id
                    WHERE h.system_key IN ('outreach','reading','ascnd') AND e.note IS NOT NULL AND e.date <= ?
             UNION SELECT date FROM block_marks
                    WHERE state = 'drifted' AND reason IS NOT NULL AND reason <> '' AND date <= ?
           ) ORDER BY date DESC LIMIT ?`,
-    args: [before, before, before, before, before, limit],
+    args: [before, before, before, before, limit],
   });
   if (!dates.rows.length) return [];
 
@@ -1202,7 +1154,7 @@ export async function logDays(
   // contiguous only in the sense that it brackets the chosen days; any extra dates it sweeps
   // up are filtered below, which is cheaper than `limit` separate queries.
   const inSpan = { args: [lo, hi] };
-  const [journal, gym, skill, outreach, drift] = await Promise.all([
+  const [journal, gym, docs, drift] = await Promise.all([
     db.execute({
       // The sheet count rides along so the spread can draw the whole scroll rather than
       // its first sheet. A correlated COUNT per page, not a JOIN: a page with no later
@@ -1215,14 +1167,6 @@ export async function logDays(
     }),
     db.execute({
       sql: "SELECT id, date, kind, title, note FROM gym_sessions WHERE date BETWEEN ? AND ?",
-      ...inSpan,
-    }),
-    db.execute({
-      // skill_id rides along as the entry's `ref` — the log's dialogs write to
-      // /api/skills/[id]/time, and a session headed only by its own row id cannot say
-      // which skill that id belongs to.
-      sql: `SELECT t.id, t.skill_id, t.date, t.note, s.name FROM skill_time t
-              JOIN skills s ON s.id = t.skill_id WHERE t.date BETWEEN ? AND ?`,
       ...inSpan,
     }),
     db.execute({
@@ -1282,21 +1226,7 @@ export async function logDays(
       meta: String(r.kind),
     });
   }
-  for (const r of skill.rows) {
-    if (!keep.has(String(r.date))) continue;
-    const note = r.note == null ? null : String(r.note);
-    out.push({
-      kind: "skill",
-      id: num(r.id),
-      date: String(r.date),
-      title: firstLine(note),
-      body: note,
-      meta: String(r.name),
-      ref: num(r.skill_id),
-      label: String(r.name),
-    });
-  }
-  for (const r of outreach.rows) {
+  for (const r of docs.rows) {
     if (!keep.has(String(r.date))) continue;
     const note = r.note == null ? null : String(r.note);
     const skey = String(r.skey);

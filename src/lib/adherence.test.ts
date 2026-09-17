@@ -2,16 +2,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   adherenceFor,
+  buildBlocks,
   floorCredit,
+  isBlockEvent,
   BLOCK_SHARE,
+  GRAPHITE_COLOR_ID,
   HABIT_SHARE,
   type Block,
   type BlockState,
   type FloorReadings,
   nextBlockAfter,
 } from "./adherence.ts";
-import { STEPS_FLOOR } from "./rings.ts";
-import { CALORIE_FLOOR } from "./productivity.ts";
+import { CALORIE_FLOOR, STEPS_FLOOR } from "./rings.ts";
+import type { CalEvent } from "./google.ts";
 
 /** A block of `hours`, marked or not. `due` only affects the unmarked call-to-action. */
 const block = (
@@ -378,4 +381,70 @@ test("a block with no start time cannot be placed, so it cannot be next", () => 
 test("out-of-order input still yields the earliest", () => {
   const day = [blk("16:00"), blk("10:00"), blk("13:00")];
   assert.equal(nextBlockAfter(day, 9 * 60)!.time_start, "10:00");
+});
+
+// --- graphite is not a block -----------------------------------------------------------
+
+/** A timed calendar event on 2026-09-18, Melbourne time. */
+const ev = (
+  id: string,
+  colorId: string | null,
+  over: Partial<CalEvent> = {},
+): CalEvent => ({
+  id,
+  summary: id,
+  start: "2026-09-18T10:00:00+10:00",
+  end: "2026-09-18T12:00:00+10:00",
+  allDay: false,
+  colorId,
+  ...over,
+});
+
+test("graphite is Google's colour 8", () => {
+  assert.equal(GRAPHITE_COLOR_ID, "8");
+});
+
+// THE ONE RULE, owner's ruling 2026-09-18: a graphite event is not a block — not on the
+// day's list, not in adherence's hours, not in hours worked. Every one of those reads
+// buildBlocks, so pinning it here pins it everywhere.
+test("buildBlocks drops graphite events and all-day entries, and nothing else", () => {
+  const blocks = buildBlocks(
+    "2026-09-18",
+    [
+      ev("lecture", null),
+      ev("church", GRAPHITE_COLOR_ID),
+      ev("projects", "10"),
+      ev("semester", null, { allDay: true, start: "2026-09-18", end: "2026-09-19" }),
+      ev("invite", GRAPHITE_COLOR_ID, { allDay: true, start: "2026-09-18", end: "2026-09-19" }),
+      ev("gym", "3"),
+    ],
+    new Map(),
+  );
+  assert.deepEqual(
+    blocks.map((b) => b.event_id),
+    ["lecture", "projects", "gym"],
+  );
+});
+
+test("a graphite event MARKED adhered still never reaches the figure", () => {
+  const marks = new Map([
+    ["church", { state: "adhered" as BlockState, reason: null }],
+    ["lecture", { state: "adhered" as BlockState, reason: null }],
+  ]);
+  const blocks = buildBlocks(
+    "2026-09-18",
+    [ev("lecture", null), ev("church", GRAPHITE_COLOR_ID)],
+    marks,
+  );
+  const a = adherenceFor(blocks, null, NONE);
+  assert.equal(a.totalHours, 2, "only the lecture's two hours are blocked time");
+  assert.equal(a.adhered, 1);
+  assert.equal(a.pct, BLOCK_SHARE);
+});
+
+test("isBlockEvent: timed and not graphite", () => {
+  assert.equal(isBlockEvent({ allDay: false, colorId: null }), true);
+  assert.equal(isBlockEvent({ allDay: false, colorId: "10" }), true);
+  assert.equal(isBlockEvent({ allDay: false, colorId: "8" }), false);
+  assert.equal(isBlockEvent({ allDay: true, colorId: null }), false);
 });

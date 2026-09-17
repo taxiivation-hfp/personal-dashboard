@@ -27,7 +27,12 @@ CREATE TABLE IF NOT EXISTS goals (
   sort_order   INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-  completed_at TEXT
+  completed_at TEXT,
+  -- The goal's optional DEADLINE, a local 'YYYY-MM-DD' — the Health & Career pivot,
+  -- 2026-09-18. Only an ACTIVE goal WITH a deadline takes an arc of the Career ring, filled
+  -- by whether it is on pace (src/lib/career.ts). An existing database gets this column
+  -- from client.ts's ensure(); it is nullable, so no row is touched.
+  deadline     TEXT CHECK (deadline IS NULL OR deadline GLOB '????-??-??')
 );
 CREATE INDEX IF NOT EXISTS idx_goals_pillar_status ON goals(pillar_id, status);
 

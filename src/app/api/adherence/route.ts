@@ -4,17 +4,22 @@ import { adherenceFor, buildBlocks, type BlockState } from "@/lib/adherence";
 import { habitTallyFor } from "@/lib/queries";
 import { weekdayBit } from "@/lib/engine";
 import { addDays, isISODate, todayISO } from "@/lib/dates";
-import { scoreDay } from "@/lib/productivity";
+import { hoursForDay } from "@/lib/productivity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * The 7-day strip.
+ * Adherence per day over a window — the tracker on Today, the record's adherence chart and
+ * its hours-by-category chart.
  *
  * Computed from calendar events + marks, NOT from marks alone. Marks-only would
  * silently inflate history: a past day with three blocks where one was marked adhered
  * would read 100%, because the two never marked wouldn't be in the denominator.
+ *
+ * Each day: { date, isToday, isFuture, ...Adherence, hours, blocks }. `hours` is the day's
+ * HOURS WORKED BY CATEGORY (productivity.ts) — minutes, never points; the score is gone.
+ * Graphite events never reach any of it: buildBlocks drops them.
  */
 export async function GET(req: Request) {
   try {
@@ -44,7 +49,7 @@ export async function GET(req: Request) {
     }
 
     const db = await getDb();
-    // `connected` is load-bearing for the productivity score below — do not discard it.
+    // `connected` is load-bearing for the hours below — do not discard it.
     const { byDate, connected } = await getCalendarRange(start, end);
 
     const markRows = await db.execute({
@@ -111,10 +116,9 @@ export async function GET(req: Request) {
     // StatsLink). getDayView still reads the viewed day's own title, which is where the one
     // title this app still shows comes from.
 
-    // Calories per day — for the productivity floor AND, since the floors joined the
-    // habit share, for adherence. One ranged query rather than one per day. SUM is an
-    // aggregate, so libSQL hands it back as a BigInt — Number() at the boundary, as
-    // everywhere else.
+    // Calories per day, for the calorie floor's share of adherence. One ranged query rather
+    // than one per day. SUM is an aggregate, so libSQL hands it back as a BigInt — Number()
+    // at the boundary, as everywhere else.
     const calRows = await db.execute({
       sql: "SELECT date, SUM(kcal) AS total FROM calorie_entries WHERE date BETWEEN ? AND ? GROUP BY date",
       args: [start, end],
@@ -132,18 +136,6 @@ export async function GET(req: Request) {
     const stepsByDate = new Map<string, number>();
     for (const r of stepRows.rows)
       stepsByDate.set(String(r.date), Number(r.steps));
-
-    // GYM SESSIONS PER DAY, for the productivity score. Read here again after being taken
-    // out: training is priced per LOGGED SESSION now rather than per scheduled hour, so the
-    // gym_sessions row is the record and the Grape block on the calendar is worth nothing.
-    // See POINTS_PER_SESSION. One ranged query rather than one per day; COUNT is an
-    // aggregate, so libSQL hands it back as a BigInt and Number() applies at the boundary.
-    const gymRows = await db.execute({
-      sql: "SELECT date, COUNT(*) AS n FROM gym_sessions WHERE date BETWEEN ? AND ? GROUP BY date",
-      args: [start, end],
-    });
-    const gymByDate = new Map<string, number>();
-    for (const r of gymRows.rows) gymByDate.set(String(r.date), Number(r.n));
 
     const today = todayISO();
     const nowMs = Date.now();
@@ -168,51 +160,39 @@ export async function GET(req: Request) {
       );
 
       /**
-       * The productivity score — hours SPENT, never results produced. See CLAUDE.md's
-       * Productivity section; it is a deliberate, quarantined exception.
+       * HOURS WORKED, BY CATEGORY — minutes, never points (the score is gone, 2026-09-18).
+       * The same function /api/productivity's per-day breakdown calls, so the chart and the
+       * workings it opens cannot disagree about a day.
        *
-       * Assembled HERE and deliberately never added to DayView. The coach reads
-       * getDayView and block_marks, so keeping the score off DayView makes it
-       * structurally invisible to the coach rather than merely discouraged by a prompt.
+       * Never added to DayView: it answers "where did the hours go", which is the record's
+       * question, not the day's.
        *
-       * null when the calendar is unreachable, and that gate matters: without it a day
-       * would still report a number built from its non-negotiables while every scheduled
-       * hour silently counted as zero — a wrong number rather than an absent one.
-       *
-       * Gym sessions ARE read here, and they are the only way training enters the score:
-       * Grape has left CALENDAR_RATES, so the scheduled block pays nothing and the logged
-       * session pays a flat rate. One of the two, never both.
+       * null when the calendar is unreachable, and that gate matters: an outage must read as
+       * "no data", not as a day in which nothing was worked.
        */
-      const productivity = connected
-        ? scoreDay({
-            blocks: blocks.map((b) => ({
+      const hours = connected
+        ? hoursForDay(
+            blocks.map((b) => ({
               minutes: b.minutes ?? 0,
               colorId: b.colorId,
               state: b.state,
               workedFraction: b.workedFraction,
             })),
-            // STANDING ticks only — one-off non-negotiables feed adherence and nothing
-            // else, the owner's ask stated literally ("counts towards tomorrow's
-            // adherence"). Keeping them out of the score also keeps /api/productivity's
-            // breakdown agreeing with this bar without a third reader of the new table.
-            habitsDone,
-            calories: calByDate.get(d) ?? null,
-            workouts: gymByDate.get(d) ?? 0,
-          })
+          )
         : null;
 
       out.push({
         date: d,
         isToday: d === today,
         isFuture: d > today,
-        // The floors read here are UNGATED by calendar connectivity, unlike the
-        // productivity score below: food logged is food logged whatever Google is doing,
-        // and adherence must not lose two shares to someone else's outage.
+        // The floors read here are UNGATED by calendar connectivity, unlike the hours
+        // below: food logged is food logged whatever Google is doing, and adherence must
+        // not lose two shares to someone else's outage.
         ...adherenceFor(blocks, tally, {
           steps: stepsByDate.get(d) ?? null,
           calories: calByDate.get(d) ?? null,
         }),
-        productivity,
+        hours,
         // A compact summary so the calendar column can show what the day actually
         // held, not just a percentage — enough to read the pattern at a glance.
         //
