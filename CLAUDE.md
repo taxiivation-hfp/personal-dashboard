@@ -8,14 +8,16 @@ The question it answers is **"did I do what I said I'd do?"** — never "how muc
 get done?" The problem being solved is **drift and self-justification**, not
 productivity.
 
-**Output and results are deliberately NOT tracked or scored, with one quarantined
-exception.** If you find yourself adding something that measures how much was produced or
-how good it was, you have misunderstood the product. Working a block badly and working it
-brilliantly are the same event here: the block was adhered to.
+**Output and results are NOT tracked or scored, anywhere, with no exception.** If you find
+yourself adding something that measures how much was produced or how good it was, you have
+misunderstood the product. Working a block badly and working it brilliantly are the same
+event here: the block was adhered to.
 
-The exception is the **productivity score** — see its own section below. It measures hours
-SPENT, never results produced, and it is fenced off from everything else. Do not read it as
-permission to score anything else.
+**THE PRODUCTIVITY SCORE IS GONE — the owner's ruling, 2026-09-18: "quantifying productivity
+is stupid."** No points are printed anywhere, and there is no quarantined exception left to
+read as permission. What survived is the honest half of the question the score was a proxy
+for — **where did the week's hours go** — answered in hours and minutes on `/stats`, which is
+a duration you actually spent rather than a number the app invented. See "Hours worked" below.
 
 ## The rules that follow from that
 
@@ -45,14 +47,36 @@ A calendar block is not done/not-done. It is exactly one of:
   for anything still unmarked, not the primary path.
 - **Drifted** opens an optional short reason field. Optional. Never blocking. Never a
   required field, never a modal you have to dismiss.
-- Reasons are stored so the coach can spot patterns over time.
+- Reasons are stored, and their reader is the owner: they surface in the written log.
+
+### NOT EVERY CALENDAR EVENT IS A BLOCK — and ONE function decides
+
+`isBlockEvent` in `src/lib/adherence.ts`, asked by `buildBlocks`, which is where every
+reader of blocks gets them: the day's list, adherence on Today and on the tracker, hours
+worked, the drill-downs. Two kinds of event are not blocks:
+
+- **An ALL-DAY entry.** It is a condition of the day, not eight hours of work you failed to
+  do. Excluded from both sides of the block share.
+- **A GRAPHITE event — Google's `colorId "8"` (`GRAPHITE_COLOR_ID`) — the owner's ruling,
+  2026-09-18.** Graphite used to mean a social event and fed the Social ring. Social is gone,
+  socialising "comes naturally in between blocks", so an event in that colour is not
+  something to mark, not blocked hours in adherence, and not hours worked. **KNOWN AND
+  ACCEPTED: every past day re-reads without them** — a fortnight of Church and nights out has
+  left the denominator, so those days read differently than they did. That is the same silent
+  history rewrite as retuning the hours table, and it was accepted with the rule.
+
+  The Events API reports only the eleven legacy colour ids, so the Birch beside Graphite in
+  the calendar UI's wider palette arrives as `8` too. Measured on the owner's calendar, and
+  accepted with the rule.
+
+One place decides this because two would eventually disagree about a Tuesday, with no error
+and no failing test — the same failure `worked.ts` exists to prevent.
 
 #### A DRIFT CAN BE PARTIAL — the worked fraction
 
 Still three states, and the tallies still count by state: a partial drift is a **drift** on
-the record and a drift to the coach. What it also carries is `block_marks.worked_fraction`,
-0–1 — how much of the block was actually worked — set on a 5% slider that opens beside the
-reason.
+the record. What it also carries is `block_marks.worked_fraction`, 0–1 — how much of the
+block was actually worked — set on a 5% slider (`WORKED_STEP`).
 
 **It exists because the block share was already a claim about HOURS** and the only fractions
 it could express were 0 and 1. An afternoon whose first forty minutes went as planned was
@@ -60,32 +84,67 @@ recorded as if nothing had happened, which understates a day that was genuinely 
 
 **The rule lives in ONE place: `workedFraction()` in `src/lib/worked.ts`** — import-free, and
 also the home of the `BlockState` union, which used to be written out verbatim in three
-files. Five readers take it: adherence, productivity, `eventWorkIn`, the Portfolio lap and
-the productivity drill-down. Five hand-written copies of one state table would diverge
-silently — two screens quietly disagreeing about the same 48 minutes, with no error and no
-failing test. **Do not inline this rule anywhere.**
+files. Four readers take it: adherence, the hours-by-category maths, the hours drill-down
+route, and `dismissalWouldErase` beside it. Four hand-written copies of one state table would
+diverge silently — two screens quietly disagreeing about the same 48 minutes, with no error
+and no failing test. **Do not inline this rule anywhere.**
 
-- **The fraction is HOURS, and hours count wherever hours are counted** — the ring, the
-  score, and the Portfolio project-hours lap. **The Social ring is untouched**: it counts
-  *events*, and half an evening out is not half a social event.
+- **The fraction is HOURS, and hours count wherever hours are counted** — the adherence ring
+  and the hours-by-category chart. It reaches no pillar ring: Health counts sessions, days and
+  totals, and Career counts goals, so neither has an hour in it.
 - **NULL is not 0.** Null means nobody was asked; 0 means you said none of it. Both are worth
   nothing, so every drift written before the slider is unchanged — and the distinction is
-  kept because the coach is a reader that can use it.
+  kept because it is a real difference about what was answered.
 - **100% converts the mark to Adhered**, in `engine.markBlock` and not in the client. At the
   top of the slider the arithmetic is already identical, and a chip reading "Drifted" over a
   block worked end to end is the record holding two names for one fact. `/api/blocks` returns
   the **resulting** state; the screen closes its row on that answer rather than predicting it.
-- **The slider never gates the mark.** Tap Drifted → saved instantly at 0 → the row opens.
+- **The slider never gates the mark.** Tap Drifted → saved instantly at 0 → the editor opens.
   One tap is still a complete drift. The honest-logging rule governs a second control exactly
   as it governs the first.
 - **The percentage is drawn beside the chip, never inside it** — all three chips must keep
   measuring the same. Its fill is the **accent**, not the drift colour: this is the part you
   *worked*, and it feeds the amber ring, so it wears the ring's hue.
-- **Tapping the Drifted chip reopens the row.** A slider you cannot correct is worse than no
-  slider.
+- **Tapping the Drifted chip reopens the editor.** A slider you cannot correct is worse than
+  no slider.
 
-**Adherence rate is the hero stat**: today's adherence % is the single largest number
-on the screen, drawn as a large amber ring with a 7-day strip beneath it.
+#### THE DRIFTED EDITOR IS A POPOVER, not an inline expansion
+
+The owner's ruling, 2026-09-18, replacing the row that grew a panel underneath itself. The
+blocks window has a fixed height and nothing in it may scroll at rest (see the dashboard
+section), and a row that doubles its own height pushes the rest of the day off the bottom of
+the window at exactly the moment you are working down it.
+
+`src/components/DriftPopover.tsx`, mounted once after the list for whichever row is open,
+positioned from the row's own `getBoundingClientRect()`: to the right of it, flipped left when
+it would overrun, then clamped to the viewport. It re-aims on resize and closes on a scroll of
+the owning `.window` — a fixed box aimed at a box that moves has to answer both.
+
+- **Outside click and Escape COMMIT, then close.** A slider left at 40% and dismissed with
+  Escape must not lose the 40%. `skip` is the same path with a word on it.
+- Not a `<dialog>`: a modal backdrop over a list you are marking as you go is the wrong
+  contract. `role="dialog"` and an `aria-label` naming the block instead.
+- It prints the block's title, because a popover beside a list must say which row it belongs
+  to.
+
+#### EVERY BLOCK ROW HAS A DISMISS CONTROL
+
+The owner's ruling, 2026-09-18 — for invites and anything never meant to be done. It writes
+the existing `dismissed` state, which `/api/blocks` and adherence already honour by dropping
+the block from **both** sides of the block share. It sits beside `undo`, in the same quiet
+treatment, on **every** row, marked or not: an invite you were never going to do is usually an
+unmarked one.
+
+**A DISMISSAL NEVER TAKES BACK WORKED TIME** — `engine.markBlock` reads the prior mark and
+refuses, returning the state that stands. Dismissing a row that earned hours is the one move
+that could make the climbing figure FALL, which is the thing it must never do
+(`dismissalWouldErase` in worked.ts holds the arithmetic). So dismissing an adhered row is a
+no-op and the row simply does not change. **Do not special-case it and do not print an
+error**: `mark()` already trusts the server's resulting state, and a row that does not move is
+the honest outcome. Unmarked, skipped and zero-fraction drifts dismiss as before.
+
+**Adherence rate is the hero stat**: today's adherence % is the single largest number on the
+screen, drawn as a 240px amber ring with the day's tasks floating around it.
 
 ### The figure CLIMBS from 0, and never falls
 
@@ -102,7 +161,7 @@ non-negotiable is one of SEVEN items — 50/7 each. A ONE-OFF non-negotiable sch
 the day (see its own section) is one more equal item; it can only ever be added for a day
 AHEAD, so the denominator is still a thing the morning knew. `adherenceFor` itself is
 unchanged — the tally is assembled in `getDayView` and `/api/adherence`, BOTH of which
-must count the one-offs or the strip and the hero disagree about a day.
+must count the one-offs or the tracker and the hero disagree about a day.
 
 **STEPS AND CALORIES ARE TWO MORE ITEMS OF THE HABIT SHARE, EARNED FRACTIONALLY** — the
 owner's ruling, 2026-08-17; they used to feed adherence nothing at all. Each pays
@@ -118,15 +177,15 @@ again — 14,000 steps earns exactly what 7,000 does.
   unearned share, like an unticked habit.
 - **The figure still only climbs** — both readings are running totals that never fall
   within a day, and the clamp forbids a negative credit.
-- The floor constants stay in their homes — `STEPS_FLOOR` in rings.ts, `CALORIE_FLOOR` in
-  productivity.ts — and adherence.ts imports them. No copied numbers.
+- **BOTH FLOOR CONSTANTS LIVE IN `rings.ts` NOW** — `STEPS_FLOOR` (7,000) and `CALORIE_FLOOR`
+  (2,500). The calorie floor moved there from productivity.ts with the pivot, because rings.ts
+  must stay import-free and the Health ring now reads it; `productivity.ts` re-exports it — a
+  re-export, never a copy — for the calorie screens that have always imported it from there.
+  New code imports both from `rings.ts`. No copied numbers.
 - **KNOWN AND ACCEPTED: every past day re-read lower when this landed** (denominator +2,
-  mostly unearned back then) — the same silent history rewrite as retuning
-  `CALENDAR_RATES`.
+  mostly unearned back then) — the same silent history rewrite as dropping graphite.
 - `habitsDone`/`habitsScheduled` remain the TICK tally. "3 of 5 ticked" must stay a true
   sentence, so the floors are not in it; they reach `pct` and nothing else.
-- The productivity score keeps its own BINARY calorie rule. Two measures, two questions,
-  deliberately not one arithmetic.
 
 **EVEN HALVES, replacing 70/30 — the owner's ruling.** The old split made the figure mostly
 a story about the calendar: a day with nothing scheduled could barely climb however much of
@@ -150,15 +209,16 @@ Consequences worth knowing, all of them intended:
   become "due" for the figure to be honest, because nothing is ever held against you.
 - **Drift is not punished, it just does not add — for the part you drifted.** A drifted block
   carrying a worked fraction adds that fraction of itself, so an afternoon half-lived reads
-  as half-lived. The three-state mark still records what happened and the coach still reads
-  it. The hero figure stops being the place that holds it against you.
+  as half-lived. The three-state mark still records what happened. The hero figure stops
+  being the place that holds it against you.
 - **Nothing can make the figure fall, and no fraction may.** A clamp in `workedFraction`
   is what enforces it: above 1 a block could earn more of the day than it occupies, and
   below 0 *marking* a block would lower the number — the one thing a climbing figure must
-  never do. A test pins it.
+  never do. A test pins it. The dismissal guard above is the same rule defended at a
+  different door.
 - **A day ends wherever it got to.** 60% is not a failure grade; it is sixty points earned.
-- Blocks with no duration are excluded from both sides — an all-day event is not eight
-  hours of work you failed to do.
+- Blocks with no duration are excluded from both sides — an unknown span cannot be weighed,
+  and counting it as zero hours would make the block unearnable.
 
 ## Non-negotiables
 
@@ -180,48 +240,43 @@ whole list. Workouts are logged separately, by kind: **Strength / Cardio**, one
 row per SESSION — a day can hold two lifts and a run, and each is its own document.
 
 **MISC IS GONE.** What it held was bouldering and calisthenic skills, and Calisthenics is a
-Portfolio SKILL. Once skills started logging sessions rather than hours the two were the
-same document with two places to write it — so it got written in whichever the owner
-remembered, and both counts were wrong. One activity, one row. `gym_sessions.kind` still
-ACCEPTS `'misc'` at the database level and any surviving row is left alone: nothing writes
-it and no metric counts it, so it is inert rather than corrupt. Preserve data; migrate,
-never drop.
+skill. Once skills started logging sessions rather than hours the two were the same document
+with two places to write it — so it got written in whichever the owner remembered, and both
+counts were wrong. One activity, one row. `gym_sessions.kind` still ACCEPTS `'misc'` at the
+database level and any surviving row is left alone: nothing writes it and no metric counts
+it, so it is inert rather than corrupt. Preserve data; migrate, never drop.
 
 Each kind opens **its own free-text document** — a separate note per session, not one
 shared field. Saving IS logging; there is no second "did it" toggle to forget. The text is
 deliberately unstructured: a workout log is numbers scribbled between sets, and any form
 imposed here is a form to fight on a bad day.
 
-**Calories have a FLOOR at 2500**, worth one non-negotiable in the productivity score and —
-since 2026-08-17 — one fractional item of adherence's habit share (see the adherence
-section). A floor to reach, never a ceiling to stay under: this is someone training, for
-whom under-eating is the failure and there is no upper bound worth drawing. Its box is
-DASHED until met — "not yet" rather than "failed", since most of a day is legitimately
-spent below the line. In the PRODUCTIVITY score, below the floor still scores nothing —
-a points total you can half-hit is a target by another name; adherence pays the reached
-fraction of the floor for the same reason it pays the worked fraction of a block. The
-calorie row's STREAK counts a third threshold, `CALORIE_STREAK_FLOOR` (2,000 in
-streaks.ts) — "did you log the day", deliberately not "did you eat enough"; see the
-streaks paragraph in the non-negotiables section.
+**Calories have a FLOOR at 2500** (`CALORIE_FLOOR`, whose home is `rings.ts`), worth one
+fractional item of adherence's habit share and one of the Health ring's five parts. A floor to
+reach, never a ceiling to stay under: this is someone training, for whom under-eating is the
+failure and there is no upper bound worth drawing. Its box is DASHED until met — "not yet"
+rather than "failed", since most of a day is legitimately spent below the line. The calorie
+row's STREAK counts a third threshold, `CALORIE_STREAK_FLOOR` (2,000 in streaks.ts) — "did you
+log the day", deliberately not "did you eat enough"; see the streaks paragraph below.
 
-**A non-negotiable may carry a DOCUMENT** — outreach, reading and ASC.ND, today.
-`habit_entries.note`, one per day by that table's own UNIQUE constraint, which is the
-shape the metric already counts in: outreach is `perDayCapped: true`, so a second message
-on a Tuesday is the same Tuesday. What is counted is consistency at the floor, never
-volume past it.
+**A non-negotiable may carry a DOCUMENT** — Outreach, Read and ASC.ND, today.
+`habit_entries.note`, one per day by that table's own UNIQUE constraint, which is the shape
+the metrics already count in. What is counted is consistency at the floor, never volume past
+it.
 
 **THREE HABITS JOINED ON 2026-08-24/25** — the owner's ask, seeded by the latched
-`habits_aug24_v1` block in client.ts: **Calendar** (plain tick, no pillar), **Vitamins**
-(plain tick, Physical) and **ASC.ND** (`system_key='ascnd'`, Portfolio) — a DOCUMENT habit
-on the outreach/reading model: its row opens `NoteLog`, saving is what ticks, and its
-notes join the written log as their own kind (`ascnd` in dayLog.ts, tab labelled
-"ASC.ND"). All three are ordinary rows otherwise — they join the habit tally, and they
-streak like everything else.
+`habits_aug24_v1` block in client.ts: **Calendar** (plain tick), **Vitamins** (plain tick) and
+**ASC.ND** (`system_key='ascnd'`) — a DOCUMENT habit on the outreach/reading model: its row
+opens `NoteLog`, saving is what ticks, and its notes join the written log as their own kind
+(`ascnd` in dayLog.ts, tab labelled "ASC.ND"). All three are ordinary rows otherwise — they
+join the habit tally, and they streak like everything else. **Their pillars were re-filed by
+the pivot**: ASC.ND is Health, Calendar is Career. See the checklist colours below.
 
 **A DOCUMENT ROW IS ONE CONTROL** — the owner's ruling, 2026-08-21, replacing the
 tick-box-plus-side-button pair. Tapping the row opens the logger (`NoteLog`), like every
-other logging surface here; the roster of which rows do this is `DOC_HABITS` in Today.tsx,
-keyed by `system_key` so a rename changes nothing. Three rules follow, all deliberate:
+other logging surface here; the roster of which rows do this is **`DOC_HABITS`, exported from
+`src/components/NoteLog.tsx`** — it lives beside the dialog it configures, keyed by
+`system_key` so a rename changes nothing. Three rules follow, all deliberate:
 
 - Writing TICKS the day in the same upsert — saving is logging, no second control to
   forget. And **"Log it" over an empty page IS the tick**: the button never gates on
@@ -232,25 +287,51 @@ keyed by `system_key` so a rename changes nothing. Three rules follow, all delib
 - **Clearing the note still does not untick** — deleting a sentence you no longer like
   must not quietly retract the day. Two different retractions, named apart.
 
+**ASC.ND's placeholder is "What did you do?"** — the owner's own wording, 2026-09-18. The
+routine is stretching, skincare and posture: things you DO rather than work on, and the old
+verb read as a question about a project.
+
 **READING LOGS PAGES AS WELL AS WORDS.** The reading dialog carries a "Pages read" number
 beside the textarea; it lands in `habit_entries.value` next to the note (see
 `engine.setHabitNote`'s three-shape `value` contract: undefined leaves it, null clears to
 a bare tick, a number sets it — a note edit must never eat a number). KNOWN AND ACCEPTED:
 value 1 is ambiguous between "a bare tick" and "one page"; with a ten-page floor that is a
 curiosity, not a schema. The row's identity is `system_key='reading'`, stamped by the
-latched `system_keys_v2` block in client.ts. Reading notes join the WRITTEN LOG as their
-own kind, exactly as outreach notes do.
+latched `system_keys_v2` block in client.ts; the pivot renamed it to **Read** and the key is
+why the rename cost nothing. Reading notes join the WRITTEN LOG as their own kind, exactly as
+outreach notes do.
 
 The Journal row deliberately has no note of its own — a page IS the document, and a note
 about it is a second diary.
 
+**THE CHECKLIST'S TICK COLOUR IS THE HABIT'S PILLAR** — the owner's ruling, 2026-09-18,
+replacing "everything unassigned wears the accent". A tick box is the one place a pillar
+touches a daily gesture, so it should say which pillar it serves:
+
+| Tone | Rows |
+|---|---|
+| **Health — Moss** `--color-physical` | ASC.ND, Weight, Vitamins, Steps, Calories |
+| **Career — Plum** `--color-portfolio` | Outreach, Calendar |
+| **Neutral — warm grey** `--color-neutral` | Journal, Read, Tidy room (pillar NULL) |
+| **Accent — amber** | one-off non-negotiables, and only those |
+
+Every row resolves through `habitTone` in Today.tsx — `toneColor(pillar, colors[pillar])`, or
+the neutral token when there is no pillar — so the owner's `/colours` choice reaches the
+boxes. **Steps and Calories stopped hard-coding `var(--color-physical)`** and take the Health
+tone like the rest; `CalorieInput` receives it as a `tone` prop for the same reason. The
+one-off branch is separate and stays amber: a one-off belongs to no pillar and is the only row
+that is not a standing rule.
+
+**Two renames landed with the pivot**: `Read 10 pages` → **Read**, `One outreach message` →
+**Outreach**. Both are one-word row labels on a two-column checklist, and both rows already
+say what they count in the dialog they open.
+
 **EVERY CHECKLIST ROW CARRIES ITS OWN STREAK** — the owner's ruling, 2026-08-21. A plain
-count of consecutive done days, the same standing the app-wide streak has. The walk lives
-in `src/lib/streaks.ts` (pure, tested): days the item is not scheduled neither count nor
-break (a legacy Sundays-only item keeps its run through the week), and the live today gets
-GRACE — unticked at 2pm is "not yet", never a break. Streaks are HIDDEN off today, for the
-app-wide streak's own reason: the days you step back to are precisely the unmarked ones.
-**Calories streak on `CALORIE_STREAK_FLOOR` (2,000), deliberately below the 2,500
+count of consecutive done days. The walk lives in `src/lib/streaks.ts` (pure, tested): days
+the item is not scheduled neither count nor break (a legacy Sundays-only item keeps its run
+through the week), and the live today gets GRACE — unticked at 2pm is "not yet", never a
+break. Streaks are HIDDEN off today: the days you step back to are precisely the unmarked
+ones. **Calories streak on `CALORIE_STREAK_FLOOR` (2,000), deliberately below the 2,500
 floor** — the streak asks "did you log the day", not "did you eat enough"; a streak pinned
 to the eating floor would give an honest under-day a reason not to be logged. Journal's
 streak rides its own habit entries, which page saves already tick.
@@ -271,6 +352,10 @@ reversing "a streak on a phone battery is not a streak on a person". `DayView.st
 walks health_logs against `STEPS_FLOOR` (7,000) — the same floor the row's box ticks on,
 so the streak and the tick can never disagree about a day — with today's usual grace. The
 phone stays the only writer; a day it never pushed breaks the run like any unearned day.
+
+**There is no app-wide streak flame on Today any more.** It lived in the head of the week
+strip's card and went with the card (see the dashboard section). `days logged in a row`
+survives as a figure on `/stats`, which is where a figure about a run of days belongs.
 
 ### One-off non-negotiables — "Tomorrow, specifically"
 
@@ -296,9 +381,8 @@ task and not a habit: it never carries, has no weekday rule, and IS scored.
 - **Removable only while it is still a plan** (`date > today`, enforced in the engine):
   a lived day's denominator is part of its record, and deleting a ticked item would
   lower a day's figure after the fact.
-- **It feeds adherence and NOTHING else** — not the productivity score (the owner's ask,
-  stated literally: "counts towards tomorrow's adherence"), not the rings, not the
-  streaks. `/api/adherence` passes only the STANDING tick count to `scoreDay`.
+- **It feeds adherence and NOTHING else** — not the rings, not the streaks.
+  `/api/adherence` passes only the STANDING tick count to the maths.
 
 A non-negotiable may take a **number** instead of a tick (`habits.input = 'number'`, with
 `habits.unit`). Daily weight uses it. The value lives in `habit_entries.value`, which is
@@ -310,7 +394,7 @@ does not. Clearing the field clears the day, exactly like unticking.
 Separate from non-negotiables and separate again from blocks. A non-negotiable is a standing
 weekday rule ("weigh in, every day"); a **task** is a single thing decided for a single day
 ("book the physio"). Added from `/habits`, dated, defaulting to **tomorrow** — the day you
-can still shape, which is the same reason the day title and the habit overrides live there.
+can still shape, which is the same reason the day title is edited where it is.
 
 **If it is not ticked it carries forward, and the carry is DERIVED, never written.** Where a
 task sits is computed from `due` and today (`src/lib/tasks.ts`, import-free and tested); no
@@ -326,12 +410,11 @@ task, a phone opened at 2am rolling the day early. Reading a task twice cannot m
 - A done task belongs to **the day it was done**, which is what keeps a past day's record
   true when you read it back. An outstanding task sits on **today** and on no earlier day —
   the record of a past day must not grow new rows because you did not do something since.
-- **It feeds NOTHING** — not adherence, not the rings, not the streak, not the coach. The
-  habit share splits over non-negotiables SCHEDULED plus the two floors: a fixed
-  denominator known each morning. A carrying backlog joining it would make every other item
-  worth less for reasons nothing you did today caused — which is exactly the "item you are
-  designed to fail" that keeps the gym off the checklist. The list says `not scored` on
-  screen rather than leaving it to be discovered.
+- **It feeds NOTHING** — not adherence, not the rings, not the streak. The habit share splits
+  over non-negotiables SCHEDULED plus the two floors: a fixed denominator known each morning.
+  A carrying backlog joining it would make every other item worth less for reasons nothing you
+  did today caused — which is exactly the "item you are designed to fail" that keeps the gym
+  off the checklist.
 - **"carried 3 days" is a fact, not a verdict.** No red, no "overdue", no escalating weight.
   The honest-logging rule covers this list too: a list that starts scolding is one you stop
   writing to.
@@ -343,151 +426,227 @@ task, a phone opened at 2am rolling the day early. Reading a task twice cannot m
   day's adherence, a task carries and counts toward nothing. Do not merge them; the
   denominator argument above is exactly why the carrying one must stay unscored.
 
-## Pillar rings — sufficiency, never score
+### THE TASKS FLOAT AROUND THE HERO RING
 
-Three rings (Social / Physical / Portfolio) over a **rolling 14-day window**, defined in
-`src/lib/rings.ts`. Adherence remains the hero; rings are secondary context.
+The owner's ruling, 2026-09-18, replacing the full-width band under the checklist.
+`src/components/FloatingTasks.tsx` owns the hero row: the adherence ring and its caption
+arrive as `children` and sit in the middle, and the day's tasks are small cards on two rails
+either side of it. The band was a rule and a heading spent on a couple of sentences while the
+whole area either side of a 240px ring stayed empty.
 
-**The core rule: a ring fills toward a threshold and CAPS.** Its *value* cannot be
-improved by doing more — 8 strength sessions and 20 both count as a full ring, and 15k
-steps fills the steps ring exactly as much as 7k. Because you cannot win by overdoing one
-pillar, the only board that looks good is a well-rounded one. That cap *is* the mechanism.
+- **Up to six cards** (`MAX_CARDS`). Past that the sixth slot becomes a `+N more` card opening
+  the rest in a `.popover`, so the band's height is the same whether the day holds six tasks
+  or twenty. Ticking inside the popover works in place and does not close it — "clear three of
+  these" is one gesture, not three.
+- **Slots alternate, left first** (even index left, odd right), so the first task lands on the
+  side the eye reaches first and a single task never sits alone on the right.
+- **THE BAND'S ORDER IS `due` THEN `id`, NOT `tasksFor`'s done-last.** Done-last is right for
+  a list you scroll and wrong for six fixed slots: ticking calls `refresh()`, the server hands
+  back the same tasks re-sorted, and every card behind the one you ticked shifts a slot — past
+  six, the card you just ticked leaves the band and reappears inside the popover while a
+  hidden task takes its place. That is the exact hazard the drift popover was written against:
+  a list you are marking as you go must not move under you. Cutting the slots on keys that do
+  not move when `done` flips makes a tick read as confirmation, in place. Done-last survives
+  where it belongs: `/habits`, and the popover's own list, both of which are lists rather than
+  slots.
+- **No tasks → nothing is drawn** — no rails, no heading, no "nothing due" line. An empty
+  frame is furniture claiming a feature is in use; the honest drawing of an empty list is a
+  centred ring.
+- **The `not scored` label is lost here, deliberately.** The flag exists because a list that
+  looks like the scored one and isn't is worse than no list — but these are not a list any
+  more, they carry no rule and no heading to hang the word off, and there is nowhere honest to
+  put it. It survives on `/habits`, which is where tasks are written and where "does this
+  count" is actually asked. Nothing about the contract moved.
+- The card wears **ink**, never a pillar hue: a task belongs to no pillar.
 
-Strength and Cardio count **sessions**, not days — two lifts on a Tuesday are two things
-that happened. That is the owner's ruling and it makes the Physical ring easier to fill
-than the days rule it replaced; the threshold was deliberately left at 8 anyway. Outreach
-and Steps remain per-day capped, which `Metric.perDayCapped` is what actually encodes —
-`unit` is only the noun printed in the fact line.
+## Pillar rings — TWO pillars, sufficiency, never score
 
-Overdrive (below) draws past the threshold, so 20 days and 8 do not look identical — but
-they are worth identically much. The distinction is the whole design: what you see is the
-truth, what counts is the cap.
+**HEALTH and CAREER — the owner's ruling, 2026-09-18, replacing Social / Physical /
+Portfolio.** Defined in `src/lib/rings.ts` (import-free, tested) and `src/lib/career.ts`.
+Adherence remains the hero; the rings are secondary context in the Recent window.
 
-- Thresholds are the owner's **minimums, not stretch goals**, and are configurable in the
-  registry so retuning is a one-line change.
-- **A pillar may weight its metrics.** Physical is 0.8 Strength / 0.2 Cardio, so eight
-  strength days and no cardio reads 80% rather than 50% — the bulk of the intent was met,
-  and the empty cardio ring still shows what was skipped.
-- **Overdrive is VISUAL ONLY.** Past its threshold a metric ring draws a second
-  translucent lap, capped at 2x. It never enters the pillar mean, and that is
-  load-bearing rather than fussy: with Strength at 0.8, an uncapped fill of 1.25 would
-  give `0.8 x 1.25 + 0.2 x 0 = 100%`, so overdoing strength would exactly cancel skipping
-  cardio. The cap stays in the maths; the acknowledgement lives in the pixels. A test
-  asserts no amount of strength can fill Physical alone.
-- **Portfolio carries a lap of its own: PROJECT HOURS.** Adhered Basil blocks over the
-  fortnight — the same colour and the same adhered-only rule productivity prices at the full
-  rate — against 14 hours, an hour a day. `weight: 0`, so it is a thin outer lap and never
-  moves Portfolio's fill.
+- **Physical is displayed as HEALTH, Portfolio as CAREER. THE DATABASE KEYS DO NOT CHANGE** —
+  they are still `physical` and `portfolio`, because renaming a live key is churn across
+  goals, habits, tasks and every stored colour. The names people read come from
+  **`PILLAR_NAME` in rings.ts and only from there**; `pillars.name` is kept in step by the
+  migration, but nothing prints it — a name that lives in two places is a name that eventually
+  says two things.
+- **Colours: Health = Moss `#467c6c`, Career = Plum `#7d5a72`.** The live Physical colour was
+  Rust `#9a6448`, which sits on top of the amber accent; the migration moves it. `/colours`
+  still edits both, from the curated palette only.
+- **The rolling window is unchanged**: 14 days ending on the day being VIEWED, both ends
+  inclusive.
 
-  That weight is the point, not a technicality: **Portfolio's fill stays a statement about
-  SKILLS**, so blocking six hours and touching nothing cannot fill the pillar. The lap says
-  the hours were there; the donut says what came of them. It is also the first metric
-  measured in HOURS rather than in things that happened — skills count sessions because
-  turning up is the unit, and project work has no session shape. It is the thing that
-  quietly gets none of the week, so the honest question is how much of the week it got.
-- **A metric may have a floor without having a share, and it is drawn OUTSIDE the ring.**
-  Steps and the Portfolio project-hours lap both do: a threshold of their own at `weight: 0`,
-  so each fills its own mark and neither ever enters its pillar's mean. (Misc used to be the
-  third and is gone — see the non-negotiables section.)
+**SOCIAL IS GONE, AND ITS CODE IS PARKED, NOT DELETED.** Socialising "comes naturally in
+between blocks" and is no longer planned or tracked. The `pillars` row `social_capital` STAYS
+in the database — goals, habits and tasks reference it — and is filtered out of every listing
+by `isPillarKey`, the one gate between a stored string and a `PillarKey`. The Social code (the
+`outreach` and `social_events` metrics, the `calendar_social` source, the graphite counting and
+event lists in `/api/rings`, `socialBands` and the mid band, `CalEvent.recurring`'s only use)
+is parked **verbatim under `archive/social/`** — outside `src`, not compiled, in
+`tsconfig.json`'s `exclude` and behind Tailwind's `@source not`, one file per source file with
+its original line ranges, under a README saying what it was and why it was parked. **The owner
+asked for it to be kept, not deleted.** Do not re-import it, and do not tidy it away.
 
-  As a slice it would have been wrong either way: weighted, it would take circle from the
-  metrics that count; at weight 0 it would sit there looking like a slice switched off. As
-  a **thin translucent lap around the donut** it reads as an extra, which is exactly its
-  standing in the maths. `MetricRing.lap` derives this in `rings.ts` — the registry stays
-  the only place that knows what weight 0 means. A ghost is never a lap: "no source yet" is
-  a statement about the app and belongs on the ring where the metric would have been.
+### A RING IS A SEGMENTED DONUT OF ONE THICKNESS
 
-  Translucent, **not glowing**. A glow is a shadow, and the only glow this app ships is
-  the streak flame's pill (the owner's 2026-08-24 exception — see the non-negotiables
-  section); a ring lap gets none.
-- **Social events come from the CALENDAR, not a checklist.** Graphite (`colorId: "8"`)
-  means a social event — Church, a night out, a farewell. They are already scheduled there,
-  and a second place to record them is a second place to forget. Counted in `/api/rings`
-  and passed to `getRingCounts`; on a calendar failure the count is left UNDEFINED so the
-  ring goes ghost rather than reporting a false zero. ADHERED only: an event you drifted
-  from is not a social fortnight you had.
-- **EVERY ADHERED SOCIAL EVENT COUNTS TOWARD THE SIX** — standing and one-off alike. The
-  metric was fed the RECURRING events only, on the reasoning that a farewell you were invited
-  to is not evidence you kept a standing commitment. Measured against a real fortnight that
-  reasoning collapsed: five adhered social events, one recurring, ring reading **1 of 6**.
-  Most of a social life is one-offs, so the ring could not be filled by socialising — only by
-  socialising on a repeat rule. That is the same shape that keeps the gym off the checklist:
-  an item you are designed to fail teaches distrust of the whole board. The ring is now fed
-  the SAME tally the caption prints, so the two can never disagree about one fortnight.
+No outer laps, no mid band, no overdrive drawing — all three went with the three-pillar board.
+The circle is split into arcs sized by weight with a small gap between them (`SegmentedRing` in
+`PillarRing.tsx`); each arc draws a faint track and a fill of `arcLength × fill`, and the
+centre prints the pillar %. One radius, one stroke. Both pillar rings are smaller than the hero
+adherence ring.
 
-- **The two Social BANDS still split on RECURRENCE, never on colour.** Inner is the standing
-  kind — Church, a weekly night out; the mid band is the one-offs. Both are graphite, and the
-  split now decides only what is DRAWN and which drill-down list an event lands in — never
-  what is scored.
+**The core rule survives intact: a part fills toward a threshold and CAPS.** Eight strength
+sessions and twenty fill Strength identically, and a fortnight of 200k steps fills the Steps
+arc exactly as much as 98k does. Because you cannot win by overdoing one part, the only ring
+that looks good is a well-rounded one. That cap *is* the mechanism, and it is load-bearing in
+the arithmetic rather than decorative: `weightedFill` consumes the CAPPED fills, so an uncapped
+Strength could otherwise cancel an empty Cardio arc outright.
 
-  It was two colour ids until it was measured, and the lesson is worth keeping: **the
-  Calendar API reports only the ELEVEN LEGACY colour ids while the calendar UI's palette is
-  wider**, so Graphite and the Birch beside it both arrive as `8`. Across 180 days of the
-  owner's calendar, id 8 held Church and Nathan's Farewell side by side and the only id 4
-  event was titled "Gym" — so the second constant matched nothing social, the one-off band
-  never drew, every one-off quietly filled the inner ring, and a stray Gym block was one
-  adhered mark from counting as a night out.
+- Thresholds are the owner's **minimums, not stretch goals**, and live in the registry so
+  retuning is a one-line change.
+- **`null` is not `0`.** An arc whose SOURCE did not answer is a dashed GHOST and is EXCLUDED
+  from the pillar's mean — counted as 0 it would cap the pillar below full forever, which no
+  behaviour could fix. Its fact line prints `—`, never "0 of 14", which would be a zero the
+  source did not say. A genuine zero is a solid empty arc with a real number beside it.
+- **The real number is always printed beside the arc, and it never caps.** `11 of 8` is a true
+  sentence. A cap must never hide the truth.
+- **A thin ring means neglected, never failed.** No XP, no levels, no points, no ring streaks,
+  no fortnight-over-fortnight comparison.
 
-  `CalEvent.recurring` (from Google's `recurringEventId`, present on every instance of a
-  series) is what the colours were standing in for. A colour cannot carry this; a repeat
-  rule can, and cannot be fooled by a palette the API does not speak.
-- **Every skill lives under Portfolio**, including ice skating, badminton, calisthenics and
-  dancing. They are things being LEARNED, and learning is what Portfolio holds; Physical
-  already counts its own work from `gym_sessions`. The `skills` metric counts every
-  `skill_time` row regardless of pillar and always did, so this decides where a skill is
-  listed and nothing else.
-- **A SKILL LOGS SESSIONS, NOT HOURS**, and a session is a free-text document — the same
-  object a workout is, written on the same surface, with the first line as its title via the
-  same `src/lib/sessions.ts`. Portfolio stopped being a stopwatch: three quick-add chips
-  could only say how LONG, and what is worth recording is what you worked on.
+### HEALTH — five parts, `HEALTH_METRICS`
 
-  The table is still `skill_time` — renaming a live table is churn for a noun — but
-  `minutes` is now NULLABLE and nothing writes it. Every hour ever logged is still in it,
-  because preserving data outranks a tidy schema; `NULL` means "a session", a number means
-  "logged under the old hours model", and both count as exactly one session. `client.ts`'s
-  `ensure()` widens the column on boot by rebuilding the table when it finds it still
-  `NOT NULL`, since SQLite cannot alter nullability.
+| Part (label) | Weight | Fill | Source |
+|---|---|---|---|
+| Strength | 40 | strength sessions ÷ 8 | `gym_sessions` kind strength, per SESSION |
+| Cardio | 15 | cardio sessions ÷ 2 | `gym_sessions` kind cardio |
+| ASC.ND routine | 15 | days ticked ÷ 14 | habit `system_key='ascnd'` |
+| Steps | 15 | SUM(steps) ÷ 98,000 | `health_logs` — `STEPS_FLOOR × WINDOW_DAYS`, DERIVED |
+| Calories | 15 | SUM(kcal) ÷ 35,000 | `calorie_entries` — `CALORIE_FLOOR × WINDOW_DAYS`, DERIVED |
 
-  Sessions are ROWS, so a skill may hold several on one day — two sittings at the piano are
-  two sessions, the ruling gym already runs under. That also finally matches what the metric
-  always DECLARED: `perDayCapped: false`, `unit: "sessions"`. It was being counted
-  `DISTINCT (skill_id, date)`, the exact label-versus-counter drift the registry warns about.
-- **The real number is always printed beneath the ring** (`11 of 8 days`). The arc caps;
-  the text never does. A cap must never hide the truth.
-- **`null` is not `0`.** A metric with no source is a dashed ghost and is excluded from
-  its pillar's average. A genuine zero shows a solid empty ring with `0 of 2 days`. While
-  the window is still filling, the fact line says `· day 3 of 14`, so a first day cannot
-  read as a fortnight of neglect.
-- **A thin ring means neglected, never failed.** The coach may note neglect neutrally and
-  must never rate, rank, congratulate, or compare fortnights — same prohibition it runs
-  under for adherence.
-- No XP, no levels, no points, no ring streaks, no fortnight-over-fortnight comparison.
+- Strength and Cardio count **sessions, not days** — two lifts on a Tuesday are two things
+  that happened (`perDayCapped: false`). That is the owner's ruling, and the threshold was
+  deliberately left at 8 when it landed.
+- **STEPS AND CALORIES ARE FORTNIGHT TOTALS — the owner's ruling, both.** One big day covers
+  quiet ones; an unlogged day adds 0. That is a real change of meaning from a consistency
+  measure, and it is exactly why the DAILY floors stay drawn on the checklist rows and on the
+  charts, where consistency is still the question. The fortnight targets are DERIVED as
+  `floor × WINDOW_DAYS` rather than written down, so retuning a daily line moves the fortnight
+  with it. `perDayCapped: false` on both: de-duplicating by date would throw away every step
+  after a day's first row.
+- **The cap is per part.** A 40k-step Saturday fills Steps and nothing else, and no amount of
+  strength reaches 100 while cardio sits empty. A test pins it.
+- The ASC.ND habit is a HEALTH habit — the owner's daily stretching / skincare / posture
+  routine. It is counted by `system_key`, so a rename changes nothing.
+- **Health, opened** (tap the ring): the five parts as rows, each with an 18px marker ring in
+  that arc's own shade — the marker takes the ARC's index, so the legend and the donut can
+  never disagree. `Strength 2 of 8`, `Cardio 2 of 2`, `ASC.ND routine 11/14`,
+  `Steps 84k of 98k`, `Calories 29k of 35k`. Strength and Cardio open the fortnight's sessions
+  and carry a `Log` pill; Steps opens its dialog; the `every session logged →` link sits under
+  the list. **No goals section, no skills section.**
 
-## Goals — the one sanctioned accomplishment measure, quarantined
+### CAREER — goals, paced against their own deadlines
 
-**A finished goal must never disappear.** Every screen filters `status != 'done'`, which used
-to mean completing something removed it from the app entirely — exactly backwards for an owner
-who wants "a clear plan on what I have achieved and what I wanna achieve next". The record
-carries both halves: **In flight**, each active goal with its progress and THE NEXT UNTICKED
-SUBGOAL, and **Achieved**, finished goals newest first with the date.
+`src/lib/career.ts`, pure (its only imports are `dates.ts` and `rings.ts`, both import-free)
+and tested. **Career fills from GOALS and only from goals.** A goal is a project; its subgoals
+are shown as **subtasks**. Calendar blocks are not linked to goals, the Basil "project hours"
+lap is gone, and skills are not part of Career.
+
+**WHICH GOALS COUNT: status `active`, AND a deadline, AND created on or before the day being
+viewed.** Each counted goal is **ONE EQUAL ARC**.
+
+```
+expected = clamp((today − created) ÷ (deadline − created), 0, 1)
+fill     = min(1, progress ÷ expected)          — and 1 when expected ≤ 0
+Career % = the MEAN of the counted arcs
+```
+
+`progress` is the existing `goals.ts` rule — the sum of done subgoal weights, derived on read
+and never computed here. The edge cases are the rule, not exceptions to it:
+
+- **`expected ≤ 0` → fill 1.** A goal created today has nothing expected of it yet, so it
+  cannot be behind. The same holds for a goal whose deadline is on or before its creation day:
+  no span to divide, so nothing is expected until that deadline passes.
+- **Past the deadline, `expected` is 1**, so the arc shows actual progress. It stays in the
+  ring until it is ticked done or dropped. **No red, no "overdue" wording** — a thin arc is
+  information, not a verdict.
+- **A goal that did not exist yet is not in a past day's ring.** Without that filter the
+  created-today rule would also apply to every day before the goal was written down, so
+  stepping back a week would show Career filled by work that had not been decided on — a past
+  day growing a figure out of something done since, which is the backdating rule this app
+  already runs under for tasks. A goal with an unreadable `created_at` is KEPT rather than
+  hidden: it is a thing the owner wrote down, and it should not vanish from a ring because its
+  stamp is corrupt.
+- **Goals are not versioned otherwise.** A past day shows TODAY's progress against the pace
+  that day expected. That is stated in `/api/rings` and is the only honest thing available —
+  nothing records what a goal's progress was on a Tuesday.
+- Arcs sort by soonest deadline, then oldest goal. The mean is summed from the fills rather
+  than through the weights, so `1/3 + 1/3 + 1/3` can never read 99.99%.
+
+**NO COUNTED GOALS IS NOT 0%.** `fill` is null and the ring is drawn as an empty DASHED ghost
+whose centre reads **"no goals"**. Nothing is being neglected; there is nothing in the ring.
+A "0%" there would be the app inventing a failure out of an empty board.
+
+**CAREER IS REBUILT ON THE CLIENT, and that is load-bearing rather than an optimisation.**
+Today.tsx runs the same `buildCareerRing` against its own `goals` state, so ticking a subtask
+moves the donut that same beat, with no round trip and no window in which the list and the ring
+disagree. The `portfolio` entry `/api/rings` returns is ignored on that screen. One function,
+two callers, no second opinion.
+
+**Career, opened**: every ACTIVE goal, with or without a deadline — the RING counts only the
+dated ones, but a goal with no deadline is still a goal you are working on. Title, the deadline
+or `no deadline`, the percentage, a progress bar, tickable subtasks, and a **mark done** pill
+(status `done`, which stamps `completed_at` server-side; the goal then leaves the active list,
+which is correct and intended). An `edit →` link to `/goals`.
+
+**EVERY GOAL IS A CAREER GOAL.** `GOAL_PILLAR` in engine.ts files every new goal under
+`portfolio` — in the engine rather than in a client, so a screen that still sends a pillar
+cannot file one anywhere else (a `pillar` field from an older client is IGNORED, not refused,
+so an old form does not break). The pillar picker on `/goals` is gone.
+
+### SKILLS — hidden, and every row kept
+
+Skills are not a current focus and must not sit anywhere as an unfilled thing — the owner's
+ruling, 2026-09-18. Hidden from the rings, the dashboard, `/colours`, `/sessions` (no skill
+chip, no skill rows) and the `/stats` Log (no skill entries). `/skills` REDIRECTS to `/` — a
+redirect rather than a deletion, because the address is bookmarkable and removing a route must
+never strand a screen.
+
+**All skill data is kept**: every `skills` row, every `skill_time` session and every stored
+hue. `queries.ts` still reads them, and `SkillsEditor.tsx` and `SkillLog.tsx` are still on
+disk, unimported and compiling. Do not delete them, and do not "finish the job".
+
+## Goals — the record, and the one thing they now feed
+
+Goal progress is the sum of completed subgoal weights (`src/lib/goals.ts`), derived on
+read and never stored. `weight = 0` means AUTO: an equal share of what the explicit
+overrides leave behind.
+
+**A GOAL NOW FEEDS THE CAREER RING, and nothing else** — not adherence, not the streak, not
+the hours. That is the one connection the pivot made, and it is narrow by construction: what
+the ring reads is whether a goal is ON PACE against a date the owner set, never how much was
+produced. Goals are never auto-completed at 100%; marking one done is the owner's call.
+
+**A goal carries an optional DEADLINE** (`goals.deadline`, `YYYY-MM-DD`, nullable, carrying
+the same `GLOB '????-??-??'` CHECK every other date column has; `engine.ts` validates it
+properly). A goal without one lists on `/goals` and under Career, but takes no arc of the ring
+until it has one. An empty field CLEARS it back to null.
 
 `goals.completed_at` is stamped by `updateGoal` when the status becomes 'done' and CLEARED
 when it leaves — a live goal claiming a completion date is worse than no date at all. It sat
 in the schema unwritten for the app's whole life before that, so goals finished earlier are
 undated; they still list, and sort last.
 
-Naming the next step is what makes it a plan rather than an inventory. A goal you cannot name
-the next step of is a wish, and a percentage on its own is not something you can act on this
-afternoon.
+**`/stats` HAS NO In flight AND NO Achieved** — the owner's ruling, 2026-09-18, removing both
+sections and the task lists beside them. Goals are read and edited where they are worked: in
+the Career drill-down, on `/goals`, and on the timeline, where a finished goal now stays on the
+line with a tick rather than being listed a third time on a screen you visit to read charts.
+**There is no task history anywhere.**
 
-
-Goal progress is the sum of completed subgoal weights (`src/lib/goals.ts`), derived on
-read and never stored. `weight = 0` means AUTO: an equal share of what the explicit
-overrides leave behind.
-
-**It feeds nothing else** — not adherence, not the streak, not the rings, not the coach.
-That isolation is what stops "did I do what I said I'd do" becoming "how much did I
-finish". Goals are never auto-completed at 100%; marking one done is the owner's call.
+`/goals` is the edit surface the Career drill-down links to: a deadline field on every goal and
+on the create form, a quiet `mark done` / `reopen` beside `drop`, and **"subtask"** wording
+throughout. A done goal's card keeps rendering with its title muted and its completion date
+where the deadline field was.
 
 ## Backdating — the log is for catching up as much as keeping up
 
@@ -511,13 +670,12 @@ not rendered. Three ways in, and NONE of them is a calendar control:
 
 - **‹ › at the end of the date line.** The date is a heading that happens to be steppable,
   not a dial — hence the arrows at the end of the line rather than flanking it.
-- **A tap on any column of the week strip**, which is where a hand already reaches to read
-  the last seven days. One transparent button per column, laid OVER all four rows: those
-  rows line up by a percentage gap, and turning one of them into controls would have made
-  it a different height from its neighbours and pulled the alignment apart.
+- **A tap on a dot in the adherence tracker**, which is where a hand already reaches to read
+  the last week. Eight transparent full-height rects, one per slot, each focusable with an
+  Enter/Space handler and an aria-label naming the day and its figure. This is the gesture the
+  old week strip's overlay buttons had, and the one thing about that card worth keeping.
 - **`?date=` on the front door**, clamped to today and validated. For a reload — the screen
-  writes the day back with `replaceState` as you move — and for the journal's
-  "open that day".
+  writes the day back with `replaceState` as you move — and for the log's "open that day".
 
 **The screen never shows a day it cannot write.** The swap is ATOMIC: the whole day arrives
 at once and the control you pressed carries the wait. Moving the date line first and letting
@@ -525,25 +683,25 @@ the checklist catch up would put one date at the top of the screen and another d
 underneath it, and a tick made in that window is a tick against the wrong list.
 
 **A standing bar says so while you are back there** — `Catching up. Everything marked here
-lands on Tuesday 11 August — 1 day back.` on `--color-recorded`, the token the calendar
-column already gives a past day. Every control below it looks exactly as it does on a live
-day, which is the point and also the risk. No warning hue: catching up is the feature
-working, not a mistake.
+lands on Tuesday 11 August — 1 day back.` on `--color-recorded`, the token this app gives a
+past day. Every control below it looks exactly as it does on a live day, which is the point and
+also the risk. No warning hue: catching up is the feature working, not a mistake.
 
 **Never past today.** Nothing to log about a day that has not happened.
 
-**The week strip stays anchored to TODAY**, with the viewed day underlined and the real today
-still in ink. A strip that travelled with the screen could only be walked backwards — forward
-would be off its right edge — and it would rescale its columns against a different week's high
-at every step. Fixed, it is a ruler.
+**THE ADHERENCE TRACKER STAYS ANCHORED TO THE REAL TODAY**, with the viewed day's dot ringed
+in ink and its label underlined. A chart that travelled with the screen could only be walked
+backwards — forward would be off its right edge — and it would rescale its plot against a
+different week's high at every step. Fixed, it is a ruler. (The week strip was fixed for
+exactly this reason; the strip is gone, the reason is not.)
 
 Two things stand down on a past day, and both would otherwise write to the wrong place:
 **`StepsRefresh`'s button** (the Shortcut pushes to whatever day the SERVER calls today, so
 the count on screen would never move) and its **staleness dressing** (dashed-and-ink means
 "the phone has stopped pushing", which says nothing true about a Tuesday three weeks gone).
-The age still prints. `NextUp` already returned null off today.
+The age still prints.
 
-The three date pickers — workout, food, weight — now take the REAL today as their cap rather
+The three date pickers — workout, food, weight — take the REAL today as their cap rather
 than the viewed day. Capping at the screen's day would have made yesterday unreachable from
 last Tuesday, which is the control quietly becoming narrower than the sentence beside it.
 
@@ -554,13 +712,11 @@ catching-up bar, a forward arrow disabled against a day that now exists, and a l
 button that would write into a row not on screen. Nothing MOVES when it rolls over: the day
 you were looking at is still the day you were looking at, it has just stopped being today.
 
-**Two figures are hidden rather than relabelled off today**, because they are facts about the
-present that no past day can answer: Today's **streak** (`getStreak` counts the run ending on
-the day it is asked about, and the days you step back to are precisely the unmarked ones, so
-it would almost always read 0 in a card captioned "seven days to today"), and `StepsRefresh`'s
-button. Everything else on the record says which window it means — `adherence to 2 Aug`,
-`hours worked, 7 days to 2 Aug` — since four figures ending on the viewed day while three of
-their labels claim to mean "now" is the record lying about a fortnight ago.
+**Today's streak is hidden off today.** `getStreak` counts the run ending on the day it is
+asked about, and the days you step back to are precisely the unmarked ones, so it would almost
+always read 0. Everything else on the record says which window it means — `adherence to 2 Aug`,
+`hours worked, 7 days to 2 Aug` — since figures ending on the viewed day while their labels
+claim to mean "now" is the record lying about a fortnight ago.
 
 **Anything uncontrolled must be keyed by the DATE as well as its row.** The numeric
 non-negotiable field is `defaultValue`, deliberately, so a background refresh cannot pull a
@@ -574,7 +730,7 @@ day change a remount, which is the one thing that re-seeds an uncontrolled field
 place — `habit_entries` is `UNIQUE (habit_id, date)` and `setHabitValue` upserts on that
 pair, so a second reading for a day has never been a second row — but nothing on screen said
 so, and a scale misread as 92.4 instead of 82.4 is a permanent kink in a line you will later
-trust. `WeightEntry` now PREFILLS the reading for the chosen date and says `editing 3 Aug`,
+trust. `WeightEntry` PREFILLS the reading for the chosen date and says `editing 3 Aug`,
 Save becomes Update, and Delete appears only where there is something to delete. Deleting
 asks first, in the app's own two-step — never a native `confirm()`, which in a standalone
 PWA is a system sheet dropped on the page. Under the control sit the recent readings, each
@@ -583,27 +739,26 @@ date off the chart's axis and typing it in from memory.
 
 **THE WEIGHT DIALOG'S CHART DRAWS THE OBSERVED RANGE** — the owner's ruling, 2026-08-24,
 REVERSING the fixed 0–100kg axis it shipped with. Same 30-day window and same domain
-arithmetic as the record page's weight chart (DayChart's own observed min/max with its
-line padding, no floor/ceiling props), so the two share their Y endpoints and can never
-disagree about the same month. The STEPS dialog and the record's Steps card both also
+arithmetic as the record page's weight chart, so the two share their Y endpoints and can
+never disagree about the same month. The STEPS dialog and the record's Steps card both also
 print the fortnight's SUM (`sum` over the last `WINDOW_DAYS`, null — not 0 — when the
-phone pushed on none of them): the same figure the ring counts, stated as data.
-
-`/sessions` lists BOTH logs — Strength / Cardio / **Skills** — because a skill session became
-the same object a workout is. Two pages would mean two searches, and a search that sees half
-your sessions is one you stop trusting. They stay different tables; the page merges them and
-opens the right dialog for the row. A new SKILL session cannot be written from there, and the
-control says so instead of failing quietly: "which skill" has no answer on a page listing all
-of them, and on the board it is answered by the row you tapped.
+phone pushed on none of them): the same figure the Health ring's Steps arc counts, stated as
+data.
 
 `/sessions` is the whole gym log — every session ever, newest first, grouped by day, filtered
-by kind, deliberately unpaginated. Two lifts on one Tuesday read as one Tuesday with two
-entries. It is a COUNT, never a score: no streaks, no personal bests, no volume totals.
+by kind (**Strength / Cardio only**), deliberately unpaginated. Two lifts on one Tuesday read
+as one Tuesday with two entries. It is a COUNT, never a score: no streaks, no personal bests,
+no volume totals. It briefly listed skill sessions alongside, which was right while a skill
+session was the same object a workout is; **skills are hidden now**, so there is no skill chip,
+no skill rows and no `/api/skills/history` fetch, and `?kind=` accepts only the two workout
+kinds — an unrecognised value falls through to NO filter rather than to an empty page, because
+`?kind=skill` was a real link from the record's old skills figure.
 
 ### The first line of a session is its TITLE
 
-`src/lib/sessions.ts`, pure and import-free, shared by all four surfaces that show a session:
-the log dialog's history pane, `/sessions`, the Physical pillar's drill-down and its chips.
+`src/lib/sessions.ts`, pure and import-free, shared by every surface that shows a session:
+the log dialog's history pane, `/sessions`, and the Health drill-down's fortnight list and its
+chips.
 
 **DERIVED ON READ, never stored.** The note stays ONE document and the dialog stays ONE
 textarea — the first line is an ordinary line you can rewrite or delete. Splitting the text
@@ -637,7 +792,7 @@ On `/sessions` only, and it **composes** with the kind chips rather than replaci
 `saveWorkout` sets the date rather than matching on it: `SET note=?, date=? WHERE id=? AND
 kind=?`. The old `AND date=?` in the WHERE meant an edit whose date differed matched nothing
 and fell through to the INSERT — writing a **second** row at the new date and leaving the
-first. Two sessions, one a ghost, and the Physical ring counting both.
+first. Two sessions, one a ghost, and the Health ring counting both.
 
 **The dialog opens on the SESSION's own date when editing**, and on the screen's when writing
 a new one. It tells them apart by whether it was given a workout — which is why `Workout`
@@ -645,15 +800,17 @@ carries `date` everywhere now, including from `workoutsOn`.
 
 ## THE WRITTEN LOG — the record's second half
 
-`/stats` is two tabs now: **Stats** and **Log**, chosen in the masthead with the same chip
+`/stats` is two tabs: **Stats** and **Log**, chosen in the masthead with the same chip
 idiom as the 30 days / 3 months / a year control beside them. One expansion, two questions —
 "what do the numbers say" and "what did I write" — and the window control hides on the Log,
 which is a continuous scroll with no window to set.
 
 Everything the owner writes lived on a different screen from everything else they wrote:
-journal pages on `/journal`, workouts on `/sessions`, skill sessions in a pillar drill-down,
-drift reasons nowhere at all. `src/lib/dayLog.ts` (pure, tested) merges them by day and
-`/api/log` pages them.
+journal pages on `/journal`, workouts on `/sessions`, drift reasons nowhere at all.
+`src/lib/dayLog.ts` (pure, import-free, tested) merges them by day and `/api/log` pages them.
+It is deliberately a READER: it writes nothing, adds no table, and stores no copy — a combined
+log with its own copy would be a second record to keep in step, and the two would eventually
+disagree about a day.
 
 - **A FILE-EXPLORER GRID, since 2026-08-17** — the owner's ruling, replacing the two-shape
   scroll (journalled-day card / chip row) that spent a screen of height per day. FULL WIDTH
@@ -664,19 +821,25 @@ drift reasons nowhere at all. `src/lib/dayLog.ts` (pure, tested) merges them by 
   would claim a page exists. The date under a tile is its filename — which is how the
   journal's "a page must never be identified by 3px type" rule is answered here: a tile
   chooses a DAY, not a page, and the date is what names a day.
-- **ATTACHMENTS ARE TABS, NOT DOTS** — each carries its own TITLE on its kind's colour
-  (the pillar hues, chip-test certified for white text); DRIFT stays unfilled, ink on a
-  hairline over panel, because this app does not colour a plan not happening. On a
-  journalled tile they sit FOLDED into the card's right edge as closed binder stubs, and a
-  pointer unfolds them OVER the neighbouring cards — sanctioned overlap, the owner's
-  ruling. The unfold is not animated (width is layout; this app animates transform and
-  opacity only); the title fades in. On card stock they run the tile's width, capped at
+- **ATTACHMENTS ARE TABS, NOT DOTS** — each carries its own TITLE on its kind's colour;
+  DRIFT stays unfilled, ink on a hairline over panel, because this app does not colour a plan
+  not happening. On a journalled tile they sit FOLDED into the card's right edge as closed
+  binder stubs, and a pointer unfolds them OVER the neighbouring cards — sanctioned overlap,
+  the owner's ruling. The unfold is not animated (width is layout; this app animates transform
+  and opacity only); the title fades in. On card stock they run the tile's width, capped at
   four then `+n`.
+- **A KIND'S TAB WEARS ITS PILLAR** — `KIND_PILLAR` in DayLog.tsx: gym and ascnd → Health,
+  outreach → Career, and **journal and reading → NEUTRAL** (`--color-neutral`, the same warm
+  grey a habit with no pillar takes on the checklist, so a tab and a tick row can never
+  disagree about what "no pillar" looks like; white on it measures 4.62:1, clearing the chip
+  test). Drift is absent from the map on purpose: it belongs to a calendar block, and its tab
+  is unfilled. **There is no `skill` kind** — `LogKind` has not had one since the pivot, and
+  every skill session is kept in `skill_time`, untouched.
 - **ONE TAP OPENS THE DAY** as the journal-reader SPREAD — the workout dialog's two-pane
   document: the page at reading size in the main pane (typed pages grow past A4; drawings
   shown whole, never cropped — a thumbnail may cover, a reader may not), and "That day's
   logs" beside it, each under its tab with its body unfolded. A page-less day's logs take
-  the whole dialog. Read-only; the link into the journal is the only way out to an editor.
+  the whole dialog.
 - **PAGED BY DAY, never by row.** A row limit would cut a Tuesday in half and the next page
   would open mid-session.
 - **A day with nothing written never appears.** An empty fortnight costs one thin month
@@ -686,31 +849,52 @@ drift reasons nowhere at all. `src/lib/dayLog.ts` (pure, tested) merges them by 
 - **IT STILL OWNS NOTHING — BUT IT OPENS EVERYTHING.** The owner's ruling, 2026-09-03:
   `/journal` is GONE (the route redirects here), and every entry in the day reader opens
   ITS OWN dialog — a page in the journal reader (rewrite, add sheets, delete, leaf), a gym
-  session in the workout dialog, a skill session in its logger, a document habit in
-  NoteLog. The one-row-one-writer rule survives because those dialogs ARE the writers the
-  entries always had; the log stores no copy and invents no second write path. A DRIFT
-  stays read-only — its reason belongs to a calendar block, marked where the day is lived.
-  After a write the log re-reads the loaded span in place (`DayLog.reloadSpan`) rather
-  than resetting the scroll.
+  session in the workout dialog, a document habit in NoteLog. The one-row-one-writer rule
+  survives because those dialogs ARE the writers the entries always had; the log stores no
+  copy and invents no second write path. A DRIFT stays read-only — its reason belongs to a
+  calendar block, marked where the day is lived. After a write the log re-reads the loaded
+  span in place (`DayLog.reloadSpan`) rather than resetting the scroll.
 - **The log is URL-addressable**: `/stats?view=log` opens the written half (the journal's
   old front door redirects there), and `&month=YYYY-MM` anchors the scroll at that month's
   end — the timeline's month bubbles land on it. The stats charts stay anchored to today;
   a month is a place in the LOG, not a new stats anchor.
-- Entry order within a day is fixed in one place: journal, gym, skill, outreach, reading,
-  drift. The journal leads because it is about the day as a whole; a drift reason is a
-  footnote to one block of it. Reading joined when its row became a logger — what a book
-  left behind is written record, and a log that showed half the documents is one you stop
-  trusting.
+- **Entry order within a day is fixed in ONE place** (`ORDER` in dayLog.ts): **journal, gym,
+  outreach, reading, ascnd, drift.** The journal leads because it is the only entry about the
+  day AS A WHOLE. Sessions follow in the order the body did them; then the document habits, in
+  the checklist's own order (outreach, reading, then ASC.ND, seeded after the others). Drift
+  reasons come last because they are the smallest and most incidental: a line explaining why an
+  afternoon went elsewhere is a footnote to a day, not its opening. Within a kind, by id —
+  insertion order, so two lifts on one Tuesday read in the order they were written. A screen
+  sorting these itself would be a second opinion about the same day.
 
 ## /stats — the record, and the only place history lives
 
-A route, not a fourth pane, reached from the fourth phone tab and from `StatsLink` under
-the pillar rings. Today is where you ACT; this is where you look back, and the split is
-deliberate — a screen showing both invites reading the past as a verdict on the present.
+A route, not a pane, reached from **`StatsLink` under the adherence tracker** in the Recent
+window and left by the record's own × (which falls back to `href="/"` when there is no
+in-place close to call). Today is where you ACT; this is where you look back, and the split
+is deliberate — a screen showing both invites reading the past as a verdict on the present.
+
+`StatsLink` PREVIEWS NOTHING. It drew a fourteen-bar adherence sparkline, on the argument that
+showing the fortnight it leads to earned the height a plain link would have cost. The Recent
+window answered that argument itself: the tracker card two inches above it is a real adherence
+chart with a real average on it, so the sparkline had become a second, smaller, mute drawing of
+the same series — and the one that could be misread, having no axis and no figure. It also
+stopped fetching, which is the part worth knowing: a link that opened a network request on
+every day you stepped to was paying for a picture nobody needed.
+
+**Four figures**: `adherence, last 7 days` · `hours worked, last 7 days` (opens where the
+window's hours went) · `Health, past fortnight` (gym sessions in the window, linking to
+`/sessions`) · `days logged in a row`. There is no skills figure, and the pillar is named
+**Health**, not "physical".
+
+**The fortnight**: TWO rings, Health and Career, drawn with the same `SegmentedRing` the
+dashboard uses — including the dashed "no goals" ghost, so the record and the board cannot say
+different things about an empty board. **Every metric**: Health's five parts and Career's
+counted goals, each with its pillar name, its label, its real fact and a bar at its fill.
 
 Five charts, and the order is the argument: **adherence** first because it is the app's
-question, **hours** second because it is the sanctioned exception, **weight**, **calories**
-and **steps** last because they are facts about a body rather than about a plan.
+question, **hours** second, **weight**, **calories** and **steps** last because they are facts
+about a body rather than about a plan.
 
 `DayChart` is the one primitive, and the FORM follows what the quantity IS:
 
@@ -720,13 +904,18 @@ and **steps** last because they are facts about a body rather than about a plan.
 | **bars** | calories, adherence, steps | accumulates then restarts. From ZERO, and a line would imply Tuesday's intake flowed into Wednesday's. |
 | **stacked** | hours | bars with composition, split by where the hours went. |
 
+A stacked segment carries **`minutes`** — renamed from `points` with the score. There is no
+second magnitude to carry beside it any more, so the old `minutes` side-channel went with it.
+The Hours card passes `format={asTime}`, the chart's one formatting hook, so a tooltip and a
+legend read `3h 20m` rather than a bare number.
+
 **A day with no entry draws NOTHING** in all three — not a zero-height bar, not a line
 through it. Most days in a 90-day window are blank in an app this new, and drawing them as
 zeros would report a catastrophe that never happened. It bites hardest on steps: the source
 is a phone that can simply be left on a desk, and a day it never reported is not a day
 nobody walked.
 
-`DayChart`'s `marker` — the dotted red floor line, the app's only red — now serves **two**
+`DayChart`'s `marker` — the dotted red floor line, the app's only red — serves **two**
 quantities: calories at 2,500 and steps at 7,000. Both already wear a dashed checklist box
 and print `/floor` beside their figure, so the line says on the chart what the row already
 says. That is the whole permitted set, and the rule that keeps it small is DIRECTION: a
@@ -737,16 +926,16 @@ Adherence is the one series with a real ceiling, so it is scaled to 100 rather t
 own high: scaling it to itself would make a week of 40s look like a week of 100s.
 
 **Two charts and two figures open their workings**, and only where there is a derivation
-worth showing. Hours opens the productivity breakdown — the SAME `ProductivityLog` the Today
-strip opens, so the record can never explain an hour differently from the screen it was marked
-on. Adherence opens what did and did not add, blocks AND non-negotiables, since adherence is
-an even split and a sheet showing only the calendar would explain half a figure while
-appearing to explain all of it. The hours FIGURE opens where the window's hours went, summed
-from the series the chart already holds — in MINUTES, never points, because the score stays
-quarantined off the record. Weight, calories and steps open nothing: behind those days is a
-single number, and a control opening an empty sheet is worse than no control.
+worth showing. Hours opens the day's breakdown — the SAME route the hours chart is drawn from,
+so the record can never explain an hour differently from the figure above it. Adherence opens
+what did and did not add, blocks AND non-negotiables, since adherence is an even split and a
+sheet showing only the calendar would explain half a figure while appearing to explain all of
+it — in **parts**, never "points": adherence is two 50-part shares, not a score. The hours
+FIGURE opens where the window's hours went, summed from the series the chart already holds.
+Weight, calories and steps open nothing: behind those days is a single number, and a control
+opening an empty sheet is worse than no control.
 
-**The second column is "didn't add", never "failed".** Nothing in this app's arithmetic
+**The second column is "didn't count", never "failed".** Nothing in this app's arithmetic
 subtracts.
 
 **The weight line is CONTINUOUS, and the bridge is drawn differently.** A faint dashed
@@ -754,8 +943,12 @@ polyline joins every reading across the gaps, under the solid measured runs. Wei
 only series that earns even the inference — a body HAS a weight on a morning nobody wrote one
 down, where an unlogged day's intake is not a number that quietly existed. Bars stay broken.
 
-**No average, no delta, no target line, no smoothing, no window-over-window comparison.**
-Every one of those is a judgement about a number this app has no business judging.
+**No delta, no target line, no smoothing, no window-over-window comparison** anywhere on this
+screen. Every one of those is a judgement about a number this app has no business judging.
+**ONE AVERAGE EXISTS IN THE WHOLE APP** — the adherence tracker's — by the owner's explicit
+ruling of 2026-09-18, REPLACING the blanket "no average" rule this file used to carry. It is
+scoped to that card, to seven days, and to a week you can still act on. **Do not read it as
+licence to average a quarter**, which is what a window average on this screen would be.
 
 ## The month's chapter
 
@@ -765,7 +958,7 @@ one row per month in `chapters`, keyed `'YYYY-MM'`. A NAME, not a number: "Chapt
 would mean the app deciding what the eighth month of a life is called. Clearing it DELETES the
 row, so "unnamed" has exactly one representation.
 
-The journal's month dividers print it **alongside** the month rather than instead of it: a
+The log's month dividers print it **alongside** the month rather than instead of it: a
 chapter names a stretch of life, "August 2026" is where it sits in a record you scan by date,
 and losing the second to gain the first trades navigation for atmosphere. Edited only on
 Today — the archive is what has already been written.
@@ -776,9 +969,9 @@ Today — the archive is what has already been written.
 
 The owner's ask, 2026-09-03. A horizontal roadmap: every month from **July 2025** to a
 rolling **12 months ahead**, one circle each on one hairline, opening parked on the
-current month. Reached by the **TIMELINE** word beside the Calendar window's title;
-`/?view=timeline` reopens it settled (replaceState keeps the URL in step, same contract
-as `?date=`).
+current month. Reached by the **TIMELINE** word in the **Blocks window's head** — its entry
+point moved there with the calendar column's deletion; `/?view=timeline` reopens it settled
+(replaceState keeps the URL in step, same contract as `?date=`).
 
 **IT IS A PAN-AND-ZOOM CANVAS, NOT A SCROLLING STRIP** — the owner's revision the same
 day ("scrolling should let us zoom; it should be like a whole canvas"). One WORLD of
@@ -804,9 +997,9 @@ behind them. A small fixed bar at the foot, "RETURN TO DASHBOARD", reverses it. 
 machine lives in Today.tsx (`tl`: closed → falling → open → prep → rising); the `prep`
 beat exists because the way back needs one painted frame with the windows still
 translated, or they snap home instead of travelling. Once fallen the row is
-`display:none` so 110vh of translated window never extends the page's scroll — which
-also discards the calendar column's scrollTop, so that column is re-keyed (`calEpoch`)
-on landing closed and re-centres itself on today.
+`display:none` so 110vh of translated window never extends the page's scroll. (`calEpoch`
+went with the calendar column — there is no longer a scrolled column to re-key and
+re-centre on landing.)
 
 - **Months and groups are DERIVED** (`src/lib/timeline.ts`, pure, tested): Jul–Nov term,
   Nov–Feb summer break, Feb–Jun term, Jun–Jul winter break, repeating. **Term numbers
@@ -824,10 +1017,18 @@ on landing closed and re-centres itself on today.
   in one table, added by **+ GOAL** and **+ NOTE** at the top left, each landing at the
   viewport's centre (nudged past anything already there):
   - a **GOAL window** (`kind='goal'`, `goal_id`) — one of the board's own goals, placed
-    BY CHOICE. The picker lists in-flight goals not yet on the line. The row stores which
-    and where; the card reads title, progress and the next unticked subgoal from Today's
+    BY CHOICE. The picker lists active goals not yet on the line. The row stores which
+    and where; the card reads title, progress and the next unticked subtask from Today's
     `goals` state, so no second copy of a goal exists anywhere. × forgets only the
     placement — one tap, nothing is lost.
+
+    **A GOAL NOTE CARRIES A TICK BOX** — the owner's ruling, 2026-09-18. Ticking marks the
+    goal done (status `done`, `completed_at` stamped); **the note STAYS on the line**,
+    showing `✓ done` and the completion date, and unticking returns it to active. A
+    finished goal is a thing you want to see on your year, not one the board deletes — which
+    is the argument `/stats`'s Achieved list used to make, now made in the one place a year is
+    actually looked at. The tick cannot start a drag: `cardDown` already bails on
+    `a, button, input, textarea`. **Do not touch the pan/zoom maths.**
   - a **TEXT window** (`kind='text'`, `text`, `color`) — a few of the owner's words
     (`WINDOW_TEXT_MAX` 500: a sticky, not a page) with a tint. **Tap opens the editor**
     (a tap is a release within `TAP_SLOP`; further is a drag); the draft commits when the
@@ -848,144 +1049,78 @@ on landing closed and re-centres itself on today.
   note under them edits in place. Two targets, two verbs, deliberately separate elements.
 - **Escape inside any editor on the canvas stops propagating**, or the timeline's own
   Escape (RETURN TO DASHBOARD, a window listener in Today.tsx) would fire on the same key.
-- **IT FEEDS NOTHING** — no figure on it enters adherence, the rings, the streak or the
-  score. It is a place to look at the year.
-
-Also that day's ruling: **the calendar column lists EVERY block** — the four-block cap
-and its "+n more" line are gone; a full day costs scroll rather than truth.
+- **IT FEEDS NOTHING** — no figure on it enters adherence, the rings or the streak. It is a
+  place to look at the year. Ticking a goal there is not an exception: the tick writes the
+  GOAL's status, and the Career ring reads the goal, not the line.
 
 ## The day's title
 
-One line naming what you INTEND the day to be, set in advance and rewriteable whenever.
-Today's sits under the date above the adherence ring; the next three days are named inline
-on the week strip, where they are read.
+One line naming what you INTEND the day to be, set in advance and rewriteable whenever. It
+sits under the date on the Today window's header card, on whichever day the screen is standing
+on. (It used to also be named inline for the next three days on the week strip; that card is
+gone, and with it the only surface that named a day you were not looking at.)
 
 **It is an intention, not a record, and it is connected to nothing.** It feeds no rate, no
-ring, no streak and no score. That isolation is the whole point: the moment naming a day
-"thesis push" becomes something you can succeed or fail at, it stops being a plan and turns
-into one more verdict. Rewriting one is normal, not revisionism.
+ring and no streak. That isolation is the whole point: the moment naming a day "thesis push"
+becomes something you can succeed or fail at, it stops being a plan and turns into one more
+verdict. Rewriting one is normal, not revisionism.
 
-## Productivity — the second sanctioned measure, and the narrower one
+## Hours worked — where the week went, and it is NOT a score
 
-A per-day points total, drawn on the 7-day strip. A DELIBERATE EXCEPTION to "output is
-never scored", and the exception is narrow.
+`src/lib/productivity.ts` — the file keeps its name because `/api/productivity` and the
+drill-down import it; what it measures is hours. **THE SCORE IS GONE**, the owner's ruling,
+2026-09-18. No rate per hour, no flat figure per gym session, no points per non-negotiable, no
+total. Every printed number here is a DURATION.
 
-**It scores hours SPENT, never results produced.** A block worked badly and a block worked
-brilliantly score identically, because the only inputs are duration and the event's
-calendar colour. Nothing about quality, or what was finished, or how much was produced
-enters it. The rule it bends is "no comparison between days"; the rule it keeps is the one
-that matters — that the app never judges the quality of your work.
+What survives is the question the score was a proxy for, in the owner's words: **high
+adherence doesn't mean a productive day if you didn't schedule a productive day.** So the
+record still answers where the hours went, in four categories.
 
-Why it exists, in the owner's words: high adherence doesn't mean a productive day if you
-didn't schedule a productive day. Both numbers matter.
+- **It feeds NOTHING** — not adherence, not the rings, not the streak. It never reaches
+  `DayView`, and that quarantine is enforced by data flow rather than by discipline.
+- **WHAT COUNTS AS AN HOUR WORKED is decided here and nowhere else** (`workedMinutes`): a
+  block in one of the four categories below, scaled by `workedFraction` — adhered is all of
+  it, a partial drift its worked share, unmarked / skipped / dismissed nothing — with a usable,
+  non-negative duration. Graphite never gets this far: it is dropped when blocks are built.
+  Grape (gym) is simply not a category — training is logged as sessions, and an hour under a
+  bar is not an hour of work.
+- **FOUR CATEGORIES, and the split exists to answer "where did the week go".** The point is to
+  see whether an hour went to the portfolio, to uni, or to the till.
 
-- **UNCAPPED, and comparative within the visible week** — the exact inverse of the ring
-  rule. 1,125 is a valid reading. It must therefore NEVER be drawn as a ring, or as
-  anything else that implies a target.
-- **It feeds nothing** — not adherence, not the rings, not the streak, not the coach. The
-  quarantine is enforced by data flow, not by discipline: the score exists only on
-  `/api/adherence` and never on `DayView`, which is what the coach reads.
-- **On the week strip the two are SEPARATE ROWS, not a shared box.** Adherence is a 3px
-  horizontal bar under its own printed percentage; productivity is the stacked column below
-  the rule, in the colours those hours had in the calendar. They stopped sharing a box
-  because one of them has a fixed axis and the other cannot have one — a percentage drawn
-  over an uncapped score invites a comparison neither can support.
-- **The strip ENDS ON TODAY**, and stays there even when the screen has stepped back — see
-  Backdating. Seven days, today last, no future columns. The calendar
-  column is what says what tomorrow holds; a strip reserving three empty columns for it
-  spent a third of its width on days that had not happened.
-- **A gym session scores ONCE, from the LOGGED SESSION, at a FLAT 50** —
-  `POINTS_PER_SESSION`. Grape (`colorId "3"`) is deliberately absent from `CALENDAR_RATES`,
-  so a gym block on the calendar is worth nothing on its own. One of the two pays, never
-  both: paying for the scheduled hour as well would buy the same training twice.
+  | Category | Colour |
+  |---|---|
+  | **Work Projects** | Basil `10` — the work nobody scheduled and nobody is paying for |
+  | **Work Uni** | Banana `5` — their own study in their own time |
+  | **Work Part Time** | Lavender `1` **and** Tomato `11` — the hours sold for money |
+  | **Uni** | the calendar's DEFAULT colour — the timetable |
 
-  **It is the one thing here not priced by the clock, and that is the owner's ruling.**
-  Three hours under a bar is not more productive than two — an hourly rate says it is, which
-  is a claim about training this app has no business making, and it would pay for dawdling
-  between sets while docking a session that was efficient. A session happened or it did not.
-  So a two-hour session and a forty-minute one score identically, and a day with two lifts
-  and a run scores three of them.
-
-  This REVERSES the arrangement that shipped first (an hour of Grape at half rate, with the
-  `workouts` input deleted). The double-count guard is unchanged; only which side of it pays
-  has swapped. The consequence is the mirror of the old one: a session you SCHEDULED but
-  never wrote up scores nothing, which is consistent with `workedFraction` paying only for
-  blocks you marked — both ask you to say what happened. The Physical ring reads the same
-  logged row, and that is the ring's job, not a second payment.
-
-  The slab takes `SLAB_GYM` — Grape's projection, free now that no blocked time can draw it.
-  Not achromatic: grey belongs to the ticked things, and two grey slabs cannot be told apart
-  at eighty pixels tall.
-- **A PARTIALLY WORKED BLOCK PAYS ITS WORKED SHARE**, at its colour's rate — two hours of
-  Basil drifted at 40% is 48 minutes at the full rate. Consistent with everything above:
-  this file prices HOURS, and 48 of those minutes were hours. The disqualifications come
-  FIRST and hold at any fraction — an unlisted colour and an all-day event earn nothing
-  however much of them you worked.
-
-  A segment's `minutes` are therefore the minutes **worked**, not the minutes scheduled,
-  because those are the minutes that earned the points and a breakdown must not disagree
-  with the bar it explains. The forfeited remainder is accounted for in the drill-down's
-  **"didn't count"** list, which is now keyed on *minutes that earned nothing* rather than
-  whole blocks — a partial drift appears in both halves of that screen, correctly.
-- **Non-negotiables stay in the score even though adherence counts them too.** Not a double
-  count: adherence and productivity are two different questions asked of the same day, and
-  ticking a non-negotiable is a true answer to both.
-- **No productivity number is ever printed ON THE STRIP.** The bar's height is the whole
-  claim there. Printing an uncapped score with no ceiling beside it invites a comparison it
-  cannot support — and it is the shortest path back to a scoreboard.
-- **Tapping a column opens its WORKINGS** — `ProductivityLog`, fed by `/api/productivity`.
-  This is the other half of that bargain, and the reason the rule above can stay: the bar
-  is a shape you glance at, and the arithmetic is one deliberate tap away. A drill-down you
-  opened on purpose is an explanation; a number sitting on a chart is a score. The total is
-  printed HERE and nowhere else, because a breakdown that withholds what it adds up to is
-  not a breakdown.
-
-  **"Didn't count" is the half that earns the screen.** Everything above it is already
-  visible on the bar; this is not. A day full of scheduled hours can score nothing — an
-  unmarked block pays nothing, skipped and drifted pay nothing, and a colour absent from
-  `CALENDAR_RATES` pays nothing — and every one of those is invisible in a stack. It is
-  stated without scolding: an unmarked block is information about the log, not a verdict.
-
-  `ProductivitySegment` carries `minutes` and `rate` so the workings come from `scoreDay`
-  itself. A breakdown computed anywhere else would eventually disagree with the bar it
-  exists to explain, and a disagreeing explanation is worse than none.
-- The one slab that is not calendar time — non-negotiables — is ACHROMATIC
-  (`SLAB_NEUTRAL` in `eventColor.ts`). A hue there would have to mean something, and there
-  is no calendar colour behind it to mean it.
-- **Adherence remains the hero** — the 176px amber ring, not the strip.
-- **No week-over-week comparison, no best-week marker, no target line, no delta.** It is
-  graphite on paper: a record, not a scoreboard.
-- **It does not reopen gamification.** No levels, no thresholds, no milestones, no streaks
-  on it. If it ever acquires one, this exception has been misread.
-- `src/lib/productivity.ts` holds the one tuning knob — the colour→rate table — following
-  the `rings.ts` METRICS precedent. Anything unlisted scores zero.
-- **FIVE CATEGORIES, and the split exists to answer "where did the week go".** The point is
-  to see whether an hour went to the portfolio, to uni, or to the till:
-
-  | Category | Colour | Rate |
-  |---|---|---|
-  | **Work Projects** | Basil `10` | 100/h — the only full rate |
-  | **Work Uni** | Banana `5` | 75/h |
-  | **Work Part Time** | Lavender `1` **and** Tomato `11` | 50/h |
-  | **Uni** (the timetable) | default, no colour | 50/h |
-  | Social | Graphite `8` | **nothing** |
-  | Gym | Grape `3` | **nothing** — flat per logged session |
-
-  Work Projects is the only full rate because it is the work nobody scheduled and nobody is
-  paying for, which is exactly why it is the first thing a bad week deletes. Social scores
-  nothing at all: seeing people is a pillar, and paying it productivity points would make an
-  evening out a thing you can be more or less productive AT.
-
-- **ONE CATEGORY MAY OWN TWO COLOURS, and the stack merges by CATEGORY not by colour.**
-  Work Part Time owns Lavender and Tomato because the calendar genuinely holds both, and
-  re-colouring a year of history is a worse trade than a two-row table. `scoreDay` therefore
-  keys its slabs by label and carries a `label` on every segment, so no screen looks a name
-  up and none can call one slab two things. A segment's `colorId` is the category's
-  CANONICAL colour — the first id listed for it — not necessarily any one event's.
-- **CHANGING THIS TABLE REWRITES HISTORY, silently.** The score is recomputed from the live
+  Anything NOT listed is not an hour worked, and that is deliberate: an unrecognised colour
+  must never silently join a category, because the failure would be invisible — a week would
+  simply read longer than it was with nothing on screen to say why.
+- **ONE CATEGORY MAY OWN TWO COLOURS, and everything merges by LABEL, not by colour.** Work
+  Part Time holds Lavender and Tomato because the calendar genuinely holds both, and
+  re-colouring a year of history is a worse trade than a two-row table. A category shows itself
+  in its CANONICAL colour — the first id listed for it — not necessarily any one event's.
+- **Minutes are accumulated exactly per category and rounded ONCE each.** A 50-minute block at
+  35% is 17.5, and rounding per block would let the slabs drift from what they sum to. The
+  day's total is then the sum of those rounded slabs, so **a stack can never disagree with the
+  figure it explains**.
+- **CHANGING THIS TABLE REWRITES HISTORY, silently.** Hours are recomputed from the live
   calendar on every read, so adding a colour makes every past adhered block of that colour
-  start scoring, and removing one makes them stop. There is no stored score to migrate and
+  start counting, and removing one makes them stop. There is no stored figure to migrate and
   no warning on screen. Retune deliberately.
+- **The day's drill-down** (`ProductivityLog`, fed by `/api/productivity`) prints the day's
+  total in hours and minutes, one row per category with its swatch, and **"didn't count"** —
+  the half that earns the screen. Everything above it is already visible on the bar; this is
+  not. A day full of scheduled hours can come to nothing — an unmarked block counts nothing,
+  skipped and drifted count nothing, and a colour absent from the table counts nothing — and
+  every one of those is invisible in a stack. It is stated without scolding: an unmarked block
+  is information about the log, not a verdict.
+- The slab that is not calendar time is ACHROMATIC (`SLAB_NEUTRAL` in `eventColor.ts`). A hue
+  there would have to mean something, and there is no calendar colour behind it to mean it.
+- **No week-over-week comparison, no best-week marker, no target line, no delta.** It is
+  graphite on paper: a record, not a scoreboard. If this ever acquires a threshold, a
+  milestone or a streak, the pivot has been undone.
 
 ## The coach — REMOVED
 
@@ -994,10 +1129,130 @@ There is no coach. `src/lib/coach/`, `/api/coach`, `/api/coach/note`, `CoachNote
 `COACH_MODEL` and `COACH_EFFORT` are dead config.
 
 Comments elsewhere still say a thing is "quarantined from the coach" or "stored so the coach
-can spot patterns". Those stay true as history and as the REASON a boundary exists — the
-productivity score is fenced off from `DayView` by data flow, and that fence is worth keeping
-whatever reads it next. **Drift reasons are kept**: their reader is now the owner, and they
-surface in the written log below.
+can spot patterns". Those stay true as history and as the REASON a boundary exists — hours are
+fenced off from `DayView` by data flow, and that fence is worth keeping whatever reads it next.
+**Drift reasons are kept**: their reader is now the owner, and they surface in the written log.
+
+## The dashboard — three windows, and nothing scrolls at rest
+
+Layout D, "Today vs recent" — the owner's chosen mockup, 2026-09-18. Desktop is ≥ `64rem`,
+targeted at the owner's Chrome window, about **1858 × 960 CSS px**. **AT REST NOTHING
+SCROLLS** — not the page, not a window. Things you OPEN (an expanded pillar, a popover, a
+dialog) may scroll inside themselves, and the opened pillar is the only thing in the app
+allowed to scroll at rest-plus-one-tap. Full width: there is no `max-w-*` cap on the masthead
+or the content.
+
+Three windows, left to right, separated by HUE and not by lightness:
+
+| # | `data-panel` | Surface | `--panel-grow` | `--panel-min` |
+|---|---|---|---|---|
+| 1 | `blocks` | `--color-surface-2` (lilac) | `1` | `15rem` |
+| 2 | `today` | `--color-surface-1` (warm) | `1.7` | `26rem` |
+| 3 | `pillars` | `--color-surface-3` (gold) | `1.25` | `17rem` |
+
+`order-1 / order-2 / order-3` in that same order. **Source order stays today → blocks →
+pillars**, so the phone's document leads with the day's work.
+
+### BLOCKS (replacing the Calendar window)
+
+Section head **Today's blocks** (on a past day, `Blocks on Thu 6 Aug`) with the **TIMELINE**
+button on its right — a word tracked out, not a chip, because it is a place rather than an
+action.
+
+`BlockList` keeps its **THREE-LINE rows** — time margin, serif title, state line, Adhered /
+Drifted / Skipped chips. **The owner rejected one-line rows**; do not shorten an unmarked row.
+Every row carries `undo` and `dismiss` in the same quiet treatment, on the same line.
+
+**THE OVERFLOW RULE — and it replaces "a full day costs scroll".** The 2026-09-03 ruling that
+the calendar column list EVERY block, scrolling if it had to, was a ruling about a column that
+could scroll. This window cannot. So when a day's rows would not fit, rows that are already
+MARKED collapse to ONE line — time · title · state chip, the drifted chip still a button that
+opens the popover — while **UNMARKED ROWS ALWAYS STAY FULL**, because they carry the three
+action chips and shortening them would make marking cost more, which the honest-logging rule
+forbids. Nothing is hidden and there is no "+n more": the truth the old ruling protected is
+intact, and what gives is height on rows whose work is already done. BlockList measures this
+itself against its own `.window` through a `ResizeObserver` — nothing passes it a budget — and
+bails out below `lg`, where the page scrolls anyway, and on a zero-height measurement, which is
+the phone's second, hidden instance.
+
+**DELETED with this window**: `CalendarColumn` (the nine-day view — past and upcoming days are
+no longer drawn anywhere), the `NextUp` card, `calEpoch`, and the `center=` adherence fetch.
+Calendar not connected: the existing connect prompt, trimmed to `Nothing on the calendar
+today.` / `Nothing on the calendar on Thursday 6 August.` — the sentence under it explained how
+the app works, and TEXT IS DATA.
+
+### TODAY
+
+- The header card: the date line with ‹ ›, and the day's title editable in place.
+- **The hero adherence ring, 240px**, a 52px numeral, and one caption line:
+  `3.5h of 6h blocked · 6 of 10 ticked`, with `N to mark` beneath when anything is unmarked.
+  It stays the largest ring on the screen.
+- **The day's tasks float around it** — see "The tasks float around the hero ring".
+- **The checklist** below, two columns across the window, per-row streak flames as before.
+- The catching-up bar on a past day, which costs the hero band one step of its gap.
+- **REMOVED: the "seven days to today" card** — the per-day percentages, the 3px adherence
+  bars, the productivity stacks, the weekday letters, the legend and the app-wide streak flame.
+  It said four things at once, one of which (the score) the owner has since deleted outright,
+  and its adherence half was seven separate bars the eye had to join up itself. Its one good
+  gesture — tap a column to go to that day — survives on the tracker's dots.
+
+### RECENT
+
+- **Top: the HEALTH and CAREER rings side by side** (200px, stroke 12), each name centred
+  under its ring and its part list under the name — Health's five parts, or one line per
+  counted goal for Career (the title in serif, then `60% · due 30 Sep`). **No caption line
+  anywhere**: `pillarCaption` is gone with the three-pillar board.
+- **Middle: the ADHERENCE TRACKER.**
+- **Foot: a plain `The record →` link.**
+- **Tapping a ring opens that pillar INSIDE this window.** The other ring, the tracker and the
+  record link simply unmount while it is open; × returns. The chosen ring travels on the
+  existing FLIP (measure before, measure after, release a transform) and the body arrives on
+  `.detail-enter` with its stagger. No ghosts and no push — that machinery went with the third
+  pillar, and so did `.pillar-enter` / `.pillar-ghost`.
+
+### THE ADHERENCE TRACKER
+
+`src/components/AdherenceTracker.tsx`. A line chart with the area filled under it, for the
+**7 days BEFORE today**, always anchored to the REAL today. It says ONE thing: what the last
+week looked like.
+
+- **TODAY IS DRAWN APART** — a HOLLOW dot joined by a DASHED segment. On the line, **not**
+  under the area, and **not in the average**. It is a day in progress; the figure only climbs,
+  so averaging a morning in with six finished days would drag the week down for no reason
+  other than the hour.
+- **THE AVERAGE is the mean of the seven past days, every zero counted**, printed 28px serif
+  in `--color-accent-deep` — one step darker than the area it sits on, because a figure printed
+  over a tint of its own colour has to be darker than that tint to read. Label: `average`. A
+  week with two days off IS a week with two days off, and dropping them would make the figure a
+  story about which days you looked at.
+- **Y IS FIXED 0–100**, never scaled to the week's high.
+- **The frame is drawn before the days land**, so the card does not change height under the
+  tracker: this column has no scroll to give, and a late reflow would push the record link off
+  the bottom of the window. Fewer than 8 days renders the frame and `—`.
+- X labels: weekday narrow letters, then the word **`today`**. The viewed day's label is
+  underlined and its dot takes a 1.5px ink ring.
+- **Tapping a day switches the dashboard to that day** (`goToDay`, the atomic swap and the
+  catching-up bar).
+- **NOTHING ELSE.** No tooltips, no gridline numbers, no axis ticks, no productivity, no
+  legend, no streak flame, no target line, no comparison.
+
+### Phone (< 64rem)
+
+**TWO panes**, `PhoneTab = "today" | "pillars"`, opening on Today:
+
+- **Today** — the date card, the hero ring with its floating tasks, **the blocks list**, then
+  the checklist.
+- **Pillars** — the two rings, the tracker, the record link.
+
+**There is no calendar pane.** It went with the column: the Today pane carries the day's blocks
+above its checklist, which is where a hand marking them already is, so a pane of its own would
+be a second place to reach for the same list. The BLOCKS window is `hidden lg:flex`, and its
+content renders a SECOND time inside Today's pane under `lg:hidden` — two `BlockList` instances
+mount, only one is ever visible, both read the same `data.blocks` and call the same `refresh`.
+
+Tab state is component state rather than a route, so a reload returns you to Today rather than
+wherever you wandered. **Stats is deliberately not a pane**: it is a route, and a swipe that
+navigated the browser would be a gesture you cannot undo with the same gesture.
 
 ## Visual language
 
@@ -1005,13 +1260,12 @@ Light beige, premium, clean.
 
 **TEXT IS DATA — the owner's ruling, 2026-08-24.** The app shows the data and the
 controls that input it, and explains itself in the CODE, not on the screen. The explainer
-copy that used to sit under charts, figures and lists ("half the blocked hours worked…",
-"Drawn on the range actually observed…", the drill-down footers, the long empty states) is
-REMOVED, app-wide. What stays on screen: labels, units, counts, dates, window scopes
-("last 30 days"), button captions, error/confirm messages, and the one honesty flag
-("not scored" beside tasks). When adding a surface, do not add a sentence describing it —
-put the reasoning in a comment where the next reader of the code finds it. The removed
-arguments all still hold; they simply live in the modules that implement them.
+copy that used to sit under charts, figures and lists is REMOVED, app-wide. What stays on
+screen: labels, units, counts, dates, window scopes ("last 30 days"), button captions,
+error/confirm messages, and the one honesty flag ("not scored" beside tasks on `/habits`).
+When adding a surface, do not add a sentence describing it — put the reasoning in a comment
+where the next reader of the code finds it. The removed arguments all still hold; they simply
+live in the modules that implement them.
 
 - Warm beige page background, off-white cards, **muted amber as the single accent**.
 - **Pillar hues are owner-editable at `/colours`, from a CURATED palette only.** Every
@@ -1019,35 +1273,76 @@ arguments all still hold; they simply live in the modules that implement them.
   `engine.setPillarColor` refuses anything outside it. The accent, the ink, the surfaces
   and the three block states are NOT editable — one accent is what keeps the page quiet,
   and the block states deliberately avoid a severity ramp. Do not add a free hex picker.
-- **Three windows, separated by HUE and not by lightness.** Today / Calendar / Pillars sit
-  on `--color-surface-1` (warm near-white), `-2` (cool paper with a lilac cast) and `-3`
-  (gold). The calendar window used to BE the green that now belongs to today's row alone —
-  which meant the live row was the same colour as the ground it sat on. Warm past, green
-  today, pale future: the day you can still act on is the only one with a hue. Lightness was tried first and failed: contrast ratio measures luminance only, so
-  three tones a point apart in L measured 1.03–1.07:1 against each other and read as one
-  surface. Separating on hue at nearly equal lightness is visible and costs no contrast.
-  The ramp is built UPWARD from `--color-bg`; darkening the page instead drops `--color-muted`
-  to 4.10:1 and `skipped` to 3.97:1, both failures.
+  `/colours` lists exactly two pillars, Health and Career, and no skills section.
+- **Three windows, separated by HUE and not by lightness.** Blocks / Today / Recent sit on
+  `--color-surface-2` (cool paper with a lilac cast), `-1` (warm near-white) and `-3` (gold).
+  Lightness was tried first and failed: contrast ratio measures luminance only, so three tones
+  a point apart in L measured 1.03–1.07:1 against each other and read as one surface.
+  Separating on hue at nearly equal lightness is visible and costs no contrast. The ramp is
+  built UPWARD from `--color-bg`; darkening the page instead drops `--color-muted` to 4.10:1
+  and `skipped` to 3.97:1, both failures.
 - Generous whitespace. One clear visual hierarchy. Restrained colour.
-- Big, clean number treatment for the adherence stat.
+- Big, clean number treatment for the adherence stat. `.stat-hero` already carries serif,
+  weight 600 and tabular figures — never add `font-serif` or `tabular-nums` beside it. Use it
+  for every number that is a FIGURE rather than a row value: the pillar %, the tracker average,
+  a sheet's total.
 - **There is no bottom tab bar.** Removed by the owner's ruling — the panes are reached by
   tapping the window you want, and swiping, which is what was actually used. `PhoneSwipe`
   stays. Removing a navigation control must never strand a screen: `/stats` is reached from
-  `StatsLink` and left by the record's own ×, which falls back to `href="/"` when there is no
-  in-place close to call.
+  `StatsLink` and left by the record's own ×, which falls back to `href="/"`.
 - **Two font weights only** — 400 and 600. No 500, no `font-medium`. A third weight is a
   bug, not a choice.
-- **Eight type steps, documented in `globals.css`.** 11 / 12 / 13 / 14 / 15 / 16 / 28 / 52.
-  If something needs to stand out, use weight or space, not a ninth size.
+- **FIVE type steps, documented in `globals.css`**, named by role rather than by value —
+  `text-body`, never `text-15`: **micro 12 / small 14 / body 16 / heading 28 / hero 52**, in
+  rem so a reader's browser setting still counts. This replaced an eight-step scale whose
+  middle was a lie: 12/13/14/15 carried 98 of 110 usages at ratios of 1.07–1.08, which is four
+  ways of saying the same thing rather than a hierarchy, while the documented 11 and 16 steps
+  were used six times between them. Five steps at 1.14–1.17 through the text range is the
+  product band, and the two display steps stand well clear of it. If something needs to stand
+  out, use weight or space, not a sixth size.
 - **Every colour is measured, not eyeballed.** Body text ≥4.5:1, strokes and large text
   ≥3:1, and any hue used as a filled chip must also clear 4.5:1 with white on top. That
-  last one is what caught `--color-physical` at 4.45.
+  last one is what caught `--color-physical` at 4.45, and Moss at 4.45 before it was darkened.
+- **The tokens the pivot moved**, all in `@theme`:
+  - `--color-physical: #467c6c` — **HEALTH**, Moss. 4.02 on bg, 4.68 with white.
+  - `--color-portfolio: #7d5a72` — **CAREER**, Plum, was Iris `#67609b`. 5.09 on bg, 5.93
+    with white. `TONE_HEX.portfolio` in `PillarRing.tsx` MUST move with it, and says so.
+  - `--color-neutral: #7b746a` — a non-negotiable with NO pillar (Journal, Read, Tidy room),
+    and the written log's journal/reading tabs. Deliberately the SAME VALUE as
+    `--color-drifted` rather than a ninth invented grey: that grey is already certified both
+    ways, which is what a tick box needs (a filled box with a WHITE tick, so it must pass the
+    4.5:1 chip test as well as the 3:1 mark floor). **Two names for one value, kept apart**
+    because one is a BLOCK STATE and the other is the absence of a pillar; renaming either must
+    not silently move the other.
+  - `--color-accent-deep: #7a5322` — the tracker's average numeral, and nothing else. NOT a
+    second accent: it is `--color-accent` one step down in lightness, the same move
+    `segmentShade` makes on a pillar hue. 6.47:1 on the `.record-card` ground it is actually
+    printed on, which is the pair that had to be measured — not the gold window behind the card.
+  - `--color-social` is **DELETED**. Its feature is parked; nothing reads it.
+- **`.popover`** — the app's third floating surface after the dialog and the timeline's cards,
+  used by the drift editor and the `+N more` task list. **NO SHADOW**: the only light this app
+  ships is the window bevel, the ring bloom and the streak pill's glow, and a popover is not
+  worth a fourth exception. What separates it from whatever it overlaps is an OPAQUE ground
+  plus the window's own three-step bevel and a 2px halo in the page colour — a cut-out rather
+  than a lift. It reads as "in front" because it interrupts what is behind it, which is the
+  honest cue and costs no new colour. Positioning is the caller's: the class sets no top/left.
+- **`.today-mark` is KEPT although nothing uses it.** Its only consumer was the calendar
+  column. It is the app's one gradient, and re-deriving the mask, the stops and the measured
+  ratios would cost more than the twenty lines. `.motion-spark`, `.pillar-enter` and
+  `.pillar-ghost` were deleted with their consumers, which is the ordinary rule; the gradient
+  is the stated exception, and its comment says so.
 - Motion minimal and functional, and it runs on tokens: `--ease-out`, `--dur-press` …
   `--dur-data`, all capped at 280ms. **There is deliberately no ease-in token** — it
-  delays the first moment, which is exactly when the eye is watching.
+  delays the first moment, which is exactly when the eye is watching. The timeline's fall is
+  the one sanctioned departure curve, written inline for that one gesture.
 - Animate `transform` and `opacity` only. Bars use `scaleX`, never `width`.
 - `themeColor` in `layout.tsx` must track **the topmost painted surface** — now
   `--color-bar`, the masthead band — or the iPhone status bar contradicts the app.
+- **Four chart sites deliberately keep `var(--color-physical)`**: `StepsLog`, `WeightLog`,
+  `CalorieLog` and `StepsChart`. These are charts of a **body**, not a pillar tick, and the
+  token *is* Health's default. The pivot moved the checklist BOXES, which is what the ruling
+  names, and not these. Each site carries a one-line comment saying so; do not "finish the
+  job".
 
 ## In scope
 
@@ -1140,7 +1435,7 @@ not the app speaking; it is an artefact, and its text is a property of the paper
 handwriting is. Sizing it in `cqw` is what makes a thumbnail the page in miniature instead of
 a full-size page cropped to a stamp. The cost is that a thumbnail's words are texture rather
 than words, so **wherever a thumbnail is a CHOICE, the opening line is printed beside it** —
-the archive and the day's chooser both do. A page must never be identified by 3px type.
+the log's tiles and the day's chooser both do. A page must never be identified by 3px type.
 
 **Saving a drawing is gated on the saved page having arrived — EVERY sheet of it.** A canvas
 that looks like it is adding to a page and is really holding a blank one is the only control
@@ -1245,20 +1540,28 @@ authenticating with `x-app-secret` because a Shortcut cannot hold a session cook
 not change how that push works**; everything below is additive to it.
 
 `STEPS_FLOOR` (7,000) is exported from `rings.ts`, derived from the metric — the checklist
-row, the chart's floor line and the ring read the same constant, and there is deliberately
-no second `METRICS.find` anywhere.
+row, the chart's floor line, the adherence credit and the Health ring all read the same
+constant, and there is deliberately no second lookup anywhere.
 
 **THE RING COUNTS TOTAL STEPS, NOT QUALIFYING DAYS** — `SUM(steps)` over the fortnight
-against `STEPS_FLOOR x WINDOW_DAYS` (98,000), derived rather than written down so retuning
+against `STEPS_FLOOR × WINDOW_DAYS` (98,000), derived rather than written down so retuning
 the daily line moves the fortnight target with it. It used to count days that reached 7k,
 which made it a CONSISTENCY measure: 6,900 steps scored what 0 did, and a 20k Saturday
 scored what 7,001 did. Steps ACCUMULATE, and nothing about a body cares which date they
 fell on.
 
-Known and accepted: this is the one metric where a big day can carry several quiet ones.
-That is a real change of meaning, which is why the daily floor stays drawn on the checklist
-row and on the chart — those still ask about consistency. `weight: 0`, so it draws as a
-thin outer lap and a phone sensor can never move the Physical mean.
+Known and accepted: this is a metric where a big day can carry several quiet ones — as it now
+is for Calories, which the pivot moved to the same rule. That is a real change of meaning,
+which is why the daily floor stays drawn on the checklist row and on the chart; those still
+ask about consistency.
+
+**STEPS IS ONE OF HEALTH'S FIVE PARTS NOW, at weight 15** — the owner's ruling, 2026-09-18,
+REPLACING "`weight: 0`, so it draws as a thin outer lap and a phone sensor can never move the
+Physical mean". There are no laps left to draw it on: a ring is one thickness and everything in
+it is a slice with a share. The old argument was about a sensor moving a figure about effort;
+what settles it now is that the board is five capped parts, so a phone left on a desk costs 15
+of 100 with the other 85 untouched — the same standing an unlogged fortnight of cardio has. The
+cap keeps that honest in both directions: a 40k Saturday fills Steps and reaches nothing else.
 
 Steps also earn a fractional item of ADHERENCE's habit share — `floorCredit(steps,
 STEPS_FLOOR)`, see the adherence section. The phone stays the only writer; adherence is
@@ -1302,18 +1605,52 @@ never as a zero nobody measured.
 
 - **All rules live transactionally in `src/lib/engine.ts`.** Anything the model must
   not be trusted to get right belongs there, inside a write transaction.
-- **Preserve data.** Goals, habit history, gym sessions, journal pages and Google
-  tokens are real and irreplaceable. Migrate; never drop.
+- **Preserve data.** Goals, habit history, gym sessions, skill sessions, journal pages and
+  Google tokens are real and irreplaceable. Migrate; never drop.
 - **Confirm any migration plan before running it.**
 - Stack: Next.js 16 (Turbopack) + React 19 + Tailwind v4 + libSQL.
+
+### The pivot's migration — `pivot_health_career_v1`
+
+Idempotent and LATCHED, in `client.ts`'s `ensure()`, following the `habits_aug24_v1` pattern:
+applied once, so a later rename or re-filing is never overruled on the next boot. One
+`batch()`, so a failure part-way leaves nothing applied and nothing latched and the next boot
+tries again. **No deletes.** Placed LAST, after the seed and the aug24 block, so a brand-new
+database lands here too — the seed deliberately inserts the PRE-pivot pillars and filing, and a
+fresh instance reaches the same state through the same statements a migrated one did.
+
+- `pillars`: `physical` → name `Health`, colour `#467c6c`; `portfolio` → name `Career`,
+  colour **`COALESCE(color, '#7d5a72')`**. Career's colour is FILLED, never written over: the
+  spec names a colour only for `physical` (the live Rust sat on top of the amber accent and had
+  to go), but Career is Plum by the same ruling and `pillars.color` is NULLABLE — a null would
+  draw Career in the CSS fallback on any database but the owner's. COALESCE fills the hole and
+  never overrules a hue the owner picked from the palette.
+- `habits`: ASC.ND → Health · Outreach → Career, renamed **`Outreach`** · `Calendar`
+  (pillar NULL) → Career · reading → renamed **`Read`**, pillar NULL · journal → pillar NULL ·
+  `Tidy room` → pillar NULL.
+- **Matched by `system_key` where one exists**, so a habit the owner renamed is still found;
+  by exact name otherwise. `Calendar` carries the `pillar_id IS NULL` predicate because the
+  ruling puts that condition there and nowhere else; `Tidy room` is applied flatly, because the
+  block is LATCHED and a pillar predicate would be a one-shot match that leaves the row
+  coloured forever on a database where it had already been re-filed.
+- A habit's pillar only sets its tick colour — no figure reads it — so **nothing here changes
+  adherence or any history**.
+- `goals.deadline` is added above with the other idempotent column adds, not inside the latched
+  block: `ALTER TABLE goals ADD COLUMN deadline TEXT CHECK (deadline IS NULL OR deadline GLOB
+  '????-??-??')`. A nullable ADD COLUMN cannot lose a row, so it needs no migrate.mjs block and
+  no backup step — the same reasoning `worked_fraction` was added under. Every existing goal
+  simply has no deadline and stays out of the Career ring until one is set.
+- The `social_capital` pillar row is NOT touched and NOT deleted.
+- **`scripts/migrate.mjs` is not mirrored with this block.** `ensure()` runs on every boot and
+  a fresh database reaches the same state; flagged here rather than changed.
 
 ### THE LIVE DEPLOYMENT IS VERCEL + TURSO — `taxiivation-dashboard.vercel.app`
 
 Read this before touching anything deploy-shaped, because the repo still LOOKS like a Fly
 app and it is not one. `fly.toml`, `Dockerfile` and `docs/deploy.md` describe a Fly + Turso
-deploy that was written first and never became the live one, and this line used to say the
-deploy was "deferred". None of them mention Vercel. There is no `vercel.json` and no
-`.vercel/` in the tree either, so nothing in the repo pointed at the real host.
+deploy that was written first and never became the live one. None of them mention Vercel.
+There is no `vercel.json` and no `.vercel/` in the tree either, so nothing in the repo
+pointed at the real host.
 
 That cost real time on 2026-08-14: Connect on the live site sent the owner's browser to
 localhost, and the obvious suspect was `fly.toml`'s `GOOGLE_REDIRECT_URI` — a file Vercel
@@ -1336,6 +1673,20 @@ truth disagree, believe neither until you have checked the host.**
   `scripts/import-strength.mjs` imported lives in Turso — that importer refuses to
   `--commit` against a `file:` URL for exactly this reason. A local screen showing four
   sessions is not evidence that anything was lost.
+- **`isLocalDatabase()` in `client.ts` is the one place that answers "am I on a file
+  database"**, read off the same `url` every query is built from, so nothing can ask the
+  question of a different variable than the client was made from.
+- **`DEV_CALENDAR_FIXTURE` — a local calendar for development**, so the blocks list can be
+  seen without Google. A JSON file of Google event resources (`{ "items": [...] }` or a bare
+  array), read fresh on every call; while it is on, `getCalendarForDate` and `getCalendarRange`
+  read it instead of Google and report `connected: true`, and writes to Google are untouched.
+  **Honoured ONLY when NODE_ENV is not production AND `isLocalDatabase()`** — and the database
+  condition is the point rather than belt and braces. A fixture event is MARKABLE: gated on
+  NODE_ENV alone, with the variable added to `.env.local` (the natural place to put it), it
+  would serve fabricated blocks while writing `block_marks` rows into PRODUCTION Turso, keyed
+  to events no calendar has, for good. Being ignored is SAID once per process, because a
+  fixture that silently does nothing reads as a broken fixture and the next move is to try
+  harder to turn it on.
 - **`scripts/db-copy.mjs` WIPES ITS TARGET.** It is a one-way mirror of the local file onto
   Turso, not a merge. Running it from a dev box replaces production with local data. Do not
   run it to "sync"; there is no sync.
@@ -1343,20 +1694,23 @@ truth disagree, believe neither until you have checked the host.**
   `.env.local` — neither is read by the live app.
 - SQLite `GLOB` uses `?`/`*` wildcards, not `_` — date CHECKs use `GLOB '????-??-??'`.
 - **Tests: `npm test`.** `node --test` on Node 24, which strips TypeScript natively — zero
-  dependencies. `src/lib/rings.ts`, `goals.ts` and `dates.ts` are import-free on purpose so
-  they run under it; keep them that way. `PillarKey` lives in `rings.ts` and is re-exported
-  from `queries.ts` for the same reason.
+  dependencies. `src/lib/rings.ts`, `goals.ts`, `dates.ts`, `worked.ts` and `dayLog.ts` are
+  import-free on purpose so they run under it; `career.ts`, `adherence.ts` and
+  `productivity.ts` import only import-free modules, with explicit `.ts` extensions, for the
+  same reason. Keep them that way. `PillarKey` lives in `rings.ts` and is re-exported from
+  `queries.ts`, so a client component can take it without taking the database.
 - **libSQL returns aggregates as BigInt.** `bigint / number` throws. Every aggregate goes
   through `num()` at the query boundary.
 - The rolling window is `addDays(anchor, -13)` .. anchor, `BETWEEN` both ends. The anchor
   comes from the date being VIEWED, never a server-side `todayISO()`.
-
-<!-- BEGIN:nextjs-agent-rules -->
+- **`archive/` is excluded from `tsconfig.json` and from Tailwind's scan** (`@source not` in
+  globals.css). Nothing in it compiles, and nothing in `src/` may import from it.
+- **Two things are deliberately left with no reader**: `/api/adherence`'s `center=` parameter
+  and its per-day `blocks` summary, both orphaned when `CalendarColumn` went. Left in place on
+  purpose; do not "clean them up" without checking what might want them next.
 
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
