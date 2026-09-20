@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { GoalView } from "@/lib/queries";
+import GoalCount from "./GoalCount";
 
 /**
  * The one deeper screen for goals, alongside /habits.
@@ -39,6 +40,7 @@ export default function GoalEditor({ initial }: { initial: GoalView[] }) {
   const [busy, setBusy] = useState(false);
   const [newGoal, setNewGoal] = useState("");
   const [newDeadline, setNewDeadline] = useState("");
+  const [newCount, setNewCount] = useState("");
   const [newSub, setNewSub] = useState<Record<number, string>>({});
 
   // Every mutating route returns the refreshed list, so one round trip does both jobs.
@@ -199,6 +201,24 @@ export default function GoalEditor({ initial }: { initial: GoalView[] }) {
                 />
               </div>
 
+              {/* A COUNTED goal has no subtasks — the two are exclusive (goals.ts), so the
+                  stepper stands exactly where the checklist stands and the card keeps one
+                  shape. */}
+              {g.count ? (
+                <GoalCount
+                  done={g.count.done}
+                  target={g.count.target}
+                  busy={busy}
+                  label={g.title}
+                  onSet={(n) =>
+                    call(`/api/goals/${g.id}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({ count: n }),
+                    })
+                  }
+                />
+              ) : (
+                <>
               <ul className="mt-3 divide-y divide-[var(--color-line)]">
                 {g.subgoals.map((s) => (
                   <li key={s.id} className="flex items-center gap-3 py-2">
@@ -287,6 +307,8 @@ export default function GoalEditor({ initial }: { initial: GoalView[] }) {
                   className="w-full border-b border-[var(--color-line-strong)] bg-transparent pb-1 font-serif text-small outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
                 />
               </form>
+                </>
+              )}
             </div>
           </section>
         ))}
@@ -308,11 +330,18 @@ export default function GoalEditor({ initial }: { initial: GoalView[] }) {
           // next goal's deadline.
           setNewGoal("");
           setNewDeadline("");
+          setNewCount("");
           // No pillar: the engine files every goal under Career. The route ignores a
           // `pillar` field from an older client rather than refusing it.
           call("/api/goals", {
             method: "POST",
-            body: JSON.stringify({ title: t, deadline: newDeadline || null }),
+            body: JSON.stringify({
+              title: t,
+              deadline: newDeadline || null,
+              // Blank is the normal case: a goal is a checklist unless it says how many
+              // of something it is.
+              targetCount: newCount === "" ? null : Number(newCount),
+            }),
           });
         }}
         className="mt-10 flex items-end gap-4"
@@ -333,6 +362,21 @@ export default function GoalEditor({ initial }: { initial: GoalView[] }) {
             value={newDeadline}
             onChange={(e) => setNewDeadline(e.target.value)}
             className="border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-micro tabular-nums outline-none transition-colors focus:border-[var(--color-accent)]"
+          />
+        </label>
+        {/* How many there are, for a goal made of interchangeable items. Blank means the
+            goal takes subtasks instead — which is why the placeholder is a dash rather
+            than a 0 that would read as a target of none. */}
+        <label className="flex shrink-0 items-center gap-2 pb-1.5 text-micro text-[var(--color-muted)]">
+          of
+          <input
+            type="number"
+            min={1}
+            value={newCount}
+            onChange={(e) => setNewCount(e.target.value)}
+            placeholder="—"
+            aria-label="How many items, for a counted goal"
+            className="w-14 border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-micro tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
           />
         </label>
       </form>

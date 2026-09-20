@@ -622,6 +622,32 @@ Goal progress is the sum of completed subgoal weights (`src/lib/goals.ts`), deri
 read and never stored. `weight = 0` means AUTO: an equal share of what the explicit
 overrides leave behind.
 
+**A GOAL MAY BE A COUNT INSTEAD OF A CHECKLIST** — the owner's ruling, 2026-09-20,
+OVERRULING the note on `/api/goals`'s POST that `target_count` was deliberately unwired
+because "a count of completed items was an output measure this app no longer scores". What
+reverses it: a counter is a **compression of a checklist, not a new measure**. "NeetCode,
+1 of 150" and 150 subgoals with one ticked are the same claim about the same commitment,
+and only one of them fits on a screen. It still rates nothing about HOW anything was done,
+which is the line this app actually draws.
+
+- `goals.target_count` (already in the schema, unused since the app was built) and
+  `goals.done_count`. **`goalProgress()` in goals.ts is the ONE place** that picks which
+  rule applies, so `career.ts`, the timeline card, the tracker and the ring take a 0–1
+  number without knowing which kind of goal made it — which is why gaining counted goals
+  changed none of them.
+- **A COUNT AND SUBGOALS ARE EXCLUSIVE.** Weighing a tally against a checklist would need a
+  second rule about what each is worth, and two rules about one number is how two screens
+  end up disagreeing about the same goal. A counted goal's extra prose goes in `goals.target`.
+- **The tally is set ABSOLUTELY, never as a delta** (`engine.setGoalCount`, clamped 0..target
+  server-side). A retried tap or a double-fired pointer must not advance it twice — the same
+  reasoning `day_tasks` runs under, where reading a task twice cannot move it twice.
+- One control, `GoalCount.tsx`, on `/goals` AND the Career drill-down. The timeline card
+  prints `18 of 50` where `next · <subtask>` goes.
+- **What must never be built on it: no streak on a count, no per-week chart, no total across
+  goals.** The number fills one goal's own arc against its own deadline and reaches nothing
+  else. The moment it grows a second reader it has become the volume measure this app
+  refuses.
+
 **A GOAL NOW FEEDS THE CAREER RING, and nothing else** — not adherence, not the streak, not
 the hours. That is the one connection the pivot made, and it is narrow by construction: what
 the ring reads is whether a goal is ON PACE against a date the owner set, never how much was
@@ -1052,6 +1078,32 @@ re-centre on landing.)
 - **IT FEEDS NOTHING** — no figure on it enters adherence, the rings or the streak. It is a
   place to look at the year. Ticking a goal there is not an exception: the tick writes the
   GOAL's status, and the Career ring reads the goal, not the line.
+
+**THE HORIZON IS 24 MONTHS, not 12** — raised 2026-09-20 when the career roadmap landed. Its
+PR deadlines run to the ACS skills assessment in Jul 2028, and a month note is keyed by a
+month, so a horizon at Sep 2027 would have left the last and highest-stakes year of the plan
+as rows pointing at circles the canvas never drew. The timeline tests are written against
+`MONTHS_AHEAD` rather than the month it currently lands on, so the dial can be turned again.
+
+### THE TWO ROADMAPS — `roadmap.md` and `healthroadmap.md`
+
+Seeded by `scripts/seed-roadmap.mjs` (dry run by default, `--commit` to write, idempotent by
+inspection and never overwriting). The owner's ruling, 2026-09-20, is the SPLIT:
+
+- **CAREER → goals.** Ten, nine with deadlines, so nine take an arc and "Systems depth" —
+  explicitly *ongoing, indefinitely* — lists without one. A deadline on forever would be a
+  lie, and the no-deadline case already exists for exactly this. SQL and Algorithms are
+  COUNTED goals (18/50, 1/150); Builds carries the roadmap's own seven ticks, so it starts
+  at its true 44% rather than lying on day one.
+- **HEALTH → the timeline, and ONLY the timeline.** Health's ring is five fixed parts with no
+  goals in it and that does not change. The tiers are a sequence GATED BY EACH OTHER rather
+  than by a calendar, so they are free-floating text windows (one Moss tint, below the line,
+  from the month being lived and running right) and carry no dates — pinning them to months
+  would invent a schedule the document deliberately refuses to give.
+- **The deadline table is MONTH NOTES**, not goals: dates the owner does not control, with no
+  subtasks. A missed 485 lodgement is a visa problem, not a thin arc.
+- Credentials for the live seed live in **`.env.seed`**, which `next dev` does not read and
+  which is named explicitly in `.gitignore` (it matches none of the `.env*` patterns there).
 
 ## The day's title
 

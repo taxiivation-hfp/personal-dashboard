@@ -20,12 +20,14 @@ test("addMonths by twelve is the same month next year", () => {
   assert.equal(addMonths("2025-07", 12), "2026-07");
 });
 
-test("months run from the fixed start to a rolling year ahead", () => {
+test("months run from the fixed start to a rolling horizon", () => {
   const months = timelineMonths("2026-09-03");
   assert.equal(months[0], TIMELINE_START);
   assert.equal(months[months.length - 1], addMonths("2026-09", MONTHS_AHEAD));
-  // Jul 2025 .. Sep 2027 inclusive = 27 months.
-  assert.equal(months.length, 27);
+  // Jul 2025 .. the horizon, inclusive at both ends. Counted from the constants rather
+  // than written down, so raising MONTHS_AHEAD (12 -> 24 on 2026-09-20) moves it here too.
+  const toViewedMonth = 15; // Jul 2025 .. Sep 2026, inclusive
+  assert.equal(months.length, toViewedMonth + MONTHS_AHEAD);
 });
 
 test("months are contiguous and ascending", () => {
@@ -52,19 +54,20 @@ test("the first academic year groups as term 3, summer, term 4, winter", () => {
 test("term numbers increment across years — the owner's ruling", () => {
   const groups = timelineGroups(timelineMonths("2027-09-01"));
   const terms = groups.filter((g) => g.label.startsWith("Term "));
-  assert.deepEqual(
-    terms.map((g) => [g.start, g.label]),
-    [
-      ["2025-07", "Term 3"],
-      ["2026-02", "Term 4"],
-      ["2026-07", "Term 5"],
-      ["2027-02", "Term 6"],
-      ["2027-07", "Term 7"],
-      ["2028-02", "Term 8"],
-      // Jul 2028 term clipped by the rolling edge (2028-09) but present and numbered.
-      ["2028-07", "Term 9"],
-    ],
-  );
+  // The anchors the ruling names by hand: Jul 2025 opens Term 3, Feb 2026 is Term 4,
+  // Jul 2026 is Term 5 — two a year, forever.
+  assert.deepEqual(terms.slice(0, 5).map((g) => [g.start, g.label]), [
+    ["2025-07", "Term 3"],
+    ["2026-02", "Term 4"],
+    ["2026-07", "Term 5"],
+    ["2027-02", "Term 6"],
+    ["2027-07", "Term 7"],
+  ]);
+  // Past those, the run is asserted as a RUN rather than a fixed list: HOW MANY terms are
+  // visible is a function of MONTHS_AHEAD, which is a dial (12 -> 24 on 2026-09-20), and a
+  // test that pins the dial's current setting fails every time it is turned.
+  assert.ok(terms.length > 5);
+  terms.forEach((g, i) => assert.equal(g.label, `Term ${3 + i}`));
 });
 
 test("adjacent groups share their boundary month", () => {
@@ -82,13 +85,21 @@ test("brackets strictly alternate up and down", () => {
 });
 
 test("a group reaching past the rolling edge is clipped, keeps its identity", () => {
-  const months = timelineMonths("2026-09-03"); // ends 2027-09
+  // Written against MONTHS_AHEAD rather than the month it currently lands on, so raising
+  // the horizon (12 -> 24 on 2026-09-20) retunes the dial without rewriting the test.
+  const months = timelineMonths("2026-09-03");
+  const edge = addMonths("2026-09", MONTHS_AHEAD);
   const groups = timelineGroups(months);
   const lastGroup = groups[groups.length - 1]!;
-  assert.equal(lastGroup.end, "2027-09");
-  assert.equal(lastGroup.label, "Term 7");
-  assert.equal(lastGroup.start, "2027-07");
-  assert.equal(lastGroup.key, "2027-07");
+  assert.equal(lastGroup.end, edge);
+  // The edge falls in September, so the group covering it is the July term of that year.
+  const july = `${edge.slice(0, 4)}-07`;
+  assert.equal(lastGroup.start, july);
+  assert.equal(lastGroup.key, july);
+  assert.equal(
+    lastGroup.label,
+    `Term ${3 + 2 * (Number(edge.slice(0, 4)) - 2025)}`,
+  );
 });
 
 test("a group clipped to a single month is dropped", () => {

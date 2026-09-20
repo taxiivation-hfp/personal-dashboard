@@ -928,6 +928,25 @@ function checkDeadline(d: string | null): string | null {
   return d;
 }
 
+/**
+ * A counted goal's size. A target must be a positive whole number or absent — 0 and a
+ * fraction are both refused rather than coerced, because `target_count` is the flag that
+ * says "this goal counts", and a goal that silently stopped counting would show 0% with no
+ * way on screen to tell why.
+ */
+function checkTargetCount(n: number | null): number | null {
+  if (n === null) return null;
+  if (!Number.isInteger(n) || n <= 0)
+    throw new Error("a goal's target count must be a whole number above 0");
+  return n;
+}
+
+/** 0..target, whole. See setGoalCount for why the clamp lives here and not in a client. */
+function clampCount(done: number, target: number | null): number {
+  if (target == null || !Number.isFinite(done)) return 0;
+  return Math.min(target, Math.max(0, Math.round(done)));
+}
+
 /** The pillar every new goal is filed under — see createGoal. */
 const GOAL_PILLAR: PillarKey = "portfolio";
 
@@ -943,19 +962,62 @@ export async function createGoal(
     title: string;
     target?: string | null;
     deadline?: string | null;
+    /** A COUNTED goal's size — 150 for "NeetCode, 150 problems". Omit for a goal whose
+     *  progress comes from subtasks; the two are exclusive (goals.ts). */
+    targetCount?: number | null;
+    /** How many are already done at creation. A roadmap is written down partway through
+     *  more often than not, and a goal that must start at 0 is a goal that lies on day one. */
+    doneCount?: number | null;
   },
 ): Promise<number> {
   const title = g.title.trim();
   if (!title) throw new Error("a goal needs a title");
   const pillar = GOAL_PILLAR;
   const deadline = checkDeadline(g.deadline ?? null);
+  const targetCount = checkTargetCount(g.targetCount ?? null);
+  const doneCount = clampCount(g.doneCount ?? 0, targetCount);
   const r = await db.execute({
-    sql: `INSERT INTO goals (pillar_id,title,target,deadline)
-          SELECT id,?,?,? FROM pillars WHERE key=?`,
-    args: [title, g.target?.trim() || null, deadline, pillar],
+    sql: `INSERT INTO goals (pillar_id,title,target,deadline,target_count,done_count)
+          SELECT id,?,?,?,?,? FROM pillars WHERE key=?`,
+    args: [
+      title,
+      g.target?.trim() || null,
+      deadline,
+      targetCount,
+      doneCount,
+      pillar,
+    ],
   });
   if (!r.rowsAffected) throw new Error(`pillar '${pillar}' is missing`);
   return Number(r.lastInsertRowid);
+}
+
+/**
+ * A goal's COUNT — the owner's ruling, 2026-09-20. Set ABSOLUTELY, never as a delta: a
+ * retried tap, a double-fired pointer or a replayed request must not advance the tally
+ * twice. That is the same reasoning day_tasks runs under — reading a task twice cannot
+ * move it twice — applied to the one number in this app a client increments.
+ *
+ * CLAMPED to 0..target here rather than trusted to the client, because the column's CHECK
+ * only catches the negative half and a goal at 151 of 150 would print a percentage over
+ * 100 on three screens.
+ */
+export async function setGoalCount(
+  db: Client,
+  id: number,
+  done: number,
+): Promise<void> {
+  const cur = await db.execute({
+    sql: "SELECT target_count FROM goals WHERE id=?",
+    args: [id],
+  });
+  if (!cur.rows.length) throw new Error("no such goal");
+  const target = cur.rows[0]!.target_count;
+  if (target == null) throw new Error("that goal is not counted");
+  await db.execute({
+    sql: "UPDATE goals SET done_count=?, updated_at=? WHERE id=?",
+    args: [clampCount(done, Number(target)), now(), id],
+  });
 }
 
 export async function updateGoal(
@@ -967,12 +1029,28 @@ export async function updateGoal(
     status?: GoalStatus;
     /** A 'YYYY-MM-DD' to set, null to CLEAR, undefined to leave as it is. */
     deadline?: string | null;
+    /** A positive whole number to make the goal COUNTED, null to return it to its
+     *  subtasks, undefined to leave it. Clearing keeps done_count where it was rather
+     *  than zeroing it: the tally is a thing the owner counted, and a goal switched back
+     *  and forth must not forget it. */
+    targetCount?: number | null;
   },
 ): Promise<void> {
   const sets: string[] = [];
   const args: (string | number | null)[] = [];
   if (patch.title !== undefined)
     (sets.push("title=?"), args.push(patch.title.trim()));
+  if (patch.targetCount !== undefined) {
+    const t = checkTargetCount(patch.targetCount);
+    sets.push("target_count=?");
+    args.push(t);
+    // A target that SHRANK below the tally would leave the goal reading over 100% until
+    // the next tap. Pull the count down with it; growing one leaves the tally alone.
+    if (t !== null) {
+      sets.push("done_count=MIN(done_count,?)");
+      args.push(t);
+    }
+  }
   if (patch.target !== undefined)
     (sets.push("target=?"), args.push(patch.target?.trim() || null));
   if (patch.deadline !== undefined)

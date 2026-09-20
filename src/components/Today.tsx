@@ -664,6 +664,20 @@ export default function Today({
       body: JSON.stringify({ status: done ? "done" : "active" }),
     });
 
+  /**
+   * SET A COUNTED GOAL'S TALLY — the Career drill-down's stepper. Absolute, never a delta
+   * (engine.setGoalCount): a double-fired tap must not advance the count twice.
+   *
+   * It goes through `mutateGoals` like every other goal write, so the Career ring is
+   * rebuilt on this client the same beat the number moves — which is the whole reason the
+   * ring is built here rather than taken from /api/rings.
+   */
+  const onGoalCount = (id: number, count: number) =>
+    mutateGoals(`/api/goals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ count }),
+    });
+
   /** Tick or untick a one-off task. The tick belongs to the day on screen. */
   async function toggleTask(id: number, done: boolean) {
     await fetch("/api/tasks", {
@@ -1394,6 +1408,7 @@ export default function Today({
         })
       }
       onGoalDone={onGoalDone}
+      onGoalCount={onGoalCount}
       onSaveWorkout={saveWorkout}
       onDeleteWorkout={deleteWorkout}
       onOpenDay={goToDay}

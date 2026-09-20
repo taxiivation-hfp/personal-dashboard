@@ -496,10 +496,24 @@ export function SegmentedRing({
   // at the full box and the stroke is centred on it.
   const r = (size - stroke) / 2;
 
-  /** A point on a ring of radius `rad`. Angles run from twelve o'clock, clockwise. */
+  /**
+   * A point on a ring of radius `rad`. Angles run from twelve o'clock, clockwise.
+   *
+   * ROUNDED TO THREE PLACES, and that is a correctness fix rather than tidiness. The raw
+   * doubles differ in their last bit between Node and the browser's V8 — the server wrote
+   * `34.32548372373708` where the client computed `34.325483723737094` — so React saw the
+   * two `d` attributes as different text and threw a hydration mismatch, discarding the
+   * server's SVG and repainting the whole ring on arrival. It only ever fired once a
+   * pillar actually HAD arcs to draw, which is why it slept until the career roadmap put
+   * nine dated goals in the Career ring.
+   *
+   * Three places is ~a thousandth of a pixel on a 200px ring: below what any display can
+   * show, and far above what the mismatch needed.
+   */
+  const round = (n: number) => Math.round(n * 1000) / 1000;
   const at = (turn: number, rad: number) => {
     const a = turn * 2 * Math.PI - Math.PI / 2;
-    return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)] as const;
+    return [round(cx + rad * Math.cos(a)), round(cy + rad * Math.sin(a))] as const;
   };
 
   /**

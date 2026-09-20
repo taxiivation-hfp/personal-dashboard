@@ -122,6 +122,22 @@ async function ensure(c: Client): Promise<Client> {
     );
   }
 
+  // A COUNTED goal's tally — the owner's ruling, 2026-09-20 (see the note in goals.ts).
+  // `target_count` has been in the schema, unused, since the app was built; this is the
+  // other half of the pair, and the two together are what let a goal read "18 of 50"
+  // instead of costing fifty subgoal rows nobody could read.
+  //
+  // NOT NULL DEFAULT 0 rather than nullable: unlike worked_fraction there is no "nobody was
+  // asked" here — a goal with no target is not a counted goal at all, which `target_count`
+  // already says on its own. A constant default cannot lose a row, so this needs no
+  // migrate.mjs block and no backup step either.
+  if (!(await has("goals", "done_count"))) {
+    await c.execute(
+      `ALTER TABLE goals ADD COLUMN done_count INTEGER NOT NULL DEFAULT 0
+         CHECK (done_count >= 0)`,
+    );
+  }
+
   /**
    * skill_time.minutes goes NULLABLE — skills log SESSIONS now, not hours.
    *

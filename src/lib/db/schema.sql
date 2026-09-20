@@ -21,7 +21,12 @@ CREATE TABLE IF NOT EXISTS goals (
   pillar_id    INTEGER NOT NULL REFERENCES pillars(id),
   title        TEXT NOT NULL,
   target       TEXT,
-  target_count INTEGER,
+  -- A COUNTED goal: `target_count` is how many there are, `done_count` how many are done,
+  -- and progress is the fraction (src/lib/goals.ts). The owner's ruling, 2026-09-20 —
+  -- a compression of a checklist, for a goal made of 150 interchangeable items. A count
+  -- and subgoals are EXCLUSIVE: target_count NULL means progress comes from subgoals.
+  target_count INTEGER CHECK (target_count IS NULL OR target_count > 0),
+  done_count   INTEGER NOT NULL DEFAULT 0 CHECK (done_count >= 0),
   progress     REAL NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 1),
   status       TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','done','paused','dropped')),
   sort_order   INTEGER NOT NULL DEFAULT 0,

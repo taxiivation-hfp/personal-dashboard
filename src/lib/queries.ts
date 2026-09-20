@@ -14,7 +14,12 @@ import {
 import { rfc3339, todayISO } from "./dates";
 import type { CalEvent } from "./google";
 import { addDays, localDateOf } from "./dates";
-import { deriveWeights } from "./goals";
+import {
+  deriveWeights,
+  goalProgress,
+  isCounted,
+  type GoalCount,
+} from "./goals";
 import {
   HEALTH_METRICS,
   PILLAR_NAME,
@@ -110,9 +115,13 @@ export type GoalView = {
   id: number;
   title: string;
   target: string | null;
-  /** Derived: the sum of completed subgoal weights. Never inferred from activity, and
-   *  deliberately never read from the stale goals.progress column. */
+  /** Derived: a COUNTED goal's fraction, or the sum of completed subgoal weights. Never
+   *  inferred from activity, and deliberately never read from the stale goals.progress
+   *  column. Every reader takes this number without knowing which rule made it. */
   progress: number;
+  /** A counted goal's tally, or null when progress comes from subtasks. The two are
+   *  EXCLUSIVE — see goals.ts. */
+  count: { done: number; target: number } | null;
   /** 'active' | 'done' | 'paused' ('dropped' goals are never listed). */
   status: string;
   subgoals: SubgoalView[];
@@ -868,7 +877,7 @@ export async function getDayView(
  */
 export async function listGoals(db: Client): Promise<GoalView[]> {
   const r = await db.execute(
-    "SELECT id,title,target,status,deadline,created_at,completed_at FROM goals WHERE status != 'dropped' ORDER BY id",
+    "SELECT id,title,target,target_count,done_count,status,deadline,created_at,completed_at FROM goals WHERE status != 'dropped' ORDER BY id",
   );
   const subs = await db.execute(
     "SELECT id,goal_id,title,weight,done FROM subgoals ORDER BY goal_id, sort_order, id",
@@ -893,13 +902,23 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
     // Progress is DERIVED here rather than read from goals.progress, so the stored
     // column can never drift out of step with the subgoals that define it. (It already
     // had: row 1 stored 0.0833 while deriving 0.)
+    //
+    // `goalProgress` picks the rule — a COUNT when the goal has a target, the subgoal
+    // weights otherwise — so this is still one derivation with one home, and no screen
+    // has to know which kind of goal it is holding.
     const w = deriveWeights(raw);
+    const count: GoalCount = {
+      done: num(g.done_count),
+      target: g.target_count == null ? null : num(g.target_count),
+    };
+    const counted = isCounted(count);
     const created = str(g.created_at);
     return {
       id: num(g.id),
       title: String(g.title),
       target: str(g.target),
-      progress: w.progress,
+      progress: goalProgress(count, raw),
+      count: counted ? { done: count.done, target: count.target } : null,
       status: String(g.status),
       subgoals: raw.map((s, i) => ({ ...s, effectiveWeight: w.effective[i] })),
       overAllocated: w.overAllocated,

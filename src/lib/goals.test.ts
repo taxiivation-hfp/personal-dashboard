@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveWeights } from "./goals.ts";
+import {
+  countedProgress,
+  deriveWeights,
+  goalProgress,
+  isCounted,
+} from "./goals.ts";
 
 const close = (a: number, b: number) =>
   assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
@@ -87,4 +92,43 @@ test("a negative weight is treated as auto, not as a subtraction", () => {
   ]);
   close(r.effective[0], 0.5);
   close(r.effective[1], 0.5);
+});
+
+// ------------------------------------------------------------------ counted goals
+
+test("a counted goal's progress is the true fraction, not a block of ten", () => {
+  // The case the rule was written for: 18 of 50 must read 36%, where five blocks of ten
+  // could only ever say 20% or 40%.
+  assert.equal(countedProgress(18, 50), 0.36);
+  assert.equal(countedProgress(1, 150), 1 / 150);
+});
+
+test("a count clamps at both ends", () => {
+  // Above 1 a goal claims more than it is; below 0 doing a problem would LOWER the figure.
+  assert.equal(countedProgress(60, 50), 1);
+  assert.equal(countedProgress(-3, 50), 0);
+  assert.equal(countedProgress(5, 0), 0);
+  assert.equal(countedProgress(Number.NaN, 50), 0);
+});
+
+test("a target of null, 0 or a non-number is not a counted goal", () => {
+  assert.equal(isCounted(null), false);
+  assert.equal(isCounted({ done: 4, target: null }), false);
+  assert.equal(isCounted({ done: 4, target: 0 }), false);
+  assert.equal(isCounted({ done: 4, target: 50 }), true);
+});
+
+test("goalProgress takes the count when there is one and the subgoals when there is not", () => {
+  const subs = [
+    { weight: 0, done: true },
+    { weight: 0, done: false },
+  ];
+  // Counted wins outright — a count and subgoals are exclusive, so the checklist beside a
+  // target is never weighed against it.
+  assert.equal(goalProgress({ done: 18, target: 50 }, subs), 0.36);
+  assert.equal(goalProgress({ done: 18, target: 50 }, []), 0.36);
+  // No target: the subgoal rule, unchanged.
+  assert.equal(goalProgress(null, subs), 0.5);
+  assert.equal(goalProgress({ done: 0, target: null }, subs), 0.5);
+  assert.equal(goalProgress(null, []), 0);
 });

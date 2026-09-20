@@ -988,6 +988,16 @@ export default function Timeline({
                           ✓ done
                           {g.completedAt ? ` ${shortDate(g.completedAt)}` : ""}
                         </>
+                      ) : g.count ? (
+                        /* A COUNTED goal has no next subtask to name, so it says where it
+                           is instead. The line is never blank and never claims a checklist
+                           that does not exist. */
+                        <span className="tabular-nums">
+                          <span className="text-[var(--color-ink)]">
+                            {g.count.done}
+                          </span>{" "}
+                          of {g.count.target}
+                        </span>
                       ) : next ? (
                         <>
                           next ·{" "}

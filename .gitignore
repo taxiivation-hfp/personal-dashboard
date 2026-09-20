@@ -12,6 +12,10 @@ next-env.d.ts
 .env
 .env.local
 .env*.local
+# Live Turso credentials for scripts/seed-roadmap.mjs. Deliberately NOT .env.local, so
+# `next dev` can never read them and write to production by accident — which means it also
+# does not match the patterns above and has to be named here.
+.env.seed
 
 # local tool state, not project config
 .claude/settings.local.json

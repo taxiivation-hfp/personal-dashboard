@@ -24,6 +24,7 @@ import {
   type WorkoutKind,
 } from "@/lib/rings";
 import type { GoalView } from "@/lib/queries";
+import GoalCount from "./GoalCount";
 
 /** One column of the adherence tracker. Declared here because this is the component that
  *  passes it on; Today.tsx holds the state and AdherenceTracker draws it. */
@@ -103,6 +104,7 @@ export default function PillarSections({
   today,
   onSubgoal,
   onGoalDone,
+  onGoalCount,
   onSaveWorkout,
   onDeleteWorkout,
   onOpenDay,
@@ -130,6 +132,8 @@ export default function PillarSections({
   today?: string;
   onSubgoal: (id: number, done: boolean) => Promise<void>;
   onGoalDone: (id: number, done: boolean) => Promise<void>;
+  /** A COUNTED goal's tally, set absolutely. */
+  onGoalCount: (id: number, count: number) => Promise<void>;
   /**
    * id null = log a NEW session; an id edits that one.
    *
@@ -728,6 +732,18 @@ export default function PillarSections({
                 />
               </div>
 
+              {/* A COUNTED goal steps where a checklist would tick. Exclusive by rule
+                  (goals.ts), so the card keeps one shape either way. */}
+              {g.count ? (
+                <GoalCount
+                  done={g.count.done}
+                  target={g.count.target}
+                  busy={busy === `gc${g.id}`}
+                  label={g.title}
+                  onSet={(n) => run(`gc${g.id}`, () => onGoalCount(g.id, n))}
+                />
+              ) : (
+                <>
               <ul className="mt-2.5">
                 {g.subgoals.map((s) => (
                   <li key={s.id}>
@@ -772,6 +788,8 @@ export default function PillarSections({
                 <p className="mt-2 text-micro text-[var(--color-muted)]">
                   set weights total more than 100%
                 </p>
+              )}
+                </>
               )}
             </li>
           ))}

@@ -23,9 +23,14 @@
 /** Where the timeline begins. Fixed, not rolling: the record starts where it started. */
 export const TIMELINE_START = "2025-07";
 
-/** How many months past the current one the timeline extends — the rolling future the
- *  vision board needs. The owner's pick, 2026-09-03. */
-export const MONTHS_AHEAD = 12;
+/**
+ * How many months past the current one the timeline extends — the rolling future the
+ * vision board needs. The owner's pick of 12 (2026-09-03), RAISED TO 24 on 2026-09-20 when
+ * the career roadmap landed: its PR deadlines run to the ACS skills assessment in Jul 2028,
+ * and a month note is keyed by a month, so a horizon at Sep 2027 would have left the last
+ * and highest-stakes year of the plan as rows pointing at circles the canvas never drew.
+ */
+export const MONTHS_AHEAD = 24;
 
 export type TimelineGroup = {
   /** The group's IDENTITY — its canonical first month, uncut by any range clipping. It is

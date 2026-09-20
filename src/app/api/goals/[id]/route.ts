@@ -1,6 +1,11 @@
 import { getDb } from "@/lib/db/client";
 import { listGoals } from "@/lib/queries";
-import { updateGoal, deleteGoal, isGoalStatus } from "@/lib/engine";
+import {
+  updateGoal,
+  deleteGoal,
+  setGoalCount,
+  isGoalStatus,
+} from "@/lib/engine";
 import { isISODate } from "@/lib/dates";
 
 export const runtime = "nodejs";
@@ -20,8 +25,13 @@ async function goalId(ctx: {
  *   'paused' and 'dropped' are accepted as before.
  * - `deadline: "YYYY-MM-DD"` sets it; `deadline: null` or `""` CLEARS it.
  *
- * Deliberately no `progress`: it is DERIVED from completed subgoal weights and must never be
- * settable, or the stored column drifts out of step with the subgoals that define it.
+ * - `count: n` sets a COUNTED goal's tally ABSOLUTELY — never a delta, so a retried tap
+ *   cannot advance it twice (engine.setGoalCount). `targetCount` changes how many there
+ *   are; null returns the goal to its subtasks.
+ *
+ * Deliberately no `progress`: it is DERIVED — from the count, or from completed subgoal
+ * weights — and must never be settable, or the stored column drifts out of step with the
+ * thing that defines it.
  */
 export async function PATCH(
   req: Request,
@@ -43,13 +53,29 @@ export async function PATCH(
           { status: 400 },
         );
     }
+    let targetCount: number | null | undefined;
+    if (b.targetCount !== undefined) {
+      targetCount = b.targetCount === null ? null : Number(b.targetCount);
+      if (targetCount !== null && !Number.isInteger(targetCount))
+        return Response.json(
+          { error: "targetCount must be a whole number" },
+          { status: 400 },
+        );
+    }
+    if (b.count !== undefined && typeof b.count !== "number")
+      return Response.json({ error: "count must be a number" }, { status: 400 });
+
     const db = await getDb();
     await updateGoal(db, id, {
       title: typeof b.title === "string" ? b.title : undefined,
       target: b.target,
       status: b.status,
       deadline,
+      targetCount,
     });
+    // AFTER updateGoal, so setting a target and its tally in one request lands the tally
+    // against the new target rather than the old one.
+    if (typeof b.count === "number") await setGoalCount(db, id, b.count);
     return Response.json({ goals: await listGoals(db) });
   } catch (e) {
     return Response.json(

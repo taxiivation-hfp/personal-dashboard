@@ -42,11 +42,16 @@ export async function POST(req: Request) {
     const db = await getDb();
     const id = await createGoal(db, {
       title: b.title,
-      // No target_count: goal progress comes from completed subgoal weights. Deriving it
-      // from a count of completed items was an output measure, which this app no longer
-      // scores.
       target: typeof b.target === "string" ? b.target : null,
       deadline,
+      // A COUNTED goal — the owner's ruling, 2026-09-20, replacing the note that stood
+      // here: that a count of completed items was an output measure this app no longer
+      // scores. What reverses it is that a count is a COMPRESSION OF A CHECKLIST (see
+      // goals.ts): 1 of 150 and 150 subgoals with one ticked are the same claim about the
+      // same commitment, and the counter is the one that fits on a screen. Absent, the
+      // goal is an ordinary subtask goal and nothing here changes.
+      targetCount: typeof b.targetCount === "number" ? b.targetCount : null,
+      doneCount: typeof b.doneCount === "number" ? b.doneCount : 0,
     });
     // Mutating routes return the refreshed collection, so the client never needs a second
     // round trip to see its own write.

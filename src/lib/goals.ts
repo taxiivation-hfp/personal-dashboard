@@ -53,3 +53,55 @@ export function deriveWeights(subgoals: WeightedSubgoal[]): WeightBreakdown {
     overAllocated: overrideSum > 1 + 1e-9,
   };
 }
+
+// ------------------------------------------------------------------ COUNTED GOALS
+//
+// A goal whose progress is a COUNT rather than a checklist — the owner's ruling,
+// 2026-09-20, overruling the note left on /api/goals's POST that `target_count` was
+// deliberately unwired because "deriving progress from a count of completed items was an
+// output measure". The argument that reverses it: a counter is a COMPRESSION OF A
+// CHECKLIST, not a new kind of measure. "NeetCode, 1 of 150" and 150 subgoals with one
+// ticked say exactly the same thing about exactly the same commitment; the counter just
+// does not cost 150 rows and a page you cannot read. It still rates nothing about HOW the
+// problems were solved, which is the line this app actually draws.
+//
+// What keeps that true, and what must not be built on top of it: NO STREAK on a count, no
+// problems-per-week chart, no total across goals. The number exists to fill one goal's own
+// arc against its own deadline, and it reaches nothing else — the same quarantine goal
+// progress has always had.
+//
+// A COUNT AND SUBGOALS ARE EXCLUSIVE. A goal with a target counts, full stop; weighing a
+// tally against a checklist would need a second rule about what each is worth, and two
+// rules about one number is how two screens end up disagreeing about the same goal.
+
+/** A goal's tally. `target` null (or ≤ 0) means this is not a counted goal. */
+export type GoalCount = { done: number; target: number | null };
+
+/** Is this goal counted? Narrowed so callers get a real target out of it. */
+export function isCounted(c: GoalCount | null): c is { done: number; target: number } {
+  return !!c && Number.isFinite(c.target) && (c.target ?? 0) > 0;
+}
+
+/**
+ * A counted goal's progress, 0..1. Clamped at BOTH ends for the same reason
+ * `workedFraction` is: above 1 a goal would claim more than it is, and below 0 doing a
+ * problem could lower the figure. 18 of 50 is 0.36 — the true fraction, which is the whole
+ * point of counting instead of ticking blocks of ten.
+ */
+export function countedProgress(done: number, target: number): number {
+  if (!(target > 0) || !Number.isFinite(done)) return 0;
+  return Math.min(1, Math.max(0, done / target));
+}
+
+/**
+ * THE ONE PLACE a goal's progress is decided, whichever kind it is. Every reader takes the
+ * number this returns and none of them knows or cares where it came from — which is why
+ * career.ts, the timeline card and the tracker needed no change to gain counted goals.
+ */
+export function goalProgress(
+  count: GoalCount | null,
+  subgoals: WeightedSubgoal[],
+): number {
+  if (isCounted(count)) return countedProgress(count.done, count.target);
+  return deriveWeights(subgoals).progress;
+}
