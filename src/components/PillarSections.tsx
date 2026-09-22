@@ -426,7 +426,21 @@ export default function PillarSections({
             SPANS, not ul/li: a button's content model is phrasing content, and the whole
             block IS the button (the donut and its name together are a large, obvious target
             at 11pm, and a separate chevron would be a smaller one for no gain). This is the
-            same reason the text column beside the old collapsed donut was spans. */}
+            same reason the text column beside the old collapsed donut was spans.
+
+            HEALTH ONLY. CAREER PRINTS NOTHING HERE — the owner's ruling, 2026-09-22,
+            removing the line-per-goal this used to draw.
+
+            The two are not symmetrical and should not be: FIVE PARTS IS WHAT HEALTH IS.
+            That list is a definition — the same five rows whatever the fortnight held, so a
+            column can be sized for it and it never grows. A goal list is a BACKLOG, and a
+            backlog is unbounded by nature: the career roadmap put nine dated goals in the
+            ring and eighteen lines of them shoved the adherence tracker and the record link
+            off the bottom of a window that is not allowed to scroll at rest. A list that
+            breaks the layout at some number of goals was only ever working by accident.
+
+            Nothing replaces it, not even a count: the ring's centre already prints the
+            figure, and the goals themselves are one tap away in the drill-down. */}
         <span className="block w-full text-center">
           {ring?.key === "physical"
             ? ring.arcs.map((a) => (
@@ -439,20 +453,7 @@ export default function PillarSections({
                   {a.label} {a.fill == null ? "—" : a.fact}
                 </span>
               ))
-            : ring?.key === "portfolio"
-              ? // One line per counted goal. Nothing at all when there are none: the ring's
-                // centre already says "no goals", and a second saying of it is furniture.
-                ring.arcs.map((a) => (
-                  <span key={a.key} className="mt-1.5 block first:mt-0">
-                    <span className="block truncate font-serif text-small">
-                      {a.label}
-                    </span>
-                    <span className="block text-micro tabular-nums text-[var(--color-muted)]">
-                      {a.fact}
-                    </span>
-                  </span>
-                ))
-              : null}
+            : null}
         </span>
       </button>
     );
