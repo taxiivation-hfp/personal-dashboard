@@ -1,8 +1,10 @@
-# Roadmap — grouped by item
+# Roadmap
 
-Each item has a duration, not a calendar slot. Run them in parallel.
+**Goals** have a done state. **Non-goals** are continuous practice with no finish line — they still matter, they just can't be completed.
 
 ---
+
+# GOALS
 
 ## 1. SQL
 **Now → end of September, then 15 min/day forever**
@@ -13,8 +15,6 @@ Each item has a duration, not a calendar slot. Run them in parallel.
 
 Later, if you want depth: PGExercises (recursive CTEs, window functions), and *Use The Index, Luke* for query plans.
 
----
-
 ## 2. Algorithms
 **Now → end of January. 2/day now, heavier in Dec–Jan. Stop at 100.**
 
@@ -24,145 +24,136 @@ Later, if you want depth: PGExercises (recursive CTEs, window functions), and *U
 - Learn properly in week one: `Counter`, `defaultdict`, `deque`, `heapq`, `bisect`, `lru_cache`.
 - Feb onward: 2/week maintenance.
 
----
-
-## 3. Systems depth
-**Now → ongoing, indefinitely**
-
-- **A Philosophy of Software Design** (Ousterhout) — ~190 pages. Read this first, this phase. Complexity, abstraction, interface design.
-- **Designing Data-Intensive Applications** (Kleppmann) — one chapter a week, forever. Start December.
-- **System Design Primer** (github.com/donnemartin/system-design-primer) — one section a week.
-- **Hussein Nasser** (youtube.com/channel/UC_ML5xP23TOWKUcc-oAE_Eg) — meal-length, backend and database internals.
-
----
-
-## 4. Data modelling
-**One weekend, anytime before January**
-
-- **The Data Warehouse Toolkit** (Kimball), chapters 1–3 only.
-- Facts and dimensions, slowly changing dimensions, normalisation trade-offs, why a schema that reads well writes badly.
-
----
-
-## 5. Builds
-**December → January, and continuing**
-
-Many small builds. You pick what. The point is coverage — each build should force you into a decision you haven't made before. If you reach for Postgres and REST every time, you've built one project five times.
-
-**One ADR per build.** Half a page: what you decided, what the options were, what you picked, why, what it costs. The value is that writing down the rejected option forces you to have considered one. Twenty minutes.
-
-### Coverage checklist
-
-Tick these off across builds. The ones you've already hit are marked.
-
-- [x] **Data modelling** — schema design, normalised or not, read vs write cost *(dashboard)*
-- [x] **Auth** — who are you, what can you touch *(dashboard)*
-- [x] **Testing** — what you verify and what you deliberately don't *(dashboard)*
-- [x] **Scheduled work** — runs on a clock. Missed runs, overlapping runs *(Retention Router)*
-- [x] **External integration** — someone else's API, their rate limits, schema changes, downtime *(Retention Router)*
-- [x] **Idempotency** — same operation arrives twice. Does it double-charge *(Retention Router)*
-- [x] **Config and deployment** — how it ships, where secrets live, changing behaviour without redeploying *(Retention Router)*
-- [ ] **State and persistence** — where data lives, what survives a crash, what durability costs
-- [ ] **Concurrency** — two things at once, and what breaks when they touch the same data
-- [ ] **Asynchrony** — work longer than a request. Queues. What the user sees while waiting
-- [ ] **Failure and retry** — the thing you call is down. Retry policy, backoff, what stops you making it worse
-- [ ] **Caching and invalidation** — what's expensive enough to cache, how you know it's stale
-- [ ] **Observability** — answering "what happened at 2am" six weeks later. **Biggest gap.**
-- [ ] **Real-time** — pushing to the client instead of the client asking. Websockets vs polling
-- [ ] **Blob handling** — uploads, storage, things too big for the database
-
-### One from-scratch build
-**A weekend, once.**
-
-Write a small key-value store. Not an HTTP server — socket handling and header parsing won't inform a component choice. A KV store teaches you why Redis exists, what persistence costs, and what a cache actually is. That transfers, because "do I need a cache here" is a real decision.
-
-Reference: **Build Your Own X** (github.com/codecrafters-io/build-your-own-x).
-
----
-
-## 6. One operated system
-**January → ongoing**
-
-Separate from the small builds. One thing that runs, that people use, that can break at 3am.
-
-- Real users, even ten.
-- Stateful and concurrent — the interesting failures live where two things happen at once.
-- Observable — logs and metrics you'd actually use during an incident.
-- **Operated.** You kept it up. You know what fell over and why.
-- One decision you can defend for ten minutes, with the alternative you rejected.
-
-This is the thing you point at in interviews. The small builds are how you get good enough to make it.
-
----
-
-## 7. AWS Solutions Architect – Associate (SAA-C03)
+## 3. AWS Solutions Architect – Associate (SAA-C03)
 **Study late Nov → sit December. ~$150.**
 
 Not DEA-C01 — that's a data product catalogue and it picks a lane for you. SAA covers compute, storage, networking, IAM, availability, cost, architecture trade-offs. Serves backend, data, platform and AI infra equally, and it's the cert recruiters recognise.
 
-- AWS Skill Builder (free tier + official practice exam), starting with the SAA-C03 Exam Guide for domain weightings.
+- AWS Skill Builder — free tier plus official practice exam. Start with the SAA-C03 Exam Guide for domain weightings.
 - Maarek (faster, exam-focused) or Cantrill (slower, teaches more) on Udemy.
-- AWS Free Tier — build something. Don't pass it on video alone.
+- Build something on the free tier. Don't pass it on video alone.
 
----
+## 4. English test
+**January–February 2027**
 
-## 8. Verification
+IELTS or PTE. Target 8.0 in every band. Must be taken within 12 months of your 485 lodgement, so a Jan–Feb test covers you through to early 2028.
+
+## 5. Projects
 **December → ongoing**
 
-The actual "managing AI" skill. Not prompting — catching the model being confidently wrong.
+One **ADR** per project. Half a page: what you decided, the options, what you picked, why, what it costs. The value is that writing down the rejected option forces you to have considered one. Twenty minutes.
+
+Features listed are the point of each project — they're the decisions you haven't had to make yet. What you actually build around them is yours.
+
+### Project V — from scratch
+*A weekend. Write a key-value store, no libraries doing the work.*
+
+- In-memory store with get/set/delete
+- Persistence to disk, and recovery after a `kill -9`
+- Concurrent clients writing to the same key
+- TTL and expiry
+
+*Why this one: teaches you why Redis exists, what durability costs, and what a cache actually is. Not an HTTP server — socket and header parsing won't inform a component choice.*
+
+### Project VI — work that outlives the request
+- A background job queue
+- Work that takes longer than a user will wait
+- Retry with exponential backoff
+- Dead-letter handling for jobs that keep failing
+- Status visible to the user while they wait
+
+### Project VII — expensive things and big things
+- File or media upload
+- Blob storage separate from the database
+- A cache layer with a deliberate invalidation strategy
+- Before/after measurement proving the cache earned its place
+
+### Project VIII — push, not pull
+- Server pushing to the client rather than the client asking
+- Connection and presence state
+- Reconnection after a dropped connection
+- A written comparison against just polling, and why you chose what you chose
+
+### Project IX — operated, not just built
+*This is the one you point at in interviews. The others are how you get good enough to make it.*
+
+- Deployed, with real users — ten is enough
+- Structured logging and metrics you'd actually open during an incident
+- Something broke and you can narrate what and why
+- One decision you can defend for ten minutes
+- Kept alive over weeks, not demoed once
+
+---
+
+# NON-GOALS
+
+No done state. Ongoing.
+
+## Reading
+**Ongoing, indefinitely**
+
+- **A Philosophy of Software Design** (Ousterhout) — ~190 pages. Read first. Complexity, abstraction, interface design.
+- **Designing Data-Intensive Applications** (Kleppmann) — one chapter a week, forever. Start December.
+- **The Data Warehouse Toolkit** (Kimball) — chapters 1–3 only. Facts and dimensions, normalisation trade-offs, why a schema that reads well writes badly.
+- **System Design Primer** (github.com/donnemartin/system-design-primer) — one section a week.
+
+## YouTube
+**Meals and commutes. Supplement, never substitute.**
+
+- **Hussein Nasser** (youtube.com/channel/UC_ML5xP23TOWKUcc-oAE_Eg) — backend and database internals. Best free source for the depth you're after.
+- **ByteByteGo** (youtube.com/@ByteByteGo) — system design patterns, 6–12 min.
+- **CodeAesthetic** (youtube.com/@CodeAesthetic) — abstraction and naming, short.
+- **ArjanCodes** (youtube.com/@ArjanCodes) — the **Code Roasts** series is direct practice at reviewing code you didn't write.
+- **StatQuest** (youtube.com/@statquest) — statistics, useful for your current units.
+
+Don't watch SQL videos instead of writing SQL. Don't watch LeetCode solutions before attempting the problem.
+
+## Verification
+**Every project, forever**
+
+Catching the model being confidently wrong. Not prompting.
 
 - **pytest** — test the invariants that must hold, not coverage theatre.
-- **Hypothesis** (property-based testing) — highest-leverage technique against AI-generated code, because it finds the cases you didn't think to write.
-- **ArjanCodes Code Roasts** (youtube.com/@ArjanCodes) — direct practice at reviewing code you didn't write.
-- Habit: specs first, then drive the agent, then review every change. Keep the specs.
+- **Hypothesis** (property-based testing) — finds the cases you didn't think to write, which is exactly where AI-generated code fails.
+- Habit: specs first, drive the agent, review every change. Keep the specs.
+
+## Meetups and industry events
+**Weekly, ongoing**
+
+The sponsorship pipeline. Applications produced silence; the one live thing came from a room you were in.
+
+Same group four times beats four groups once — recognition is the whole mechanism. Stay for the after, not just the talk. Have an answer to "what are you working on" that names a problem, not a degree. Ask about their work rather than for a job. Follow up within 48 hours referencing what you actually discussed; most people don't, which is why it works. Track who you met and what you said you'd send, then send it.
+
+Speak at one eventually. Lightning talks are under-subscribed and organisers want volunteers. Ten minutes on something you built inverts the dynamic — people approach you afterwards. You have a decade of content experience and no camera fear. Most engineers have neither. Almost nobody uses this.
+
+Range across backend, cloud, database, AI/LLM and language-specific groups. Different rooms, different companies hiring. Conferences and one-day events have a higher density of senior people than a monthly meetup.
+
+Sponsorship is a decision a person makes about someone they trust. Months of showing up, not one good conversation.
+
+## Technical interview practice
+**February → June, ongoing**
+
+- **Live coding out loud.** The hard part isn't the algorithm, it's narrating while you think. Solve NeetCode problems talking to an empty room, or record yourself. Most common failure, most underestimated.
+- **System design.** Structure: clarify requirements, sketch components, name the bottleneck, state the trade-off. ByteByteGo plus the Primer is enough.
+- **The AI question.** Every interviewer asks it. Don't say "it makes me faster" — everyone does. Have a concrete example of catching it being wrong.
+- **Defending a build.** Someone will go deep on one decision. The ADRs are this.
+- **Online assessments** vary — Codility, HackerRank, CodeSignal, Coderbyte. One timed mock on whatever platform the invite names, before the real thing.
 
 ---
 
-## 9. Meetups and industry events
-**Now → ongoing. Weekly.**
-
-This is the sponsorship pipeline. Applications have produced silence; the one live thing came from a room you were in.
-
-**The mechanic:**
-- **Same group, four times.** Recognition is the entire point. Four visits to one group beats one visit to four.
-- **Go to the talk, stay for the after.** The talk is content. The 40 minutes after is the reason you came.
-- **Have an answer to "what are you working on."** Not "I'm a student." Name the thing you're building and one problem in it. That's what makes someone ask a follow-up.
-- **Ask about their work, not for a job.** A question only someone who has built the thing would ask. That's a conversation between engineers.
-- **Follow up within 48 hours.** LinkedIn, one line referencing what you actually talked about. Most people don't, which is why it works.
-- **Track it.** Who, where, what they work on, what you said you'd send. Send it.
-
-**Speak eventually.** Lightning talks at meetups are usually under-subscribed and organisers want volunteers. Ten minutes on something you built puts every person in the room in a position to remember you, and it inverts the dynamic — people approach you afterwards. You have a decade of content experience and you're not scared of a camera. Most engineers are. This is your unfair advantage and almost nobody uses it.
-
-**Range matters.** Backend, cloud, database, AI/LLM, and language-specific groups. Different rooms, different companies hiring. Conferences and one-day events too — higher density of senior people than a monthly meetup.
-
-**The thing to internalise:** sponsorship is a decision a person makes about someone they trust. You're not collecting contacts, you're becoming someone a few people would vouch for. That takes months of showing up, not one good conversation.
-
----
-
-## 10. Technical interviews
-**February → June**
-
-- **Live coding out loud.** The hard part isn't the algorithm, it's narrating while you think. Practise by solving NeetCode problems talking to an empty room, or record yourself. Everyone underestimates this and it's the most common failure.
-- **System design.** You won't get a full round as a grad, but "how would you build X" comes up constantly and most candidates flail. ByteByteGo plus the System Design Primer is enough. Structure: clarify requirements, sketch components, name the bottleneck, state the trade-off.
-- **The AI question.** Every interviewer in 2027 asks how you use AI tools. Don't say "it makes me faster" — everyone says that. Have a concrete example of catching it being confidently wrong.
-- **Defending your build.** Someone will go deep on one decision. Know the alternative you rejected and why. The ADRs are this.
-- **Online assessments** vary: Codility, HackerRank, CodeSignal, Coderbyte. Do one timed mock on whatever platform the invite names before the real thing.
-
----
-
-## 11. Deadlines
+# DEADLINES
 
 | When | What |
 |---|---|
 | Late Oct 2026 | Research scholarship outcome |
-| Jan–Feb 2027 | Sit IELTS/PTE. 8.0 every band. Must be within 12 months of 485 lodgement |
+| Jan–Feb 2027 | Sit IELTS/PTE |
 | Feb–May 2027 | Grad program applications |
-| 1–22 Jul 2027 | Deloitte graduate window (2026 dates — verify) |
 | Jun 2027 | NAATI CCL Indonesian |
+| 1–22 Jul 2027 | Deloitte graduate window (2026 dates — verify) |
 | Jul 2027 | Request completion letter the day it exists |
 | Early Aug 2027 | **Lodge 485.** Student visa expires 30/08/2027 |
 | Aug 2027 | Book health exam immediately |
 | Feb 2028 | Professional Year decision point (only if no skilled job) |
-| Jul 2028 | ACS skills assessment — nominate three ANZSCO codes, one fee |
+| Jul 2028 | ACS assessment — nominate three ANZSCO codes, one fee |
 
-Full detail in `pr-roadmap-v2.md` and `pr-roadmap.ics`.
+Detail in `pr-roadmap-v2.md` and `pr-roadmap.ics`.

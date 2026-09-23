@@ -84,11 +84,74 @@ const GOALS = [
     count: { done: 18, target: 50 },
   },
   {
+    // The roadmap caps NeetCode at 100 ("the last 50 are hard DP and advanced graphs that
+    // don't come up at grad level"); the owner's own answer when asked was 150, and a
+    // target is a commitment rather than a reading of the document. 150 stands until they
+    // say otherwise — it is one field on /goals.
     title: "Algorithms",
     deadline: "2027-01-31",
     target:
       "NeetCode, in their order, in Python. 25 minutes then read the solution; redo from scratch three days later. Week one: Counter, defaultdict, deque, heapq, bisect, lru_cache. Feb onward, 2/week.",
     count: { done: 1, target: 150 },
+  },
+  {
+    title: "AWS Solutions Architect – Associate",
+    deadline: "2026-12-31",
+    target:
+      "SAA-C03, ~$150. Not DEA-C01 — that picks a lane for you. Compute, storage, networking, IAM, availability, cost, trade-offs.",
+    subtasks: [
+      "SAA-C03 Exam Guide — domain weightings first",
+      "AWS Skill Builder, free tier",
+      "Maarek or Cantrill on Udemy",
+      "Build something on the AWS Free Tier — don't pass it on video alone",
+      "Official practice exam",
+      "Book it and sit it",
+    ],
+  },
+  {
+    title: "English test",
+    deadline: "2027-02-28",
+    target:
+      "IELTS or PTE, 8.0 in every band. Must be within 12 months of the 485 lodgement, so a Jan–Feb sitting covers through to early 2028.",
+    subtasks: [
+      "Choose IELTS or PTE and book a Jan–Feb 2027 date",
+      "Sit it",
+      "8.0 in every band",
+    ],
+  },
+  {
+    // NO DATE IS GIVEN for this one: the roadmap says "December -> ongoing". 30 June 2027 is
+    // an ASSUMPTION, and a stated one — Project IX is what the grad applications
+    // (Feb-May) and the interview practice (Feb-June) both point at, so a finish line after
+    // both would be no finish line at all. One field on /goals if it is wrong.
+    title: "Projects",
+    deadline: "2027-06-30",
+    target:
+      "One ADR per project: half a page, the options, what you picked, why, what it costs — writing down the rejected option forces you to have considered one. The features listed ARE the point; what you build around them is yours.",
+    subtasks: [
+      "V · In-memory store with get/set/delete",
+      "V · Persistence to disk, and recovery after a kill -9",
+      "V · Concurrent clients writing to the same key",
+      "V · TTL and expiry",
+      "VI · A background job queue",
+      "VI · Work that takes longer than a user will wait",
+      "VI · Retry with exponential backoff",
+      "VI · Dead-letter handling for jobs that keep failing",
+      "VI · Status visible to the user while they wait",
+      "VII · File or media upload",
+      "VII · Blob storage separate from the database",
+      "VII · A cache layer with a deliberate invalidation strategy",
+      "VII · Before/after measurement proving the cache earned its place",
+      "VIII · Server pushing to the client rather than the client asking",
+      "VIII · Connection and presence state",
+      "VIII · Reconnection after a dropped connection",
+      "VIII · A written comparison against polling, and why you chose what you chose",
+      "IX · Deployed, with real users — ten is enough",
+      "IX · Structured logging and metrics you'd open during an incident",
+      "IX · Something broke and you can narrate what and why",
+      "IX · One decision you can defend for ten minutes",
+      "IX · Kept alive over weeks, not demoed once",
+    ],
   },
 ];
 
@@ -116,14 +179,11 @@ const GOALS = [
 const CAREER_TINT = "plum";
 
 const CAREER_NOTES = [
-  "Systems depth · ongoing, indefinitely\nA Philosophy of Software Design first. Then DDIA, a chapter a week from December, forever. System Design Primer, a section a week. Hussein Nasser for internals.",
-  "Data modelling · one weekend before January\nKimball's Data Warehouse Toolkit, chapters 1–3 only. Facts and dimensions, slowly changing dimensions, why a schema that reads well writes badly.",
-  "Builds · December → January\nMany small builds, each forcing a new decision. One ADR each. Left to cover: state, concurrency, async, retry, caching, observability, real-time, blobs, and a KV store.",
-  "One operated system · January → ongoing\nOne thing that runs, that people use, that can break at 3am. Real users, stateful, observable, OPERATED. One decision you can defend for ten minutes.",
-  "AWS SAA-C03 · sit December · ~$150\nNot DEA-C01. Start from the exam guide's domain weightings. Skill Builder, Maarek or Cantrill, and build on the Free Tier — not video alone.",
-  "Verification · December → ongoing\nCatching the model being confidently wrong. pytest for the invariants, not coverage theatre. Hypothesis for the cases you didn't think of. Specs first.",
-  "Meetups · weekly, ongoing\nThe sponsorship pipeline. Same group FOUR times — recognition is the point. Stay for the 40 minutes after the talk. Follow up within 48 hours. Speak eventually.",
-  "Technical interviews · February → June 2027\nLive coding OUT LOUD is the hard part, not the algorithm. System design: clarify, sketch, name the bottleneck, state the trade-off.",
+  "Reading · ongoing, indefinitely\nA Philosophy of Software Design first. DDIA a chapter a week from December, forever. Kimball ch 1–3. System Design Primer, a section a week.",
+  "YouTube · meals and commutes\nSupplement, never substitute. Hussein Nasser for internals, ByteByteGo for system design, CodeAesthetic, ArjanCodes Roasts, StatQuest. Never instead of writing SQL.",
+  "Verification · every project, forever\nCatching the model being confidently wrong. pytest for the invariants, not coverage theatre. Hypothesis for the cases you didn't write. Specs first.",
+  "Meetups · weekly, ongoing\nThe sponsorship pipeline. Same group four times beats four groups once. Stay for the after. Follow up within 48 hours. Speak at one eventually.",
+  "Interview practice · February → June\nLive coding OUT LOUD is the hard part, not the algorithm. System design: clarify, sketch, name the bottleneck, state the trade-off. One timed mock per platform.",
 ];
 
 /**
@@ -135,12 +195,38 @@ const CAREER_NOTES = [
  *
  * Dropping is idempotent: the second run updates rows that are already 'dropped'.
  */
+/**
+ * Text windows this script wrote that the roadmap no longer has a section for.
+ *
+ * MATCHED ON THE WHOLE FIRST LINE, which is the safety property: these are the exact title
+ * lines this script wrote, so a note the owner has retitled does not match and is left
+ * alone, while one whose body they reworded still goes. A prefix match was tried first and
+ * is worse — "Builds" would swallow any note of theirs that happened to start with it.
+ *
+ * A title still in CAREER_NOTES is never retired (the guard in the loop): "Meetups ·
+ * weekly, ongoing" survived the rewrite with a new body, and without that guard every run
+ * would delete it and add it back under a new id.
+ *
+ * The rewrite of 2026-09-23 replaced "Systems depth" and "Data modelling" with one Reading
+ * note, folded "Builds" and "One operated system" into the Projects GOAL, promoted AWS back
+ * to a goal, and reworded the remaining three.
+ */
+const RETIRED_NOTES = [
+  "Systems depth · ongoing, indefinitely",
+  "Data modelling · one weekend before January",
+  "Builds · December → January",
+  "One operated system · January → ongoing",
+  "AWS SAA-C03 · sit December · ~$150",
+  "Verification · December → ongoing",
+  "Meetups · weekly, ongoing",
+  "Technical interviews · February → June 2027",
+];
+
 const RETIRED_GOALS = [
   "Systems depth",
   "Data modelling",
   "Builds",
   "One operated system",
-  "AWS Solutions Architect – Associate",
   "Verification",
   "Meetups and industry events",
   "Technical interviews",
@@ -420,6 +506,29 @@ function emitSql() {
   }
 
   out.push("");
+  out.push("-- Notes whose section the roadmap no longer has. Matched on the exact opening,");
+  out.push("-- so a note the owner has edited does not match and is left alone.");
+  // By title, EXCEPT the exact text about to be written under it — see the note in
+  // main() for why a plain title match would delete and re-add the same card forever.
+  const kept = new Map(textPlaced.map((h) => [h.text.split("\n")[0], h.text]));
+  for (const title of RETIRED_NOTES) {
+    const survivor = kept.get(title);
+    out.push(
+      `DELETE FROM timeline_windows WHERE kind='text'` +
+        `\n   AND substr(text, 1, instr(text || char(10), char(10)) - 1) = ${q(title)}` +
+        (survivor ? `\n   AND text <> ${q(survivor)}` : "") +
+        ";",
+    );
+  }
+  out.push("");
+  out.push("-- A goal demoted to a note and promoted back: reopen the row, keep its subtasks.");
+  for (const g of GOALS) {
+    out.push(
+      `UPDATE goals SET status='active', completed_at=NULL WHERE title=${q(g.title)} AND status='dropped';`,
+    );
+  }
+
+  out.push("");
   out.push("-- The eight sections that are sticky notes now. DROPPED, never deleted: the row");
   out.push("-- and its subtasks stay on the record, and every list already hides 'dropped'.");
   for (const t of RETIRED_GOALS) {
@@ -476,6 +585,30 @@ async function main() {
 
   const goalIds = new Map();
   let made = 0;
+
+  // A goal that is on the board but DROPPED — AWS, demoted to a note on 2026-09-23 and
+  // promoted back by the roadmap's rewrite. Reviving the row keeps its six subtasks and its
+  // history; creating a fresh one would leave a dead twin and start it at zero.
+  const dropped = await client.execute(
+    "SELECT id,title FROM goals WHERE status = 'dropped'",
+  );
+  const droppedByTitle = new Map(
+    dropped.rows.map((r) => [String(r.title).toLowerCase(), Number(r.id)]),
+  );
+  for (const g of GOALS) {
+    const key = g.title.toLowerCase();
+    if (!byTitle.has(key) && droppedByTitle.has(key)) {
+      say(`goal  BACK  ${g.title} — reopened, subtasks intact`);
+      if (COMMIT) {
+        await client.execute({
+          sql: "UPDATE goals SET status='active', completed_at=NULL, updated_at=? WHERE id=?",
+          args: [stamp(), droppedByTitle.get(key)],
+        });
+      }
+      goalIds.set(g.title, droppedByTitle.get(key));
+      byTitle.set(key, droppedByTitle.get(key));
+    }
+  }
 
   for (const g of GOALS) {
     const key = g.title.toLowerCase();
@@ -537,7 +670,7 @@ async function main() {
 
   // Timeline windows. A goal already placed is left where the owner put it — the partial
   // unique index on goal_id would refuse a second copy anyway, but skipping says why.
-  const wins = await client.execute("SELECT kind,goal_id,text FROM timeline_windows");
+  const wins = await client.execute("SELECT id,kind,goal_id,text FROM timeline_windows");
   const placedGoals = new Set(wins.rows.filter((r) => r.goal_id != null).map((r) => Number(r.goal_id)));
   const placedText = new Set(wins.rows.filter((r) => r.kind === "text").map((r) => String(r.text)));
 
@@ -560,6 +693,31 @@ async function main() {
       sql: "INSERT INTO timeline_windows (kind,goal_id,x,y) VALUES ('goal',?,?,?)",
       args: [id, c.x, c.y],
     });
+  }
+
+  // Retire first, so a note whose section was reworded does not sit beside its replacement
+  // for the width of one run.
+  // Keyed on the WHOLE TEXT, not the title: "Meetups · weekly, ongoing" kept its title
+  // through the rewrite and changed its body, so a title guard would have left the old
+  // note standing and added the new one beside it. Matching the text retires the stale
+  // copy and then skips the fresh one on every run after.
+  const keepText = new Set(textPlaced.map((h) => h.text));
+  for (const title of RETIRED_NOTES) {
+    const hits = wins.rows.filter(
+      (r) =>
+        r.kind === "text" &&
+        String(r.text).split("\n")[0] === title &&
+        !keepText.has(String(r.text)),
+    );
+    if (!hits.length) continue;
+    say(`note  GONE  ${title} — no section for it any more`);
+    if (!COMMIT) continue;
+    for (const r of hits) {
+      await client.execute({
+        sql: "DELETE FROM timeline_windows WHERE id=?",
+        args: [Number(r.id)],
+      });
+    }
   }
 
   for (const h of textPlaced) {

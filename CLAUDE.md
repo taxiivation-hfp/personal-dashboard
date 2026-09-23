@@ -1090,31 +1090,33 @@ as rows pointing at circles the canvas never drew. The timeline tests are writte
 Seeded by `scripts/seed-roadmap.mjs` (dry run by default, `--commit` to write, idempotent by
 inspection and never overwriting). The owner's ruling, 2026-09-20, is the SPLIT:
 
-- **CAREER → TWO goals and eight sticky notes** — the owner's ruling, 2026-09-23, revising
-  the ten goals the first seeding made. What separates them is whether the thing has a
-  **finish line a pace can be measured against**. SQL is 50 problems by 30 September and
-  Algorithms is 150 by 31 January: a count, a date, and an answer to "am I on track". Both
-  are COUNTED goals (18/50, 1/150) and both take an arc.
+- **CAREER → FIVE goals and FIVE sticky notes**, and since the roadmap's rewrite of
+  2026-09-23 **the document itself draws the line**: it has a `# GOALS` half and a
+  `# NON-GOALS` half, and says why — *"Goals have a done state. Non-goals are continuous
+  practice with no finish line — they still matter, they just can't be completed."* The
+  seed follows the document; it does not decide.
 
-  The other eight are standing practices and open-ended programmes — *"DDIA, a chapter a
-  week, forever"*, *"meetups, weekly, ongoing"*, *"many small builds, you pick what"*.
-  Giving those a deadline invented a finish line the roadmap never claimed, and each then
-  took an equal arc and diluted the two that could actually be behind. They are TEXT WINDOWS
-  now, on **Plum** (Career's hue to paper, as the health tiers are Moss), **above the line**
-  where their goal cards were, in roadmap order from the month being lived.
+  **Goals:** SQL (counted, 18/50), Algorithms (counted, 1/150), AWS SAA-C03, English test,
+  and Projects — the last carrying all 22 features of Projects V–IX as subtasks, so the
+  ring reads real pace rather than five all-or-nothing ticks.
+  **Notes, on Plum, above the line:** Reading, YouTube, Verification, Meetups, Interview
+  practice.
 
-  **Their goals are DROPPED, never deleted** (`RETIRED_GOALS` in the seed script, listed by
-  name so it can only touch the eight rows it is pointed at). `listGoals` already filters
-  `dropped`, so they leave every screen while the row and all 49 subtasks stay on the record.
-  Their goal cards on the line ARE deleted: a card pointing at a dropped goal renders as
-  nothing, which is a dead row rather than a card.
+  **TWO DATES ARE ASSUMPTIONS AND SAY SO IN THE SCRIPT.** The roadmap gives Projects
+  "December → ongoing" and no finish line, so 30 June 2027 is chosen because Project IX is
+  what the grad applications (Feb–May) and the interview practice (Feb–June) both point at.
+  And Algorithms is **150, not the roadmap's cap of 100** — the owner's own answer when
+  asked. Both are one field on `/goals`.
 
-  **The career band is 200 characters per note, and that is measured, not styled.** On the
-  timeline's landing view world y maps to screen y − 212; the masthead's bottom is at screen
-  74 and the line is at world 500, so a card must start below world 286 and end above 500.
-  A text window is almost exactly as many pixels tall as it has characters at `CARD_W`, so
-  200 characters is a ~200px card in a ~204px band. Lengthen one and it sits under the
-  masthead on the first screen the owner sees.
+  **Reconciliation is by NAME, never by "whatever the manifest no longer mentions."**
+  `RETIRED_GOALS` drops goals by title (status `dropped`, so the row and its subtasks stay
+  — 83 of them now); `RETIRED_NOTES` deletes notes matched on **the whole first line, minus
+  the exact text about to be written under it**. The title match means a note the owner has
+  retitled is left alone; the text exclusion is why "Meetups · weekly, ongoing", which kept
+  its title through the rewrite and changed its body, is replaced once rather than deleted
+  and re-added on every run. A goal that comes BACK (AWS, demoted to a note on 2026-09-23
+  and promoted again by the rewrite) is **reopened, not recreated**, so it keeps its six
+  subtasks instead of gaining a dead twin.
 - **HEALTH → the timeline, and ONLY the timeline.** Health's ring is five fixed parts with no
   goals in it and that does not change. The tiers are a sequence GATED BY EACH OTHER rather
   than by a calendar, so they are free-floating text windows (one Moss tint, below the line,
