@@ -1090,11 +1090,31 @@ as rows pointing at circles the canvas never drew. The timeline tests are writte
 Seeded by `scripts/seed-roadmap.mjs` (dry run by default, `--commit` to write, idempotent by
 inspection and never overwriting). The owner's ruling, 2026-09-20, is the SPLIT:
 
-- **CAREER → goals.** Ten, nine with deadlines, so nine take an arc and "Systems depth" —
-  explicitly *ongoing, indefinitely* — lists without one. A deadline on forever would be a
-  lie, and the no-deadline case already exists for exactly this. SQL and Algorithms are
-  COUNTED goals (18/50, 1/150); Builds carries the roadmap's own seven ticks, so it starts
-  at its true 44% rather than lying on day one.
+- **CAREER → TWO goals and eight sticky notes** — the owner's ruling, 2026-09-23, revising
+  the ten goals the first seeding made. What separates them is whether the thing has a
+  **finish line a pace can be measured against**. SQL is 50 problems by 30 September and
+  Algorithms is 150 by 31 January: a count, a date, and an answer to "am I on track". Both
+  are COUNTED goals (18/50, 1/150) and both take an arc.
+
+  The other eight are standing practices and open-ended programmes — *"DDIA, a chapter a
+  week, forever"*, *"meetups, weekly, ongoing"*, *"many small builds, you pick what"*.
+  Giving those a deadline invented a finish line the roadmap never claimed, and each then
+  took an equal arc and diluted the two that could actually be behind. They are TEXT WINDOWS
+  now, on **Plum** (Career's hue to paper, as the health tiers are Moss), **above the line**
+  where their goal cards were, in roadmap order from the month being lived.
+
+  **Their goals are DROPPED, never deleted** (`RETIRED_GOALS` in the seed script, listed by
+  name so it can only touch the eight rows it is pointed at). `listGoals` already filters
+  `dropped`, so they leave every screen while the row and all 49 subtasks stay on the record.
+  Their goal cards on the line ARE deleted: a card pointing at a dropped goal renders as
+  nothing, which is a dead row rather than a card.
+
+  **The career band is 200 characters per note, and that is measured, not styled.** On the
+  timeline's landing view world y maps to screen y − 212; the masthead's bottom is at screen
+  74 and the line is at world 500, so a card must start below world 286 and end above 500.
+  A text window is almost exactly as many pixels tall as it has characters at `CARD_W`, so
+  200 characters is a ~200px card in a ~204px band. Lengthen one and it sits under the
+  masthead on the first screen the owner sees.
 - **HEALTH → the timeline, and ONLY the timeline.** Health's ring is five fixed parts with no
   goals in it and that does not change. The tiers are a sequence GATED BY EACH OTHER rather
   than by a calendar, so they are free-floating text windows (one Moss tint, below the line,
@@ -1285,8 +1305,17 @@ week looked like.
   underlined and its dot takes a 1.5px ink ring.
 - **Tapping a day switches the dashboard to that day** (`goToDay`, the atomic swap and the
   catching-up bar).
-- **NOTHING ELSE.** No tooltips, no gridline numbers, no axis ticks, no productivity, no
-  legend, no streak flame, no target line, no comparison.
+- **HOVERING A DAY READS THAT DAY** — the owner's ruling, 2026-09-23, the one amendment to
+  the rule below. It is NOT a tooltip and must not become one: no floating surface, no
+  shadow, nothing drawn over the chart. The card already HAS a figure slot with a label
+  above it, so pointing at a column simply re-addresses that slot — the label becomes the
+  date and the numeral becomes that day's percentage, in **INK** rather than the average's
+  amber, so the two readings can never be mistaken for each other. Leaving returns it to the
+  average, and the pointed-at dot grows rather than changing colour. **Focus does the same
+  as hover**: the columns are already focusable for the tap, and a keyboard should not get a
+  lesser chart.
+- **NOTHING ELSE.** No gridline numbers, no axis ticks, no productivity, no legend, no
+  streak flame, no target line, no comparison.
 
 ### Phone (< 64rem)
 

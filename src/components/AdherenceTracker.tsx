@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { prettyDate } from "@/lib/dates";
 import type { TrackerDay } from "./PillarSections";
 
@@ -70,6 +72,16 @@ const y = (pct: number) =>
 const narrowDay = (iso: string) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", { weekday: "narrow" });
 
+/** "2026-09-18" -> "Fri 18 Sep". Short deliberately: it stands in the `average` label's
+ *  slot, one line of small type beside a 28px numeral, and prettyDate's "Friday 18
+ *  September" would wrap there. Noon for the same reason narrowDay uses it. */
+const shortDay = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+
 export default function AdherenceTracker({
   days,
   viewing,
@@ -81,6 +93,9 @@ export default function AdherenceTracker({
   viewing: string;
   onDay: (date: string) => void;
 }) {
+  /** Which column the pointer (or focus) is on, or null for none. The chart's only state. */
+  const [hover, setHover] = useState<number | null>(null);
+
   const ready = days.length >= SLOTS;
   const past = ready ? days.slice(0, PAST) : [];
   const now = ready ? days[PAST]! : null;
@@ -93,21 +108,34 @@ export default function AdherenceTracker({
 
   const pts = past.map((d, i) => [x(i), y(d.pct)] as const);
 
+  // The day being pointed at, if any. Guarded on `ready` as well as on the index, so a
+  // stale hover from a render before the days landed cannot address a day that is not there.
+  const hovered = ready && hover != null ? (days[hover] ?? null) : null;
+
   return (
     <section className="record-card shrink-0">
       <div className="section-head">
-        <h2 className="text-small font-semibold">average</h2>
+        {/* The label names whichever reading the numeral beside it is showing. */}
+        <h2 className="text-small font-semibold">
+          {hovered ? shortDay(hovered.date) : "average"}
+        </h2>
         {/* One step darker than the area it is printed over — see --color-accent-deep in
             globals.css. Not a second accent: a figure sitting on a tint of its own colour
-            has to be darker than that tint to read. */}
+            has to be darker than that tint to read.
+            INK for a single day, though: --color-accent-deep is the AVERAGE's colour and
+            nothing else's, so a day's figure wearing it would read as a second average
+            rather than as a different question. */}
         <span
           className="stat-hero text-heading"
           style={{
-            color:
-              avg == null ? "var(--color-muted)" : "var(--color-accent-deep)",
+            color: hovered
+              ? "var(--color-ink)"
+              : avg == null
+                ? "var(--color-muted)"
+                : "var(--color-accent-deep)",
           }}
         >
-          {avg == null ? "—" : `${avg}%`}
+          {hovered ? `${hovered.pct}%` : avg == null ? "—" : `${avg}%`}
         </span>
       </div>
 
@@ -159,12 +187,15 @@ export default function AdherenceTracker({
               strokeLinecap="round"
             />
 
+            {/* The pointed-at dot GROWS rather than changing colour. The figure at the top
+                of the card has already moved; this only has to say which column moved it,
+                and a hue here would be a fourth meaning on a chart that carries three. */}
             {past.map((d, i) => (
               <circle
                 key={d.date}
                 cx={x(i)}
                 cy={y(d.pct)}
-                r={3}
+                r={hover === i ? 4.5 : 3}
                 fill="var(--color-accent)"
               />
             ))}
@@ -182,7 +213,7 @@ export default function AdherenceTracker({
             <circle
               cx={x(PAST)}
               cy={y(now!.pct)}
-              r={3.5}
+              r={hover === PAST ? 5 : 3.5}
               fill="var(--card-bg, var(--color-panel))"
               stroke="var(--color-accent)"
               strokeWidth={1.75}
@@ -218,6 +249,15 @@ export default function AdherenceTracker({
                 tabIndex={0}
                 aria-label={`${prettyDate(d.date)} · ${d.pct}% — open that day`}
                 onClick={() => onDay(d.date)}
+                // Pointing at a column READS it, in the card's own figure slot above —
+                // see the header comment. Focus does the same as hover: these columns are
+                // already focusable for the tap, and a keyboard should not get a lesser
+                // chart. Each handler only clears the hover it set, so moving between two
+                // adjacent columns cannot leave the readout blank.
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+                onFocus={() => setHover(i)}
+                onBlur={() => setHover((h) => (h === i ? null : h))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();

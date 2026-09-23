@@ -90,123 +90,60 @@ const GOALS = [
       "NeetCode, in their order, in Python. 25 minutes then read the solution; redo from scratch three days later. Week one: Counter, defaultdict, deque, heapq, bisect, lru_cache. Feb onward, 2/week.",
     count: { done: 1, target: 150 },
   },
-  {
-    // NO DEADLINE, deliberately. "Now -> ongoing, indefinitely" in the roadmap, and DDIA is
-    // a chapter a week forever. It lists under Career and takes no arc of the ring.
-    title: "Systems depth",
-    deadline: null,
-    target:
-      "Hussein Nasser for backend and database internals — meal-length, no schedule.",
-    subtasks: [
-      "A Philosophy of Software Design — Ousterhout, ~190 pages, this phase",
-      "Designing Data-Intensive Applications — a chapter a week from December",
-      "System Design Primer — a section a week",
-    ],
-  },
-  {
-    title: "Data modelling",
-    deadline: "2026-12-31",
-    target:
-      "One weekend. Facts and dimensions, slowly changing dimensions, normalisation trade-offs, why a schema that reads well writes badly.",
-    subtasks: [
-      "The Data Warehouse Toolkit — Kimball, chapter 1",
-      "Kimball, chapter 2",
-      "Kimball, chapter 3",
-    ],
-  },
-  {
-    title: "Builds",
-    deadline: "2027-01-31",
-    target:
-      "Many small builds, chosen for coverage — each one should force a decision you have not made before. One ADR per build: half a page, twenty minutes, and name the option you rejected.",
-    // The coverage checklist, with the roadmap's own ticks preserved. A goal that started
-    // at 0 when seven of these are already done would be the record lying on day one.
-    subtasks: [
-      { title: "Data modelling — schema, normalised or not, read vs write cost", done: true },
-      { title: "Auth — who are you, what can you touch", done: true },
-      { title: "Testing — what you verify and what you deliberately don't", done: true },
-      { title: "Scheduled work — missed runs, overlapping runs", done: true },
-      { title: "External integration — rate limits, schema changes, downtime", done: true },
-      { title: "Idempotency — same operation arrives twice", done: true },
-      { title: "Config and deployment — secrets, behaviour without a redeploy", done: true },
-      { title: "State and persistence — what survives a crash, what durability costs" },
-      { title: "Concurrency — two things at once, touching the same data" },
-      { title: "Asynchrony — queues, and what the user sees while waiting" },
-      { title: "Failure and retry — backoff, and what stops you making it worse" },
-      { title: "Caching and invalidation — what's worth caching, how you know it's stale" },
-      { title: "Observability — what happened at 2am, answered six weeks later" },
-      { title: "Real-time — pushing to the client. Websockets vs polling" },
-      { title: "Blob handling — uploads, storage, things too big for the database" },
-      { title: "From scratch: a small key-value store — a weekend, once" },
-    ],
-  },
-  {
-    title: "One operated system",
-    deadline: "2027-06-30",
-    target:
-      "One thing that runs, that people use, that can break at 3am. This is the thing you point at in interviews; the small builds are how you get good enough to make it.",
-    subtasks: [
-      "Real users, even ten",
-      "Stateful and concurrent — the interesting failures live where two things touch",
-      "Observable — logs and metrics you'd actually use during an incident",
-      "Operated — you kept it up, and you know what fell over and why",
-      "One decision you can defend for ten minutes, with the alternative you rejected",
-    ],
-  },
-  {
-    title: "AWS Solutions Architect – Associate",
-    deadline: "2026-12-31",
-    target:
-      "SAA-C03, ~$150. Not DEA-C01 — that picks a lane for you. Compute, storage, networking, IAM, availability, cost, trade-offs.",
-    subtasks: [
-      "SAA-C03 Exam Guide — domain weightings first",
-      "AWS Skill Builder, free tier",
-      "Maarek or Cantrill on Udemy",
-      "Build something on the AWS Free Tier — don't pass it on video alone",
-      "Official practice exam",
-      "Book it and sit it",
-    ],
-  },
-  {
-    title: "Verification",
-    deadline: "2027-01-31",
-    target:
-      "The actual 'managing AI' skill: not prompting, but catching the model being confidently wrong.",
-    subtasks: [
-      "pytest — the invariants that must hold, not coverage theatre",
-      "Hypothesis — property-based testing on one real project",
-      "ArjanCodes Code Roasts — reviewing code you didn't write",
-      "Specs first, then drive the agent, then review every change. Keep the specs",
-    ],
-  },
-  {
-    title: "Meetups and industry events",
-    deadline: "2027-06-30",
-    target:
-      "The sponsorship pipeline. Applications have produced silence; the one live thing came from a room you were in. Sponsorship is a decision a person makes about someone they trust.",
-    subtasks: [
-      "Same group, four times — recognition is the entire point",
-      "An answer to 'what are you working on' — the thing you're building and one problem in it",
-      "Ask about their work, not for a job",
-      "Follow up within 48 hours, every time. Most people don't",
-      "Track it: who, where, what they work on, what you said you'd send",
-      "Give a lightning talk — under-subscribed, and it inverts the dynamic",
-      "Range: backend, cloud, database, AI/LLM, language-specific. Conferences too",
-    ],
-  },
-  {
-    title: "Technical interviews",
-    deadline: "2027-06-30",
-    target:
-      "February to June. The hard part isn't the algorithm, it's narrating while you think.",
-    subtasks: [
-      "Live coding out loud — solve to an empty room, or record yourself",
-      "System design — clarify, sketch, name the bottleneck, state the trade-off",
-      "The AI question — a concrete example of catching it confidently wrong",
-      "Defending a build — the ADRs are this",
-      "One timed mock on whatever platform the invite names",
-    ],
-  },
+];
+
+// ------------------------------------------------------- THE REST OF THE CAREER ROADMAP
+//
+// STICKY NOTES, NOT GOALS — the owner's ruling, 2026-09-23, replacing the eight goals the
+// first seeding made of these sections.
+//
+// What separates the two is whether the thing has a FINISH LINE the ring can measure a pace
+// against. SQL is 50 problems by 30 September and Algorithms is 150 by 31 January: both are
+// a count, a date, and an answer to "am I on track". The other eight are standing practices
+// and open-ended programmes — "DDIA, a chapter a week, forever", "meetups, weekly, ongoing",
+// "many small builds, you pick what". Giving those a deadline invented a finish line the
+// roadmap never claimed, and every one of them then took an equal arc of the Career ring and
+// diluted the two that could actually be behind.
+//
+// They still belong on the year. A sticky note is exactly the right shape for them: words
+// you put somewhere and look at, feeding nothing. PLUM, because these are Career's, the way
+// the health tiers are Moss.
+//
+// Their goals are DROPPED, never deleted (RETIRED_GOALS below) — status 'dropped' hides a
+// goal from every list while its row and its subtasks stay on the record, which is this
+// app's rule for everything: preserve data, migrate, never drop.
+
+const CAREER_TINT = "plum";
+
+const CAREER_NOTES = [
+  "Systems depth · ongoing, indefinitely\nA Philosophy of Software Design first. Then DDIA, a chapter a week from December, forever. System Design Primer, a section a week. Hussein Nasser for internals.",
+  "Data modelling · one weekend before January\nKimball's Data Warehouse Toolkit, chapters 1–3 only. Facts and dimensions, slowly changing dimensions, why a schema that reads well writes badly.",
+  "Builds · December → January\nMany small builds, each forcing a new decision. One ADR each. Left to cover: state, concurrency, async, retry, caching, observability, real-time, blobs, and a KV store.",
+  "One operated system · January → ongoing\nOne thing that runs, that people use, that can break at 3am. Real users, stateful, observable, OPERATED. One decision you can defend for ten minutes.",
+  "AWS SAA-C03 · sit December · ~$150\nNot DEA-C01. Start from the exam guide's domain weightings. Skill Builder, Maarek or Cantrill, and build on the Free Tier — not video alone.",
+  "Verification · December → ongoing\nCatching the model being confidently wrong. pytest for the invariants, not coverage theatre. Hypothesis for the cases you didn't think of. Specs first.",
+  "Meetups · weekly, ongoing\nThe sponsorship pipeline. Same group FOUR times — recognition is the point. Stay for the 40 minutes after the talk. Follow up within 48 hours. Speak eventually.",
+  "Technical interviews · February → June 2027\nLive coding OUT LOUD is the hard part, not the algorithm. System design: clarify, sketch, name the bottleneck, state the trade-off.",
+];
+
+/**
+ * The goals the first seeding made of the sections above, to be retired.
+ *
+ * LISTED BY NAME rather than derived from "everything not in GOALS", so this can only ever
+ * touch the eight rows it is pointed at. A rule that dropped whatever the manifest no longer
+ * mentions would quietly drop a goal the owner wrote by hand the day after.
+ *
+ * Dropping is idempotent: the second run updates rows that are already 'dropped'.
+ */
+const RETIRED_GOALS = [
+  "Systems depth",
+  "Data modelling",
+  "Builds",
+  "One operated system",
+  "AWS Solutions Architect – Associate",
+  "Verification",
+  "Meetups and industry events",
+  "Technical interviews",
 ];
 
 // ------------------------------------------------------------------ THE MONTH NOTES
@@ -223,8 +160,7 @@ const NOTES = {
   "2027-01": "Sit IELTS/PTE — 8.0 every band. Must be within 12 months of the 485 lodgement",
   "2027-02": "Grad program applications open — through to May",
   "2027-06": "NAATI CCL Indonesian",
-  "2027-07":
-    "Deloitte graduate window, 1–22 Jul (2026 dates — verify) · request the completion letter the day it exists",
+  "2027-07": "Deloitte graduate window, 1–22 Jul (2026 dates — verify) · request the completion letter the day it exists",
   "2027-08": "LODGE 485 — student visa expires 30/08/2027 · book the health exam immediately",
   "2028-02": "Professional Year decision point — only if no skilled job",
   "2028-07": "ACS skills assessment — nominate three ANZSCO codes, one fee",
@@ -348,9 +284,46 @@ const healthPlaced = HEALTH.map((text, i) => ({
   text,
   x: Math.round(monthX(THIS_MONTH) - CARD_W / 2 + i * (CARD_W + GAP)),
   y: LINE_Y + 90,
+  color: TINT,
 }));
 
+/**
+ * The career notes: the same ladder, ABOVE the line, in roadmap order.
+ *
+ * Career above and health below is the shape the canvas already had when the career items
+ * were goal cards, and it is worth keeping: one glance separates the two plans without
+ * reading a word of either. They start at the month being lived for the same reason the
+ * health tiers do — a plan drawn under months that have already passed reads as a thing you
+ * have already done.
+ *
+ * THE BAND IS TIGHT, AND BOTH ITS EDGES ARE MEASURED rather than guessed. On the timeline's
+ * own landing view the world sits 212px above the viewport, so world y maps to screen
+ * y - 212; the masthead's bottom edge is at screen 74, and the line is at world 500. A card
+ * must therefore start below world 286 to clear the masthead and end above 500 to clear the
+ * line. That is why these notes are capped at 200 characters: a text window is almost
+ * exactly as many pixels tall as it has characters at CARD_W, so 200 characters is a ~200px
+ * card in a ~204px band. Lengthen one and it sits under the masthead on the first screen
+ * the owner sees.
+ *
+ * It also clears the two remaining goal cards above it (ROWS[0] = 60, a goal card about
+ * 140 tall).
+ */
+const CAREER_NOTE_Y = 296;
+
+const careerPlaced = CAREER_NOTES.map((text, i) => ({
+  text,
+  x: Math.round(monthX(THIS_MONTH) - CARD_W / 2 + i * (CARD_W + GAP)),
+  y: CAREER_NOTE_Y,
+  color: CAREER_TINT,
+}));
+
+/** Every text window this seed owns, in the order it prints them. */
+const textPlaced = [...careerPlaced, ...healthPlaced];
+
 // ------------------------------------------------------------------ THE RUN
+
+/** The engine's own stamp shape, so a row this script touches looks like every other. */
+const stamp = () => new Date().toISOString().replace(/[.]\d+Z$/, "Z");
 
 const log = [];
 const say = (s) => (log.push(s), console.log(s));
@@ -434,14 +407,27 @@ function emitSql() {
   }
   out.push("");
 
-  out.push("-- The health tiers, below the line, on one tint.");
-  for (const h of healthPlaced) {
+  out.push("-- The career roadmap's standing practices above the line, the health tiers");
+  out.push("-- below it. Each guarded on its own text, so a re-paste adds nothing.");
+  for (const h of textPlaced) {
     out.push(
       `INSERT INTO timeline_windows (kind,text,color,x,y)
 ` +
-        `SELECT 'text', ${q(h.text)}, ${q(TINT)}, ${h.x}, ${h.y}
+        `SELECT 'text', ${q(h.text)}, ${q(h.color)}, ${h.x}, ${h.y}
 ` +
         ` WHERE NOT EXISTS (SELECT 1 FROM timeline_windows WHERE kind='text' AND text=${q(h.text)});`,
+    );
+  }
+
+  out.push("");
+  out.push("-- The eight sections that are sticky notes now. DROPPED, never deleted: the row");
+  out.push("-- and its subtasks stay on the record, and every list already hides 'dropped'.");
+  for (const t of RETIRED_GOALS) {
+    out.push(
+      `DELETE FROM timeline_windows WHERE goal_id IN (SELECT id FROM goals WHERE title=${q(t)});`,
+    );
+    out.push(
+      `UPDATE goals SET status='dropped' WHERE title=${q(t)} AND status!='dropped';`,
     );
   }
 
@@ -576,17 +562,47 @@ async function main() {
     });
   }
 
-  for (const h of healthPlaced) {
+  for (const h of textPlaced) {
     if (placedText.has(h.text)) {
-      say(`tier  SKIP  ${h.text.split("\n")[0]}`);
+      say(`note  SKIP  ${h.text.split("\n")[0]}`);
       continue;
     }
-    say(`tier  ADD   ${h.text.split("\n")[0]} @ ${h.x},${h.y}`);
+    say(`note  ADD   ${h.text.split("\n")[0]} @ ${h.x},${h.y}`);
     if (!COMMIT) continue;
     await client.execute({
       sql: "INSERT INTO timeline_windows (kind,text,color,x,y) VALUES ('text',?,?,?,?)",
-      args: [h.text, TINT, h.x, h.y],
+      args: [h.text, h.color, h.x, h.y],
     });
+  }
+
+  say("");
+
+  // The eight sections that became sticky notes. Their goal rows are DROPPED rather than
+  // deleted - listGoals already filters 'dropped', so they leave every screen while the row
+  // and its subtasks stay on the record. Their timeline cards go outright: a goal window
+  // pointing at a dropped goal renders as nothing, which is a dead row, not a card.
+  for (const t of RETIRED_GOALS) {
+    const g = await client.execute({
+      sql: "SELECT id, status FROM goals WHERE title=?",
+      args: [t],
+    });
+    const live = g.rows.filter((r) => String(r.status) !== "dropped");
+    if (!live.length) {
+      say(`drop  SKIP  ${t}`);
+      continue;
+    }
+    say(`drop  DROP  ${t} - now a sticky note`);
+    if (!COMMIT) continue;
+    for (const r of live) {
+      await client.execute({
+        sql: "DELETE FROM timeline_windows WHERE goal_id=?",
+        args: [Number(r.id)],
+      });
+      await client.execute({
+        sql: "UPDATE goals SET status='dropped', updated_at=? WHERE id=?",
+        args: [stamp(), Number(r.id)],
+      });
+    }
   }
 
   say("");
