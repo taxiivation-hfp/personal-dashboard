@@ -6,9 +6,9 @@
 // The two source documents are roadmap.md (career) and healthroadmap.md (health), and the
 // owner's ruling of 2026-09-20 is what splits them:
 //
-//   CAREER  -> goals. Ten of them, nine with deadlines, so nine take an arc of the Career
-//              ring and "Systems depth" — which is explicitly ongoing, indefinitely — lists
-//              without one. A deadline on forever would be a lie.
+//   CAREER  -> goals for the half of roadmap.md headed GOALS (four, each with a finish line
+//              the Career ring can pace against), and plum sticky notes for the half headed
+//              NON-GOALS. A deadline on forever would be a lie.
 //   HEALTH  -> the timeline, and ONLY the timeline. Health's ring is five fixed parts and
 //              has no goals in it (spec §5); health here is a sequence of tiers GATED BY
 //              EACH OTHER rather than by a calendar, which is exactly what a free-floating
@@ -119,40 +119,8 @@ const GOALS = [
       "8.0 in every band",
     ],
   },
-  {
-    // NO DATE IS GIVEN for this one: the roadmap says "December -> ongoing". 30 June 2027 is
-    // an ASSUMPTION, and a stated one — Project IX is what the grad applications
-    // (Feb-May) and the interview practice (Feb-June) both point at, so a finish line after
-    // both would be no finish line at all. One field on /goals if it is wrong.
-    title: "Projects",
-    deadline: "2027-06-30",
-    target:
-      "One ADR per project: half a page, the options, what you picked, why, what it costs — writing down the rejected option forces you to have considered one. The features listed ARE the point; what you build around them is yours.",
-    subtasks: [
-      "V · In-memory store with get/set/delete",
-      "V · Persistence to disk, and recovery after a kill -9",
-      "V · Concurrent clients writing to the same key",
-      "V · TTL and expiry",
-      "VI · A background job queue",
-      "VI · Work that takes longer than a user will wait",
-      "VI · Retry with exponential backoff",
-      "VI · Dead-letter handling for jobs that keep failing",
-      "VI · Status visible to the user while they wait",
-      "VII · File or media upload",
-      "VII · Blob storage separate from the database",
-      "VII · A cache layer with a deliberate invalidation strategy",
-      "VII · Before/after measurement proving the cache earned its place",
-      "VIII · Server pushing to the client rather than the client asking",
-      "VIII · Connection and presence state",
-      "VIII · Reconnection after a dropped connection",
-      "VIII · A written comparison against polling, and why you chose what you chose",
-      "IX · Deployed, with real users — ten is enough",
-      "IX · Structured logging and metrics you'd open during an incident",
-      "IX · Something broke and you can narrate what and why",
-      "IX · One decision you can defend for ten minutes",
-      "IX · Kept alive over weeks, not demoed once",
-    ],
-  },
+  // Projects WAS the fifth goal, with 22 subtasks and an assumed 30 June 2027 deadline. It is
+  // a non-goal since the owner's ruling of 2026-09-28 — see PROJECT_NOTES below.
 ];
 
 // ------------------------------------------------------- THE REST OF THE CAREER ROADMAP
@@ -178,19 +146,49 @@ const GOALS = [
 
 const CAREER_TINT = "plum";
 
+// THE OWNER'S OWN WORDS, copied character for character from production on 2026-09-28 —
+// trailing spaces included, because the skip below matches on the whole text. On 2026-09-27
+// they cut Reading, YouTube and Meetups down on the timeline itself and deleted Verification
+// outright. A seed still holding the longer versions would re-add them beside the edited
+// ones on its next run, so the manifest follows the notes rather than the other way round.
 const CAREER_NOTES = [
-  "Reading · ongoing, indefinitely\nA Philosophy of Software Design first. DDIA a chapter a week from December, forever. Kimball ch 1–3. System Design Primer, a section a week.",
-  "YouTube · meals and commutes\nSupplement, never substitute. Hussein Nasser for internals, ByteByteGo for system design, CodeAesthetic, ArjanCodes Roasts, StatQuest. Never instead of writing SQL.",
-  "Verification · every project, forever\nCatching the model being confidently wrong. pytest for the invariants, not coverage theatre. Hypothesis for the cases you didn't write. Specs first.",
-  "Meetups · weekly, ongoing\nThe sponsorship pipeline. Same group four times beats four groups once. Stay for the after. Follow up within 48 hours. Speak at one eventually.",
+  "A Philosophy of Software Design first. \n\nKimball ch 1–3. System Design Primer, a section a week.",
+  "Hussein Nasser for internals\n\nByteByteGo for system design\n\nCodeAesthetic\n\nArjanCodes Roasts\n\nStatQuest.",
+  "Weekly Meetups \n\nStay for the after. Follow up within 48 hours. Speak at one eventually.",
   "Interview practice · February → June\nLive coding OUT LOUD is the hard part, not the algorithm. System design: clarify, sketch, name the bottleneck, state the trade-off. One timed mock per platform.",
+];
+
+// ------------------------------------------------------------------ THE PROJECT NOTES
+//
+// roadmap.md's "Projects" section, a NON-GOAL since the owner's ruling of 2026-09-28: "build
+// whatever you want" — the list is what to INCORPORATE into whatever that is, so there is no
+// finish line for a ring to pace against, and the 22-subtask goal it replaces was ticking
+// features of five prescribed projects the roadmap no longer prescribes.
+//
+// One note per item in the document's own order: the ADR habit first (it applies to every
+// project, so it is said once), then the nine topics, then the from-scratch exception and the
+// one you keep alive. Terms on one line, in the owner's terse style — the explanations stay in
+// roadmap.md. No "Projects ·" prefix: the block they sit in is what groups them.
+const PROJECT_NOTES = [
+  "Every project · one ADR\n\nHalf a page: what you chose, what you didn't, why.",
+  "Persistence and durability\n\nwrite-ahead log · fsync · crash recovery · durability vs latency",
+  "Concurrency\n\nrace conditions · locks · optimistic vs pessimistic locking · isolation levels · deadlock",
+  "Async work\n\nmessage queue · worker pool · job scheduling · exponential backoff · dead-letter queue · at-least-once vs exactly-once delivery",
+  "Failure handling\n\ntimeouts · circuit breaker · bulkhead · graceful degradation · retry storm",
+  "Caching\n\ncache invalidation · TTL · write-through vs write-behind · cache stampede · LRU eviction",
+  "Blob handling\n\nobject storage · presigned URLs · streaming uploads · multipart upload · CDN",
+  "Real-time\n\nWebSockets · server-sent events · long polling · connection state · backpressure",
+  "Observability\n\nstructured logging · correlation IDs · metrics vs logs vs traces · p99 latency · distributed tracing · alerting on symptoms not causes",
+  "Operating it\n\ndeploy pipeline · rollback · secrets management · feature flags · incident postmortem · on-call",
+  "Build from scratch · a key-value store\n\nA weekend, no libraries doing the work.\n\nget/set/delete · persist to disk · recover after kill -9 · TTL · concurrent writers",
+  "One you keep alive\n\nDeployed, real users even if it's ten.\n\nRunning for weeks, not demoed once. The one you point at in interviews.",
 ];
 
 /**
  * The goals the first seeding made of the sections above, to be retired.
  *
  * LISTED BY NAME rather than derived from "everything not in GOALS", so this can only ever
- * touch the eight rows it is pointed at. A rule that dropped whatever the manifest no longer
+ * touch the rows it is pointed at. A rule that dropped whatever the manifest no longer
  * mentions would quietly drop a goal the owner wrote by hand the day after.
  *
  * Dropping is idempotent: the second run updates rows that are already 'dropped'.
@@ -203,13 +201,18 @@ const CAREER_NOTES = [
  * alone, while one whose body they reworded still goes. A prefix match was tried first and
  * is worse — "Builds" would swallow any note of theirs that happened to start with it.
  *
- * A title still in CAREER_NOTES is never retired (the guard in the loop): "Meetups ·
- * weekly, ongoing" survived the rewrite with a new body, and without that guard every run
- * would delete it and add it back under a new id.
+ * A title still in CAREER_NOTES is never retired (the guard in the loop): a note that keeps
+ * its title through a rewrite and changes its body would otherwise be deleted and added back
+ * under a new id on every run. (No retired title is in CAREER_NOTES today — "Meetups ·
+ * weekly, ongoing" was, until the owner retitled it "Weekly Meetups" on 2026-09-27.)
  *
  * The rewrite of 2026-09-23 replaced "Systems depth" and "Data modelling" with one Reading
  * note, folded "Builds" and "One operated system" into the Projects GOAL, promoted AWS back
  * to a goal, and reworded the remaining three.
+ *
+ * The last three are the seed's own titles for notes the owner has since rewritten or
+ * deleted on the timeline (2026-09-27). Their rewrites begin with different first lines, so
+ * nothing of theirs matches; what does is a stale seeded copy on a database that still has one.
  */
 const RETIRED_NOTES = [
   "Systems depth · ongoing, indefinitely",
@@ -220,8 +223,13 @@ const RETIRED_NOTES = [
   "Verification · December → ongoing",
   "Meetups · weekly, ongoing",
   "Technical interviews · February → June 2027",
+  "Reading · ongoing, indefinitely",
+  "YouTube · meals and commutes",
+  "Verification · every project, forever",
 ];
 
+// "Projects" joined on 2026-09-28: a non-goal now, its features PROJECT_NOTES. Dropping keeps
+// the row and its 22 subtasks on the record, and takes its card off the timeline.
 const RETIRED_GOALS = [
   "Systems depth",
   "Data modelling",
@@ -230,6 +238,7 @@ const RETIRED_GOALS = [
   "Verification",
   "Meetups and industry events",
   "Technical interviews",
+  "Projects",
 ];
 
 // ------------------------------------------------------------------ THE MONTH NOTES
@@ -391,8 +400,10 @@ const healthPlaced = HEALTH.map((text, i) => ({
  * card in a ~204px band. Lengthen one and it sits under the masthead on the first screen
  * the owner sees.
  *
- * It also clears the two remaining goal cards above it (ROWS[0] = 60, a goal card about
- * 140 tall).
+ * It also clears the goal cards above it (ROWS[0] = 60, a goal card about 140 tall). It does
+ * NOT clear the project block's lower row (y 224–435 from June 2027): on a database with no
+ * career notes yet, a run dated January 2027 to March 2028 lands some of these on top of it.
+ * Production already has them, so they are skipped there; drag them apart if it happens.
  */
 const CAREER_NOTE_Y = 296;
 
@@ -403,8 +414,32 @@ const careerPlaced = CAREER_NOTES.map((text, i) => ({
   color: CAREER_TINT,
 }));
 
+/**
+ * The project notes: one block ABOVE the line, two rows of six, read left to right and then
+ * down, starting in the JUNE 2027 column — the slot the Projects goal card itself sat in.
+ *
+ * The owner asked for December, when the roadmap says projects begin, and December through
+ * May above the line is already THEIR cards (AWS, English, Meetups, Interview practice, where
+ * they dragged them). Those are never moved, and the block is only worth anything as one
+ * block: split around them it stops reading as a set. So it starts at the first clear column
+ * and the owner drags it wherever they like.
+ *
+ * BOTH ROWS ARE MEASURED, on the live canvas on 2026-09-28: these notes render 134–211px
+ * tall at CARD_W. The upper row's tallest ends at 189; the lower row's tallest, the
+ * key-value store, ends at 435 — clear of the term bracket at LINE_Y - 48 = 452.
+ */
+const PROJECT_COLS = 6;
+const PROJECT_ROWS = [16, 224];
+
+const projectPlaced = PROJECT_NOTES.map((text, i) => ({
+  text,
+  x: Math.round(monthX("2027-06") - CARD_W / 2 + (i % PROJECT_COLS) * (CARD_W + GAP)),
+  y: PROJECT_ROWS[Math.floor(i / PROJECT_COLS)],
+  color: CAREER_TINT,
+}));
+
 /** Every text window this seed owns, in the order it prints them. */
-const textPlaced = [...careerPlaced, ...healthPlaced];
+const textPlaced = [...careerPlaced, ...projectPlaced, ...healthPlaced];
 
 // ------------------------------------------------------------------ THE RUN
 
@@ -529,7 +564,7 @@ function emitSql() {
   }
 
   out.push("");
-  out.push("-- The eight sections that are sticky notes now. DROPPED, never deleted: the row");
+  out.push("-- The sections that are sticky notes now. DROPPED, never deleted: the row");
   out.push("-- and its subtasks stay on the record, and every list already hides 'dropped'.");
   for (const t of RETIRED_GOALS) {
     out.push(
@@ -697,10 +732,9 @@ async function main() {
 
   // Retire first, so a note whose section was reworded does not sit beside its replacement
   // for the width of one run.
-  // Keyed on the WHOLE TEXT, not the title: "Meetups · weekly, ongoing" kept its title
-  // through the rewrite and changed its body, so a title guard would have left the old
-  // note standing and added the new one beside it. Matching the text retires the stale
-  // copy and then skips the fresh one on every run after.
+  // Keyed on the WHOLE TEXT, not the title: a note that kept its title through a rewrite and
+  // changed its body would otherwise leave the old copy standing beside the new one. Matching
+  // the text retires the stale copy and then skips the fresh one on every run after.
   const keepText = new Set(textPlaced.map((h) => h.text));
   for (const title of RETIRED_NOTES) {
     const hits = wins.rows.filter(
@@ -735,7 +769,7 @@ async function main() {
 
   say("");
 
-  // The eight sections that became sticky notes. Their goal rows are DROPPED rather than
+  // The sections that became sticky notes. Their goal rows are DROPPED rather than
   // deleted - listGoals already filters 'dropped', so they leave every screen while the row
   // and its subtasks stay on the record. Their timeline cards go outright: a goal window
   // pointing at a dropped goal renders as nothing, which is a dead row, not a card.

@@ -1090,31 +1090,43 @@ as rows pointing at circles the canvas never drew. The timeline tests are writte
 Seeded by `scripts/seed-roadmap.mjs` (dry run by default, `--commit` to write, idempotent by
 inspection and never overwriting). The owner's ruling, 2026-09-20, is the SPLIT:
 
-- **CAREER → FIVE goals and FIVE sticky notes**, and since the roadmap's rewrite of
+- **CAREER → FOUR goals and SIXTEEN sticky notes**, and since the roadmap's rewrite of
   2026-09-23 **the document itself draws the line**: it has a `# GOALS` half and a
   `# NON-GOALS` half, and says why — *"Goals have a done state. Non-goals are continuous
   practice with no finish line — they still matter, they just can't be completed."* The
   seed follows the document; it does not decide.
 
-  **Goals:** SQL (counted, 18/50), Algorithms (counted, 1/150), AWS SAA-C03, English test,
-  and Projects — the last carrying all 22 features of Projects V–IX as subtasks, so the
-  ring reads real pace rather than five all-or-nothing ticks.
-  **Notes, on Plum, above the line:** Reading, YouTube, Verification, Meetups, Interview
-  practice.
+  **Goals:** SQL (counted, 18/50), Algorithms (counted, 1/150), AWS SAA-C03, English test.
+  **Notes, on Plum, above the line:** Reading, YouTube, Meetups, Interview practice — and
+  the twelve PROJECT notes.
 
-  **TWO DATES ARE ASSUMPTIONS AND SAY SO IN THE SCRIPT.** The roadmap gives Projects
-  "December → ongoing" and no finish line, so 30 June 2027 is chosen because Project IX is
-  what the grad applications (Feb–May) and the interview practice (Feb–June) both point at.
-  And Algorithms is **150, not the roadmap's cap of 100** — the owner's own answer when
-  asked. Both are one field on `/goals`.
+  **PROJECTS IS A NON-GOAL** — the owner's ruling, 2026-09-28. The roadmap now says *"build
+  whatever you want"*: the list is what to INCORPORATE, not five prescribed projects, so
+  there is no finish line and the goal (22 subtasks, an assumed 30 June 2027 deadline) is
+  DROPPED — row and subtasks kept. Its features are twelve notes in the document's order:
+  the ADR habit first (said once, since it applies to every project), the nine topics
+  (Persistence and durability → Operating it), the from-scratch key-value store, and the one
+  you keep alive. Terse, terms on one line, no "Projects ·" prefix — the block groups them.
+  **They sit in the June 2027 column, two rows of six**, where the goal card was: the owner
+  asked for December, and December–May above the line is their own cards, which are never
+  moved. Row heights were measured on the live canvas (134–211px; the lower row ends at 435,
+  clear of the term bracket at 452).
+
+  **ONE NUMBER IS AN ASSUMPTION AND SAYS SO IN THE SCRIPT:** Algorithms is **150, not the
+  roadmap's cap of 100** — the owner's own answer when asked. One field on `/goals`.
+
+  **THE CAREER NOTES IN THE SEED ARE THE OWNER'S LIVE TEXT**, copied character for character
+  (trailing spaces included) after they cut Reading, YouTube and Meetups down on the timeline
+  and deleted Verification on 2026-09-27. The seed skips a note only on an EXACT text match,
+  so a manifest holding the older wording re-adds it beside their edit on the next run. When
+  the owner edits a seeded note on the canvas, sync the manifest before running the seed.
 
   **Reconciliation is by NAME, never by "whatever the manifest no longer mentions."**
   `RETIRED_GOALS` drops goals by title (status `dropped`, so the row and its subtasks stay
-  — 83 of them now); `RETIRED_NOTES` deletes notes matched on **the whole first line, minus
+); `RETIRED_NOTES` deletes notes matched on **the whole first line, minus
   the exact text about to be written under it**. The title match means a note the owner has
-  retitled is left alone; the text exclusion is why "Meetups · weekly, ongoing", which kept
-  its title through the rewrite and changed its body, is replaced once rather than deleted
-  and re-added on every run. A goal that comes BACK (AWS, demoted to a note on 2026-09-23
+  retitled is left alone; the text exclusion is why a note that keeps its title through a rewrite and
+  changes its body is replaced once rather than deleted and re-added on every run. A goal that comes BACK (AWS, demoted to a note on 2026-09-23
   and promoted again by the rewrite) is **reopened, not recreated**, so it keeps its six
   subtasks instead of gaining a dead twin.
 - **HEALTH → the timeline, and ONLY the timeline.** Health's ring is five fixed parts with no

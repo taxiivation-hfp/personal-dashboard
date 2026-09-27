@@ -38,56 +38,46 @@ Not DEA-C01 — that's a data product catalogue and it picks a lane for you. SAA
 
 IELTS or PTE. Target 8.0 in every band. Must be taken within 12 months of your 485 lodgement, so a Jan–Feb test covers you through to early 2028.
 
-## 5. Projects
-**December → ongoing**
-
-One **ADR** per project. Half a page: what you decided, the options, what you picked, why, what it costs. The value is that writing down the rejected option forces you to have considered one. Twenty minutes.
-
-Features listed are the point of each project — they're the decisions you haven't had to make yet. What you actually build around them is yours.
-
-### Project V — from scratch
-*A weekend. Write a key-value store, no libraries doing the work.*
-
-- In-memory store with get/set/delete
-- Persistence to disk, and recovery after a `kill -9`
-- Concurrent clients writing to the same key
-- TTL and expiry
-
-*Why this one: teaches you why Redis exists, what durability costs, and what a cache actually is. Not an HTTP server — socket and header parsing won't inform a component choice.*
-
-### Project VI — work that outlives the request
-- A background job queue
-- Work that takes longer than a user will wait
-- Retry with exponential backoff
-- Dead-letter handling for jobs that keep failing
-- Status visible to the user while they wait
-
-### Project VII — expensive things and big things
-- File or media upload
-- Blob storage separate from the database
-- A cache layer with a deliberate invalidation strategy
-- Before/after measurement proving the cache earned its place
-
-### Project VIII — push, not pull
-- Server pushing to the client rather than the client asking
-- Connection and presence state
-- Reconnection after a dropped connection
-- A written comparison against just polling, and why you chose what you chose
-
-### Project IX — operated, not just built
-*This is the one you point at in interviews. The others are how you get good enough to make it.*
-
-- Deployed, with real users — ten is enough
-- Structured logging and metrics you'd actually open during an incident
-- Something broke and you can narrate what and why
-- One decision you can defend for ten minutes
-- Kept alive over weeks, not demoed once
-
 ---
 
 # NON-GOALS
 
 No done state. Ongoing.
+
+## Projects
+**December → ongoing**
+
+Build whatever you want. The list below is what to incorporate — roughly in order, each one a thing you haven't had to deal with yet. Research the terms yourself.
+
+One **ADR** per project. Half a page: what you chose, what you didn't, why. The value is that naming the rejected option forces you to have considered one.
+
+### Incorporate next
+
+**Persistence and durability** — write-ahead log, fsync, crash recovery, durability vs latency
+
+**Concurrency** — race conditions, locks, optimistic vs pessimistic locking, transaction isolation levels, deadlock
+
+**Async work** — message queue, worker pool, job scheduling, exponential backoff, dead-letter queue, at-least-once vs exactly-once delivery
+
+**Failure handling** — timeouts, circuit breaker, bulkhead, graceful degradation, retry storm
+
+**Caching** — cache invalidation, TTL, write-through vs write-behind, cache stampede, LRU eviction
+
+**Blob handling** — object storage, presigned URLs, streaming uploads, multipart upload, CDN
+
+**Real-time** — WebSockets, server-sent events, long polling, connection state, backpressure
+
+**Observability** — structured logging, correlation IDs, metrics vs logs vs traces, p99 latency, distributed tracing, alerting on symptoms not causes
+
+**Operating it** — deploy pipeline, rollback, secrets management, feature flags, incident postmortem, on-call
+
+### One exception — build this from scratch
+A key-value store. A weekend, no libraries doing the work. Get/set/delete, persistence to disk, recovery after `kill -9`, TTL, concurrent writers.
+
+Teaches you why Redis exists, what durability actually costs, and what a cache is. Not an HTTP server — socket and header parsing won't inform a component choice.
+
+### And one you keep alive
+Deployed, real users even if it's ten, running for weeks rather than demoed once. This is the one you point at in interviews. Everything above is how you get good enough to make it.
 
 ## Reading
 **Ongoing, indefinitely**
