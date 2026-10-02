@@ -208,29 +208,19 @@ const durationMinutes = (
 };
 
 /**
- * GRAPHITE — Google's `colorId "8"`. IGNORED EVERYWHERE, by the owner's ruling of
- * 2026-09-18.
- *
- * Graphite used to mean a social event, counted by the Social ring. Social is gone, and
- * socialising "comes naturally in between blocks" — so an event in this colour is not a
- * block: it is not on the day's list to mark, it is not blocked hours in adherence, and it
- * is not hours worked. Past days re-read without them; that is accepted.
- *
- * The Events API reports only the eleven legacy colour ids, so Birch arrives as 8 as well.
- * That was measured on the owner's calendar and is accepted with the rule.
- */
-export const GRAPHITE_COLOR_ID = "8";
-
-/**
  * Is this calendar event a TIME BLOCK? THE ONE PLACE that decides — every reader of blocks
  * (the day's list, adherence on Today and on the strip, hours worked, the drill-downs) gets
  * them from `buildBlocks`, which asks this.
  *
- * Not a block: an ALL-DAY entry (a condition of the day, not eight hours of work you failed
- * to do) and a GRAPHITE event (see above).
+ * EVERY COLOUR IS A BLOCK, by the owner's ruling of 2026-10-03 (reversing the graphite
+ * exclusion of 2026-09-18): any timed event can be adhered, drifted or skipped. Colour
+ * still decides hours worked (`categoryOf`), not whether a block can be marked.
+ *
+ * Not a block: an ALL-DAY entry only (a condition of the day, not eight hours of work you
+ * failed to do).
  */
-export function isBlockEvent(e: Pick<CalEvent, "allDay" | "colorId">): boolean {
-  return !e.allDay && e.colorId !== GRAPHITE_COLOR_ID;
+export function isBlockEvent(e: Pick<CalEvent, "allDay">): boolean {
+  return !e.allDay;
 }
 
 /** Merge live calendar events with stored marks into the day's block list. */

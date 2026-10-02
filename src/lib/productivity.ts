@@ -17,8 +17,8 @@
 //   - scaled by `workedFraction` — adhered is all of it, a partial drift its worked share,
 //     unmarked / skipped / dismissed nothing,
 //   - with a usable, non-negative duration.
-// Graphite never gets this far: it is dropped when blocks are built (adherence.ts,
-// `isBlockEvent`). Grape (gym) is simply not a category — training is logged as sessions,
+// Graphite is not a category, so it is markable but never hours worked. Grape (gym)
+// is not a category either — training is logged as sessions,
 // and an hour under a bar is not an hour of work.
 
 import { workedFraction, type BlockState } from "./worked.ts";
