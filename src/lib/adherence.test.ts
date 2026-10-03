@@ -6,7 +6,6 @@ import {
   floorCredit,
   isBlockEvent,
   BLOCK_SHARE,
-  GRAPHITE_COLOR_ID,
   HABIT_SHARE,
   type Block,
   type BlockState,
@@ -400,51 +399,26 @@ const ev = (
   ...over,
 });
 
-test("graphite is Google's colour 8", () => {
-  assert.equal(GRAPHITE_COLOR_ID, "8");
-});
-
-// THE ONE RULE, owner's ruling 2026-09-18: a graphite event is not a block — not on the
-// day's list, not in adherence's hours, not in hours worked. Every one of those reads
-// buildBlocks, so pinning it here pins it everywhere.
-test("buildBlocks drops graphite events and all-day entries, and nothing else", () => {
+// Owner's ruling 2026-10-03: every colour is a block — only all-day entries are dropped.
+test("buildBlocks keeps every colour and drops only all-day entries", () => {
   const blocks = buildBlocks(
     "2026-09-18",
     [
       ev("lecture", null),
-      ev("church", GRAPHITE_COLOR_ID),
+      ev("church", "8"),
       ev("projects", "10"),
       ev("semester", null, { allDay: true, start: "2026-09-18", end: "2026-09-19" }),
-      ev("invite", GRAPHITE_COLOR_ID, { allDay: true, start: "2026-09-18", end: "2026-09-19" }),
       ev("gym", "3"),
     ],
     new Map(),
   );
   assert.deepEqual(
     blocks.map((b) => b.event_id),
-    ["lecture", "projects", "gym"],
+    ["lecture", "church", "projects", "gym"],
   );
 });
 
-test("a graphite event MARKED adhered still never reaches the figure", () => {
-  const marks = new Map([
-    ["church", { state: "adhered" as BlockState, reason: null }],
-    ["lecture", { state: "adhered" as BlockState, reason: null }],
-  ]);
-  const blocks = buildBlocks(
-    "2026-09-18",
-    [ev("lecture", null), ev("church", GRAPHITE_COLOR_ID)],
-    marks,
-  );
-  const a = adherenceFor(blocks, null, NONE);
-  assert.equal(a.totalHours, 2, "only the lecture's two hours are blocked time");
-  assert.equal(a.adhered, 1);
-  assert.equal(a.pct, BLOCK_SHARE);
-});
-
-test("isBlockEvent: timed and not graphite", () => {
-  assert.equal(isBlockEvent({ allDay: false, colorId: null }), true);
-  assert.equal(isBlockEvent({ allDay: false, colorId: "10" }), true);
-  assert.equal(isBlockEvent({ allDay: false, colorId: "8" }), false);
-  assert.equal(isBlockEvent({ allDay: true, colorId: null }), false);
+test("isBlockEvent: any timed event", () => {
+  assert.equal(isBlockEvent({ allDay: false }), true);
+  assert.equal(isBlockEvent({ allDay: true }), false);
 });
