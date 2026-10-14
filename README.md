@@ -35,66 +35,7 @@ Each day starts from the plan. Google Calendar events sync in and shows the time
 
 Stack: Next.js, TypeScript, libSQL/Turso, Vercel.
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'monospace','primaryColor':'#ffffff','primaryBorderColor':'#222222','primaryTextColor':'#111111','lineColor':'#444444'}}}%%
-classDiagram
-    direction LR
-
-    class Browser {
-        <<client>>
-        Dashboard
-        Timeline
-        JournalCanvas
-        +PointerEvents pen_vs_touch
-    }
-
-    class Proxy {
-        <<edge>>
-        +verifySessionToken(cookie)
-    }
-
-    class ApiRoutes {
-        <<route handlers>>
-        /api/today
-        /api/habits
-        /api/journal
-        /api/gym
-        /api/health
-    }
-
-    class Engine {
-        <<lib>>
-        +transactions
-        +adherence rules
-    }
-
-    class DbClient {
-        <<lib/db>>
-        +getDb()
-    }
-
-    class Turso {
-        <<libSQL>>
-        blocks
-        habits
-        journal_entries
-        gym_sessions
-    }
-
-    class GoogleCalendar {
-        <<external>>
-        Calendar v3
-    }
-
-    Browser --> Proxy : request + cookie
-    Proxy --> ApiRoutes : allowed
-    Proxy --> Browser : redirect /login
-    ApiRoutes --> Engine : writes
-    ApiRoutes --> DbClient : reads
-    Engine --> DbClient
-    DbClient --> Turso
-    ApiRoutes --> GoogleCalendar : sync events
-```
+<img src="screenshots/architecture.png" width="920" alt="architecture">
 
 ### Layers
 
