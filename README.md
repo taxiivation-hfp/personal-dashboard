@@ -35,7 +35,7 @@ Each day starts from the plan. Google Calendar events sync in and shows the time
 
 Stack: Next.js, TypeScript, libSQL/Turso, Vercel.
 
-<img src="screenshots/architecture.png" width="920" alt="architecture">
+<img src="screenshots/architecture.svg" width="920" alt="architecture">
 
 ### Layers
 

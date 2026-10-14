@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 456" width="1200" height="456" font-family="ui-sans-serif, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>Personal Analytics Dashboard architecture</title>
+  <desc>The browser sends a request with its session cookie to the edge proxy, which verifies the cookie and either passes the request to the API routes or redirects to /login. Route handlers write through the engine, where adherence rules run in transactions, and read through the DB client. The DB client talks to Turso. Routes also sync events from Google Calendar.</desc>
+
+  <defs>
+    <filter id="lift" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#8a6a3a" flood-opacity="0.14"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a0692a"/>
+    </marker>
+    <marker id="arrowMuted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a7b69"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="456" fill="#f3ece3"/>
+
+  <text x="35" y="48" fill="#2b2118" font-size="24" font-family="Georgia, 'Source Serif 4', 'Times New Roman', serif">Personal Analytics Dashboard</text>
+  <text x="35" y="72" fill="#8a7b69" font-size="13">One request, from a pen stroke to a row in Turso.</text>
+
+  <!-- Browser -->
+  <g filter="url(#lift)">
+    <rect x="35" y="110" width="170" height="210" rx="14" fill="#fdfbf7" stroke="#e2d8c8"/>
+  </g>
+  <text x="49" y="134" fill="#8a7b69" font-size="9.5" font-weight="700" letter-spacing="1.6">CLIENT</text>
+  <text x="49" y="156" fill="#2b2118" font-size="17" font-family="Georgia, 'Source Serif 4', serif">Browser</text>
+  <line x1="49" y1="168" x2="191" y2="168" stroke="#e2d8c8"/>
+  <text x="49" y="190" fill="#4a3d30" font-size="12">Dashboard</text>
+  <text x="49" y="208" fill="#4a3d30" font-size="12">Timeline</text>
+  <text x="49" y="226" fill="#4a3d30" font-size="12">JournalCanvas</text>
+  <line x1="49" y1="242" x2="191" y2="242" stroke="#e2d8c8"/>
+  <text x="49" y="264" fill="#a0692a" font-size="11.5" font-weight="700">Pointer Events</text>
+  <text x="49" y="282" fill="#8a7b69" font-size="11.5">pen draws,</text>
+  <text x="49" y="298" fill="#8a7b69" font-size="11.5">finger scrolls</text>
+
+  <!-- Proxy -->
+  <g filter="url(#lift)">
+    <rect x="275" y="110" width="170" height="150" rx="14" fill="#fdfbf7" stroke="#e2d8c8"/>
+  </g>
+  <text x="289" y="134" fill="#8a7b69" font-size="9.5" font-weight="700" letter-spacing="1.6">EDGE</text>
+  <text x="289" y="156" fill="#2b2118" font-size="17" font-family="Georgia, 'Source Serif 4', serif">Proxy</text>
+  <line x1="289" y1="168" x2="431" y2="168" stroke="#e2d8c8"/>
+  <text x="289" y="190" fill="#4a3d30" font-size="12">verifies the session</text>
+  <text x="289" y="208" fill="#4a3d30" font-size="12">from the cookie alone</text>
+  <text x="289" y="238" fill="#a0692a" font-size="11.5" font-weight="700">runs on the edge</text>
+
+  <!-- API routes -->
+  <g filter="url(#lift)">
+    <rect x="515" y="110" width="170" height="250" rx="14" fill="#fdfbf7" stroke="#e2d8c8"/>
+  </g>
+  <text x="529" y="134" fill="#8a7b69" font-size="9.5" font-weight="700" letter-spacing="1.6">ROUTE HANDLERS</text>
+  <text x="529" y="156" fill="#2b2118" font-size="17" font-family="Georgia, 'Source Serif 4', serif">API routes</text>
+  <line x1="529" y1="168" x2="671" y2="168" stroke="#e2d8c8"/>
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="11.5" fill="#4a3d30">
+    <text x="529" y="190">/api/today</text>
+    <text x="529" y="208">/api/habits</text>
+    <text x="529" y="226">/api/journal</text>
+    <text x="529" y="244">/api/gym</text>
+    <text x="529" y="262">/api/health</text>
+  </g>
+  <line x1="529" y1="278" x2="671" y2="278" stroke="#e2d8c8"/>
+  <text x="529" y="300" fill="#a0692a" font-size="11.5" font-weight="700">private by default</text>
+  <text x="529" y="318" fill="#8a7b69" font-size="11.5">public and machine</text>
+  <text x="529" y="334" fill="#8a7b69" font-size="11.5">routes are an allowlist</text>
+
+  <!-- Engine -->
+  <g filter="url(#lift)">
+    <rect x="755" y="110" width="170" height="120" rx="14" fill="#fdfbf7" stroke="#a0692a" stroke-opacity="0.55"/>
+  </g>
+  <text x="769" y="134" fill="#8a7b69" font-size="9.5" font-weight="700" letter-spacing="1.6">LIB</text>
+  <text x="769" y="156" fill="#2b2118" font-size="17" font-family="Georgia, 'Source Serif 4', serif">Engine</text>
+  <line x1="769" y1="168" x2="911" y2="168" stroke="#e2d8c8"/>
+  <text x="769" y="190" fill="#4a3d30" font-size="12">transactions</text>
+  <text x="769" y="208" fill="#a0692a" font-size="12" font-weight="700">adherence rules</text>
+
+  <!-- Google Calendar -->
+  <g filter="url(#lift)">
+    <rect x="755" y="290" width="170" height="90" rx="14" fill="#fdfbf7" stroke="#7a5570" stroke-opacity="0.55" stroke-dasharray="5 4"/>
+  </g>
+  <text x="769" y="314" fill="#7a5570" font-size="9.5" font-weight="700" letter-spacing="1.6">EXTERNAL</text>
+  <text x="769" y="336" fill="#2b2118" font-size="17" font-family="Georgia, 'Source Serif 4', serif">Google Calendar</text>
+  <text x="769" y="364" fill="#8a7b69" font-size="11.5">Calendar v3, OAuth 2.0</text>
+
+  <!-- DB client -->
+  <g filter="url(#lift)">
+    <rect x="995" y="110" width="170" height="100" rx="14" fill="#fdfbf7" stroke="#e2d8c8"/>
+  </g>
+  <text x="1009" y="134" fill="#8a7b69" font-size="9.5" font-weight="700" letter-spacing="1.6">LIB/DB</text>
+  <text x="1009" y="156" fill="#2b2118" font-size="17" font-family="Georgia, 'Source Serif 4', serif">DB client</text>
+  <line x1="1009" y1="168" x2="1151" y2="168" stroke="#e2d8c8"/>
+  <text x="1009" y="192" fill="#4a3d30" font-size="11.5" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">getDb()</text>
+
+  <!-- Turso -->
+  <g filter="url(#lift)">
+    <rect x="995" y="270" width="170" height="140" rx="14" fill="#2d5f4e"/>
+  </g>
+  <text x="1009" y="294" fill="#b9d3c7" font-size="9.5" font-weight="700" letter-spacing="1.6">LIBSQL</text>
+  <text x="1009" y="316" fill="#f3ece3" font-size="17" font-family="Georgia, 'Source Serif 4', serif">Turso</text>
+  <line x1="1009" y1="328" x2="1151" y2="328" stroke="#f3ece3" stroke-opacity="0.25"/>
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="11.5" fill="#f3ece3">
+    <text x="1009" y="350">blocks</text>
+    <text x="1009" y="367">habits</text>
+    <text x="1009" y="384">journal_entries</text>
+    <text x="1009" y="401">gym_sessions</text>
+  </g>
+
+  <!-- flow -->
+  <g fill="none" stroke-width="1.6">
+    <path d="M 205 150 L 271 150" stroke="#a0692a" marker-end="url(#arrow)"/>
+    <path d="M 275 230 L 209 230" stroke="#8a7b69" stroke-dasharray="4 3" marker-end="url(#arrowMuted)"/>
+    <path d="M 445 150 L 511 150" stroke="#a0692a" marker-end="url(#arrow)"/>
+    <path d="M 685 150 L 751 150" stroke="#a0692a" marker-end="url(#arrow)"/>
+    <path d="M 925 150 L 991 150" stroke="#a0692a" marker-end="url(#arrow)"/>
+    <path d="M 685 255 L 960 255 L 960 185 L 991 185" stroke="#a0692a" marker-end="url(#arrow)"/>
+    <path d="M 685 335 L 751 335" stroke="#7a5570" marker-end="url(#arrow)"/>
+    <path d="M 1080 210 L 1080 266" stroke="#a0692a" marker-end="url(#arrow)"/>
+  </g>
+  <g fill="#8a7b69" font-size="11" font-style="italic" font-family="Georgia, 'Source Serif 4', serif" text-anchor="middle">
+    <text x="240" y="142">request</text>
+    <text x="240" y="222">to /login</text>
+    <text x="480" y="142">allowed</text>
+    <text x="720" y="142">writes</text>
+    <text x="820" y="247">reads</text>
+    <text x="720" y="327">sync</text>
+  </g>
+
+  <text x="35" y="438" fill="#8a7b69" font-size="12" letter-spacing="0.3">Next.js  ·  TypeScript  ·  libSQL/Turso  ·  Vercel</text>
+</svg>
