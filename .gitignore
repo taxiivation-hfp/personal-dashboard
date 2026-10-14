@@ -36,3 +36,8 @@ Direct Messages - LOGS [1038376949271244820].txt
 
 # Personal Discord DM export. Never commit.
 Direct Messages - LOGS *.txt
+
+# Dev-server output. Never part of the app.
+.next-dev.log
+# Stray empty libSQL file at the repo root; the real local DB lives in /data.
+local.db
