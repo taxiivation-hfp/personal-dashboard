@@ -45,12 +45,41 @@ function makeClient(): Client {
   return createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
 }
 
+/**
+ * THE SCHEMA LADDER BELOW IS LATCHED. Everything after the foreign-key pragma is a chain of
+ * ~35 round trips — schema replay, a PRAGMA table_info per column add, a SELECT per
+ * migration stamp — and against a remote Turso database every one of them is a network
+ * hop. On a serverless host that chain ran on EVERY cold start, which was several seconds
+ * before the first query of the first request could even be sent.
+ *
+ * So the whole ladder is stamped once into app_meta and skipped while the stamp matches.
+ * BUMP THIS VALUE whenever anything in ensure() changes, and the next boot runs the ladder
+ * again, once. A database that has never been stamped (brand new, or older than this
+ * latch) still walks the whole ladder, exactly as before.
+ */
+const ENSURE_VERSION = "2026-10-14.1";
+
+async function isEnsured(c: Client): Promise<boolean> {
+  try {
+    const r = await c.execute({
+      sql: "SELECT value FROM app_meta WHERE key='ensure_version'",
+      args: [],
+    });
+    return r.rows.length > 0 && String(r.rows[0]!.value) === ENSURE_VERSION;
+  } catch {
+    // No app_meta table yet — a brand-new database. Walk the ladder.
+    return false;
+  }
+}
+
 async function ensure(c: Client): Promise<Client> {
   await c.execute("PRAGMA foreign_keys = ON");
   const fk = await c.execute("PRAGMA foreign_keys");
   if (Number((fk.rows[0] as Record<string, unknown>)?.foreign_keys) !== 1) {
     throw new Error("Could not enable foreign_keys pragma");
   }
+
+  if (await isEnsured(c)) return c;
 
   const schema = readFileSync(
     resolve(process.cwd(), "src/lib/db/schema.sql"),
@@ -478,6 +507,13 @@ async function ensure(c: Client): Promise<Client> {
       "write",
     );
   }
+
+  // Everything above ran to completion: stamp it so the next boot skips straight past.
+  await c.execute({
+    sql: `INSERT INTO app_meta (key,value) VALUES ('ensure_version',?)
+          ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+    args: [ENSURE_VERSION],
+  });
 
   return c;
 }

@@ -73,19 +73,3 @@ export const projectedColour = (colorId: string | null): string | null =>
  */
 export const SLAB_NEUTRAL = "#7d7d7d";
 
-/**
- * THE GYM SLAB — logged training, which is not calendar time and so has no colour to
- * borrow from an event.
- *
- * It is Grape's projection all the same, and reusing it costs nothing: Grape left
- * CALENDAR_RATES when gym stopped being priced by the hour, so no blocked time can draw
- * this hue any more and there is nothing for it to be confused with. It is the colour gym
- * already wears everywhere else in this app, which is the whole reason to keep it — the
- * association is built, and a new hue would be a twelfth thing to learn.
- *
- * Not achromatic, deliberately. Grey is what the ticked things wear, and a second grey slab
- * beside the first is a distinction the chart cannot draw at eighty pixels tall — the same
- * argument that keeps calories inside the non-negotiables' slab rather than beside it.
- * Training earns a slab you can actually see, which is what the owner asked for.
- */
-export const SLAB_GYM = GOOGLE_PROJECTED["3"];

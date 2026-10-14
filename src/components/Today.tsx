@@ -455,14 +455,37 @@ export default function Today({
       .catch(() => {});
   }, [data.date]);
 
+  /**
+   * Which refresh is the LATEST. Ticks are drawn locally the instant they are tapped (see
+   * `patchData` below) and the server's answer lands afterwards; two quick taps mean two
+   * refreshes in flight, and the first one's reply must not paint over the second tap. Only
+   * the newest reply is applied.
+   */
+  const refreshSeq = useRef(0);
   const refresh = useCallback(async () => {
-    const d = await fetch(`/api/today?date=${data.date}`).then((r) => r.json());
+    const mine = ++refreshSeq.current;
+    // The three reads go out together — the tracker and the rings never waited on the day.
+    loadTracker();
+    loadRings();
+    const d = await fetch(`/api/today?date=${data.date}`)
+      .then((r) => r.json())
+      .catch(() => ({ error: true }));
+    if (mine !== refreshSeq.current) return;
     // Applied only if it is still the day on screen. `d.date` is the server's own answer,
     // so this compares what arrived against what is being asked — never two guesses.
     if (!d.error) setData((cur) => (d.date === cur.date ? d : cur));
-    loadTracker();
-    loadRings();
   }, [data.date, loadTracker, loadRings]);
+
+  /**
+   * DRAW THE TAP BEFORE THE SERVER ANSWERS. Every tick on this screen used to wait for its
+   * write AND the three reads that follow before the box changed — against a remote
+   * database that is a visible pause on the most repeated gesture in the app. The write
+   * still happens and `refresh` still replaces this guess with the stored truth; this only
+   * moves the drawing to the front.
+   */
+  const patchData = useCallback((fn: (d: DayView) => DayView) => {
+    setData((d) => fn(d));
+  }, []);
 
   /**
    * GOING BACK A DAY — the whole of the backdating feature, in one function.
@@ -587,11 +610,15 @@ export default function Today({
   }, [data.date]);
 
   async function toggleHabit(id: number, done: boolean) {
+    patchData((d) => ({
+      ...d,
+      habits: d.habits.map((h) => (h.id === id ? { ...h, done } : h)),
+    }));
     await fetch("/api/habits/log", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ habit_id: id, date: data.date, done }),
-    });
+    }).catch(() => {});
     refresh();
   }
 
@@ -627,6 +654,10 @@ export default function Today({
 
   /** Tick or untick a one-off non-negotiable. The row knows its own day. */
   async function toggleOneOff(id: number, done: boolean) {
+    patchData((d) => ({
+      ...d,
+      oneOffs: d.oneOffs.map((o) => (o.id === id ? { ...o, done } : o)),
+    }));
     await fetch("/api/habits/one-off", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -680,6 +711,12 @@ export default function Today({
 
   /** Tick or untick a one-off task. The tick belongs to the day on screen. */
   async function toggleTask(id: number, done: boolean) {
+    patchData((d) => ({
+      ...d,
+      tasks: d.tasks.map((t) =>
+        t.id === id ? { ...t, done, doneOn: done ? d.date : null } : t,
+      ),
+    }));
     await fetch("/api/tasks", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -802,6 +839,14 @@ export default function Today({
             isToday={back === 0}
             blocks={data.blocks}
             onChanged={refresh}
+            onMark={(eventId, next) =>
+              patchData((d) => ({
+                ...d,
+                blocks: d.blocks.map((b) =>
+                  b.event_id === eventId ? { ...b, ...next } : b,
+                ),
+              }))
+            }
           />
         ) : (
           <p className="max-w-[42ch] text-body text-[var(--color-muted)]">
