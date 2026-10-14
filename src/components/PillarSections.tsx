@@ -1045,7 +1045,12 @@ export default function PillarSections({
             beside it are the app's own vocabulary, so they stay sans. All three clear on
             the one submit: a date left standing behind a title that has gone would quietly
             become the next goal's deadline. "of" is how many items a COUNTED goal has;
-            blank means the goal takes subtasks instead, hence a dash and never a 0. */}
+            blank means the goal takes subtasks instead, hence a dash and never a 0.
+
+            THE "add" BUTTON IS LOAD-BEARING, not a convenience. A form with more than one
+            text-like field and no submit button has no implicit submission — Enter in the
+            title does nothing — so without it this form could not be sent at all. The
+            subtask form below each goal is one field and submits on Enter without one. */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1094,6 +1099,13 @@ export default function PillarSections({
                 className={`${SETTING} w-12`}
               />
             </label>
+            <button
+              type="submit"
+              disabled={!newGoal.trim() || busy === "gn"}
+              className="ml-auto shrink-0 rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-micro transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+            >
+              add
+            </button>
           </div>
         </form>
 
