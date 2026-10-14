@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db/client";
 import { listGoals } from "@/lib/queries";
 import { updateSubgoal, setSubgoalDone, deleteSubgoal } from "@/lib/engine";
+import { isISODate } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -19,10 +20,24 @@ export async function PATCH(
     const id = await subgoalId(ctx);
     if (id == null) return Response.json({ error: "bad id" }, { status: 400 });
     const b = await req.json();
+    // `due: "YYYY-MM-DD"` sets the subtask's date; null or "" CLEARS it.
+    let due: string | null | undefined;
+    if (b.due !== undefined) {
+      due = b.due === null || b.due === "" ? null : b.due;
+      if (due !== null && !isISODate(due))
+        return Response.json(
+          { error: "due must be a YYYY-MM-DD date" },
+          { status: 400 },
+        );
+    }
+    // `date` is the day the tick belongs to — the day on screen. Today when absent.
+    if (b.date !== undefined && !isISODate(b.date))
+      return Response.json({ error: "bad date" }, { status: 400 });
     const db = await getDb();
-    if (b.done !== undefined) await setSubgoalDone(db, id, Boolean(b.done));
-    if (b.title !== undefined || b.weight !== undefined) {
-      await updateSubgoal(db, id, { title: b.title, weight: b.weight });
+    if (b.done !== undefined)
+      await setSubgoalDone(db, id, Boolean(b.done), b.date);
+    if (b.title !== undefined || b.weight !== undefined || due !== undefined) {
+      await updateSubgoal(db, id, { title: b.title, weight: b.weight, due });
     }
     return Response.json({ goals: await listGoals(db) });
   } catch (e) {

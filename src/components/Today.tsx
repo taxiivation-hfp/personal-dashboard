@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
-import FloatingTasks from "./FloatingTasks";
+import FloatingTasks, { type FloatCard } from "./FloatingTasks";
 import HabitBox from "./HabitBox";
 import WeightLog from "./WeightLog";
 import StepsLog from "./StepsLog";
@@ -28,7 +28,8 @@ import StreakFlame from "./StreakFlame";
 import ChapterName from "./ChapterName";
 import type { Workout } from "./WorkoutLog";
 import { addDays, daysBetween, prettyDate, todayISO } from "@/lib/dates";
-import { buildCareerRing } from "@/lib/career";
+import { buildCareerRing, type CareerHours } from "@/lib/career";
+import { doneOn, subtaskLine, subtaskShowsOn } from "@/lib/subtasks";
 import type { DayView, GoalView, PillarKey } from "@/lib/queries";
 import { STEPS_FLOOR } from "@/lib/rings";
 import type {
@@ -203,6 +204,9 @@ export default function Today({
   const [goals, setGoals] = useState<GoalView[]>(initialGoals);
   /** Health's fortnight, from /api/rings. null until it lands — a ghost, not a zero. */
   const [health, setHealth] = useState<HealthRingView | null>(null);
+  /** The fortnight's Work Projects hours — the Career ring's hours half. null until
+   *  /api/rings lands, which draws that half as a ghost rather than as nothing worked. */
+  const [careerHours, setCareerHours] = useState<CareerHours | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   // Phone only: which of the two panes is showing. Opens on the day's work, and a
   // reload returns there rather than wherever you last wandered.
@@ -434,24 +438,33 @@ export default function Today({
   }, [today]);
 
   /**
-   * HEALTH ONLY. The route still answers with both pillars, and the `portfolio` entry is
-   * deliberately ignored here — see `career` below, which is rebuilt on the client from the
-   * goals this screen already owns so that ticking a subtask moves the ring without a round
-   * trip. Health has no such local source: its fortnight is sessions, steps and calories.
+   * HEALTH, AND CAREER'S HOURS INPUT. The route answers with both pillars, and the
+   * `portfolio` entry is deliberately ignored here — see `career` below, which is rebuilt on
+   * the client from the goals this screen already owns so that ticking a subtask moves the
+   * ring without a round trip. What it cannot rebuild locally is the hours half, so that
+   * arrives as `hours` and is fed back into the same function the route ran.
    */
   const loadRings = useCallback(() => {
     const asked = data.date;
     fetch(`/api/rings?date=${asked}`)
       .then((r) => r.json())
-      .then((s: { error?: unknown; pillars?: PillarRingView[]; workouts?: Workout[] }) => {
-        if (s.error || viewing.current !== asked) return;
-        setHealth(
-          (s.pillars ?? []).find(
-            (p): p is HealthRingView => p.key === "physical",
-          ) ?? null,
-        );
-        setWorkouts(s.workouts ?? []);
-      })
+      .then(
+        (s: {
+          error?: unknown;
+          pillars?: PillarRingView[];
+          workouts?: Workout[];
+          hours?: CareerHours;
+        }) => {
+          if (s.error || viewing.current !== asked) return;
+          setHealth(
+            (s.pillars ?? []).find(
+              (p): p is HealthRingView => p.key === "physical",
+            ) ?? null,
+          );
+          setWorkouts(s.workouts ?? []);
+          setCareerHours(s.hours ?? null);
+        },
+      )
       .catch(() => {});
   }, [data.date]);
 
@@ -685,28 +698,14 @@ export default function Today({
    * sticky note on the timeline. Status `done` stamps `completed_at` server-side and status
    * `active` clears it — the engine owns that pair, and this is only the button.
    *
-   * A goal marked done leaves the Career ring, because only ACTIVE goals with a deadline take
-   * an arc (spec §1). That is intended: the ring is what is in flight, not what has been
+   * A goal marked done leaves the Career ring, because only ACTIVE goals take an arc
+   * (career.ts). That is intended: the ring is what is in flight, not what has been
    * achieved. The timeline's note stays where it was put, with its tick and its date.
    */
   const onGoalDone = (id: number, done: boolean) =>
     mutateGoals(`/api/goals/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ status: done ? "done" : "active" }),
-    });
-
-  /**
-   * SET A COUNTED GOAL'S TALLY — the Career drill-down's stepper. Absolute, never a delta
-   * (engine.setGoalCount): a double-fired tap must not advance the count twice.
-   *
-   * It goes through `mutateGoals` like every other goal write, so the Career ring is
-   * rebuilt on this client the same beat the number moves — which is the whole reason the
-   * ring is built here rather than taken from /api/rings.
-   */
-  const onGoalCount = (id: number, count: number) =>
-    mutateGoals(`/api/goals/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ count }),
     });
 
   /** Tick or untick a one-off task. The tick belongs to the day on screen. */
@@ -781,18 +780,64 @@ export default function Today({
    * disagree.
    *
    * It cannot drift from the server's own answer either: `buildCareerRing` is the exact
-   * function /api/rings calls, given the same goals and the same day. The `portfolio` entry
-   * that route returns is simply ignored on this screen.
+   * function /api/rings calls, given the same goals, the same day and the hours that route
+   * measured. The `portfolio` entry that route returns is simply ignored on this screen.
    */
   const career = useMemo(
-    () => buildCareerRing(goals, data.date),
-    [goals, data.date],
+    () =>
+      buildCareerRing(
+        goals,
+        data.date,
+        careerHours ?? { hours: 0, resolved: false },
+      ),
+    [goals, data.date, careerHours],
   );
 
-  // Straight off DayView.pillars — no extra request for something already loaded.
-  const colors = Object.fromEntries(
-    data.pillars.map((p) => [p.key, p.color]),
-  ) as Partial<Record<PillarKey, string | null>>;
+  /**
+   * THE CARDS ON THE RAILS: the day's one-off tasks, and every active goal's dated subtasks
+   * that belong on this day (subtasks.ts decides). One list, one order, one cap of six.
+   *
+   * Placement is against the REAL today, as tasks.ts already does it — a subtask carrying
+   * past its date sits on one day, and that day is today.
+   */
+  const cards = useMemo<FloatCard[]>(() => {
+    const list: FloatCard[] = data.tasks.map((t) => ({
+      key: `t${t.id}`,
+      title: t.title,
+      sub: null,
+      done: t.done,
+      line: !t.done && t.carried > 0 ? `carried ${t.carried}d` : null,
+      due: t.due,
+      order: t.id,
+    }));
+    for (const g of goals) {
+      if (g.status !== "active") continue;
+      for (const s of g.subgoals) {
+        if (!subtaskShowsOn(s, data.date, today)) continue;
+        list.push({
+          key: `s${s.id}`,
+          title: s.title,
+          sub: g.title,
+          done: doneOn(s, data.date),
+          line: subtaskLine(s, data.date),
+          due: s.due!,
+          order: s.id,
+        });
+      }
+    }
+    return list;
+  }, [data.tasks, goals, data.date, today]);
+
+  /** A card ticked: a task goes to /api/tasks, a subtask through the goals wire — the tick
+   *  belongs to the day on screen either way. */
+  const toggleCard = (card: FloatCard, done: boolean) => {
+    const id = Number(card.key.slice(1));
+    if (card.key.startsWith("t")) return toggleTask(id, done);
+    return mutateGoals(`/api/subgoals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ done, date: data.date }),
+    });
+  };
 
   /**
    * The tick / fill for a non-negotiable, in its pillar's hue.
@@ -804,7 +849,7 @@ export default function Today({
    * rather than to any pillar. That branch is separate and deliberately unchanged.
    */
   const habitTone = (pillar: PillarKey | null | undefined) =>
-    pillar ? toneColor(pillar, colors[pillar]) : "var(--color-neutral)";
+    pillar ? toneColor(pillar) : "var(--color-neutral)";
 
   /**
    * THE DAY'S BLOCKS, and the way onto the timeline.
@@ -992,7 +1037,7 @@ export default function Today({
           the checklist has room to run the full width underneath, and the ring gets the
           middle of the band it was always the subject of. FloatingTasks owns the rails and
           draws nothing at all when the day holds no tasks. */}
-      <FloatingTasks tasks={data.tasks} onToggle={toggleTask}>
+      <FloatingTasks cards={cards} onToggle={toggleCard}>
         {/* items-center rather than a width: the caption is a sentence whose length changes
             through the day, and pinning it to the ring's 240px would wrap "10 of 12 ticked"
             onto a second line on exactly the days that have the most to say. */}
@@ -1249,9 +1294,7 @@ export default function Today({
               // 2,500 floor: it counts logging the day, not eating enough. Hidden off
               // today with every other streak.
               streak={back === 0 ? data.calorieStreak : 0}
-              // The Health tone, for the same reason the Steps box takes it (spec §5):
-              // the box stopped hard-coding --color-physical so the owner's /colours
-              // choice reaches it.
+              // The Health tone, resolved through habitTone like every other row (spec §5).
               tone={habitTone("physical")}
               onChanged={refresh}
             />
@@ -1265,10 +1308,8 @@ export default function Today({
           <li className={CHECK_ROW}>
             <div className="flex items-center gap-2.5 py-2.5">
               {/* The HEALTH tone, resolved through habitTone like every other row, not
-                  the raw --color-physical literal this used to hard-code (spec §5). The
-                  token is only Health's DEFAULT; the owner may pick another hue at
-                  /colours, and a row that reads the token directly would have been the
-                  one box on the checklist that ignored the choice. */}
+                  the raw --color-physical literal this used to hard-code (spec §5) — one
+                  resolver, so no box on the checklist can disagree with the rings. */}
               <HabitBox
                 done={(data.steps ?? 0) >= STEPS_FLOOR}
                 pending
@@ -1440,20 +1481,12 @@ export default function Today({
     <PillarSections
       health={health}
       career={career}
-      colors={colors}
       workouts={workouts}
       goals={goals}
       tracker={tracker}
       date={data.date}
       today={today}
-      onSubgoal={(id, done) =>
-        mutateGoals(`/api/subgoals/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ done }),
-        })
-      }
-      onGoalDone={onGoalDone}
-      onGoalCount={onGoalCount}
+      onGoals={mutateGoals}
       onSaveWorkout={saveWorkout}
       onDeleteWorkout={deleteWorkout}
       onOpenDay={goToDay}
@@ -1512,10 +1545,9 @@ export default function Today({
         className={`lg:flex lg:h-dvh lg:flex-col ${tl !== "closed" ? "overflow-hidden" : ""}`}
       >
         <div className="shrink-0 border-b border-[var(--color-line-strong)] bg-[var(--color-bar)]">
-          {/* The title is CENTRED on the page, not on the space left over beside the
-              link — hence a three-column grid with an empty cell mirroring the link. A
-              flex row with one item pushed right would drift the title off centre by
-              exactly half the link’s width. */}
+          {/* A three-column grid with an empty cell either side, so the title is CENTRED
+              on the page whatever is later put in the outer cells (the colours link that
+              used to sit on the right is gone with the colours page). */}
           {/* FULL WIDTH. The `max-w-[92rem]` cap went with the three-window relayout (spec
               §4): the owner's screen is 1858px and the row underneath now spends all of it,
               so a masthead that stopped at 1472 would have sat inside its own page. */}
@@ -1539,12 +1571,7 @@ export default function Today({
             </h1>
             {/* The date lives on the middle window now, above the ring, where it belongs
                 to the day rather than to the app. */}
-            <Link
-              href="/colours"
-              className="justify-self-end text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-            >
-              colours
-            </Link>
+            <span aria-hidden />
           </div>
         </div>
 

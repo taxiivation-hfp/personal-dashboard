@@ -73,10 +73,9 @@
    * There were three. Social was parked with the rest of its feature on 2026-09-18 (spec
    * §1) — see archive/social/README.md; its hue token went with it, unread. */
   --color-physical: #467c6c; /* HEALTH · 4.02 on bg · 4.68 with white */
-  /* Was #67609b (Iris). CAREER is Plum by the owner's ruling (spec §1); the migration stores
-   * it on the `portfolio` row, and this is the default the app falls back to when no colour
-   * is set. The KEY stays `portfolio` — renaming a live key is churn — and the NAME comes
-   * from PILLAR_NAME in rings.ts. Measured on the page ground: 5.09:1 as a stroke, 5.93:1
+  /* Was #67609b (Iris). CAREER is Plum by the owner's ruling (spec §1). The KEY stays
+   * `portfolio` — renaming a live key is churn — and the NAME comes from PILLAR_NAME in
+   * rings.ts. Both hues are FIXED: nothing in the app edits them any more. Measured on the page ground: 5.09:1 as a stroke, 5.93:1
    * with white on top, so it clears both the stroke floor and the filled-chip test. */
   --color-portfolio: #7d5a72; /* CAREER · 5.09 on bg · 5.93 with white */
 
@@ -287,8 +286,8 @@
  *
  * WHOSE words, not which widget. An <input> holding a goal title takes the serif, because
  * the title is the owner's either way — the first cut of this rule kept every input in the
- * sans, and "Grow Network" then rendered serif on Today and sans on /goals. One string,
- * two faces, which reads as a bug rather than a system. Number and weight fields stay sans:
+ * sans, and "Grow Network" then rendered serif on Today and sans in the old goals editor.
+ * One string, two faces, which reads as a bug rather than a system. Number and weight fields stay sans:
  * those are settings, not writing.
  *
  * Steps are `text-micro` / `text-small` / `text-body` / `text-heading` / `text-hero`,
@@ -1293,10 +1292,9 @@ input[type="number"]::-webkit-inner-spin-button {
  * alpha reads weaker than it does on the hero's near-white. Equal numbers are what produce
  * equal light here; lower ones produced none.
  *
- * color-mix rather than an rgb channel token, because a pillar hue is OWNER-EDITABLE at
- * /colours and arrives as an arbitrary value from the curated palette — there is no token to
- * pre-split into channels. Premultiplied by definition, so no stop greys out on the way to
- * zero. */
+ * color-mix rather than an rgb channel token: the hue arrives as a value, and there is no
+ * token pre-split into channels for it. Premultiplied by definition, so no stop greys out on
+ * the way to zero. */
 .pillar-bloom {
   position: absolute;
   left: 50%;

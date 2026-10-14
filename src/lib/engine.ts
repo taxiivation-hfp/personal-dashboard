@@ -11,7 +11,7 @@
 
 import type { Client } from "./db/client";
 import { addDays, isISODate, todayISO } from "./dates";
-import { isPaletteHex, isPillarKey, type PillarKey } from "./rings";
+import type { PillarKey } from "./rings";
 import { isWindowTint, WINDOW_TEXT_MAX } from "./timeline";
 import {
   dismissalWouldErase,
@@ -871,7 +871,7 @@ const GOAL_PILLAR: PillarKey = "portfolio";
  * Create a goal. EVERY GOAL IS A CAREER GOAL since the Health & Career pivot, so it is
  * filed under `portfolio` — always, and here rather than in a client, so a screen that still
  * sends a pillar cannot file one anywhere else. The deadline is optional: a goal without one
- * lists on /goals and under Career, but takes no arc of the ring until it has one.
+ * lists under Career, but takes no arc of the ring until it has one.
  */
 export async function createGoal(
   db: Client,
@@ -1044,10 +1044,15 @@ export async function createSubgoal(
   return Number(r.lastInsertRowid);
 }
 
+/**
+ * Edit a subtask: any of `{ title, weight, due }`; an absent field is left alone. `due`
+ * null CLEARS the date, which is how a subtask stops floating and can no longer be late.
+ * The route validates the date; here it is trusted.
+ */
 export async function updateSubgoal(
   db: Client,
   id: number,
-  patch: { title?: string; weight?: number | null },
+  patch: { title?: string; weight?: number | null; due?: string | null },
 ): Promise<void> {
   const sets: string[] = [];
   const args: (string | number | null)[] = [];
@@ -1055,6 +1060,7 @@ export async function updateSubgoal(
     (sets.push("title=?"), args.push(patch.title.trim()));
   if (patch.weight !== undefined)
     (sets.push("weight=?"), args.push(clampWeight(patch.weight)));
+  if (patch.due !== undefined) (sets.push("due=?"), args.push(patch.due));
   if (!sets.length) return;
   args.push(id);
   await db.execute({
@@ -1067,15 +1073,20 @@ export async function updateSubgoal(
  * Tick or untick a subgoal. The goal is NEVER auto-completed when this reaches 100% —
  * marking a goal done is the owner's decision, and auto-completion is a progression
  * mechanic.
+ *
+ * `doneOn` is the day the tick belongs to — the day on screen, which is today unless the
+ * owner is marking a past day up — and it is cleared on an untick. See subtasks.ts for why
+ * the day is recorded at all.
  */
 export async function setSubgoalDone(
   db: Client,
   id: number,
   done: boolean,
+  doneOn: string = todayISO(),
 ): Promise<void> {
   await db.execute({
-    sql: "UPDATE subgoals SET done=? WHERE id=?",
-    args: [done ? 1 : 0, id],
+    sql: "UPDATE subgoals SET done=?, done_on=? WHERE id=?",
+    args: [done ? 1 : 0, done ? doneOn : null, id],
   });
 }
 
@@ -1234,29 +1245,6 @@ export async function deleteWorkout(db: Client, id: number): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------- pillar colour
-
-/**
- * Set a pillar's hue, or clear it back to the CSS default with null.
- *
- * Guarded to the curated palette on purpose. A free hex field could make the app
- * unreadable, and the light-beige identity is a product decision rather than a
- * preference — see CLAUDE.md. Only PILLAR colours are editable at all.
- */
-export async function setPillarColor(
-  db: Client,
-  key: string,
-  hex: string | null,
-): Promise<void> {
-  // Only the two live pillars have a colour to set — the Social row is kept as data and is
-  // not listed anywhere a colour could be chosen for it.
-  if (!isPillarKey(key)) throw new Error(`unknown pillar '${key}'`);
-  if (hex !== null && !isPaletteHex(hex))
-    throw new Error("colour must come from the palette");
-  await db.execute({
-    sql: "UPDATE pillars SET color=?, updated_at=? WHERE key=?",
-    args: [hex, now(), key],
-  });
-}
 
 // ---------------------------------------------------------------- streak
 
@@ -1417,8 +1405,8 @@ export async function addTimelineWindow(
 /**
  * Move, rewrite or recolour a window. Three optional fields on one contract: undefined
  * LEAVES a field — a move must never eat a note, and a recolour must never move a card.
- * `color` takes a WINDOW_TINTS key or null (paper); anything else is refused, the same
- * guard setPillarColor keeps. Text is trimmed and capped at WINDOW_TEXT_MAX — a sticky
+ * `color` takes a WINDOW_TINTS key or null (paper); anything else is refused. Text is
+ * trimmed and capped at WINDOW_TEXT_MAX — a sticky
  * note, not a page — and an empty text is stored as '', not deleted: an empty window is
  * still a window the owner put there, and removing one is its own, explicit verb.
  */

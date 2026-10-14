@@ -41,11 +41,8 @@ export default function CalorieInput({
   /**
    * The HEALTH tone, already resolved by the caller through `toneColor`.
    *
-   * It was `var(--color-physical)` inline, which is only the DEFAULT half of that
-   * resolution — so recolouring Health at /colours moved its ring and left this box
-   * behind, two surfaces disagreeing about one pillar. Passed in rather than resolved
-   * here because the checklist already holds the owner's colours and every other row on
-   * it gets its tick colour the same way.
+   * Passed in rather than resolved here because every other row on the checklist gets
+   * its tick colour the same way — one resolver, so no box can disagree with the rings.
    */
   tone: string;
   onChanged: () => void;

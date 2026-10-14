@@ -1,217 +1,282 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  CAREER_HOURS,
   buildCareerRing,
   countsTowardCareer,
-  dueLabel,
   existedOn,
   expectedProgress,
-  goalFact,
+  goalArcFill,
+  hoursFact,
+  hoursFill,
+  lateness,
   paceFill,
   type CareerGoal,
+  type CareerHours,
 } from "./career.ts";
+import type { DatedSubtask } from "./subtasks.ts";
 import { PILLAR_NAME } from "./rings.ts";
 import { addDays } from "./dates.ts";
 
-const TODAY = "2026-09-18";
+const TODAY = "2026-10-15";
 
-/** An active goal with a deadline — the kind that takes an arc — overridable per test. */
-const goal = (over: Partial<CareerGoal> = {}): CareerGoal => ({
-  id: 1,
-  title: "Ship the portfolio site",
-  status: "active",
-  createdAt: addDays(TODAY, -10),
-  deadline: addDays(TODAY, 10),
-  progress: 0,
+const sub = (over: Partial<DatedSubtask> = {}): DatedSubtask => ({
+  id: 10,
+  title: "Official practice exam",
+  due: null,
+  done: false,
+  doneOn: null,
+  createdAt: addDays(TODAY, -30),
   ...over,
 });
 
-const close = (a: number, b: number) =>
-  assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
+/** An active checklist goal with a deadline ahead — the plain case. */
+const goal = (over: Partial<CareerGoal> = {}): CareerGoal => ({
+  id: 1,
+  title: "AWS Solutions Architect",
+  status: "active",
+  createdAt: addDays(TODAY, -30),
+  deadline: addDays(TODAY, 60),
+  progress: 0,
+  count: null,
+  subgoals: [sub()],
+  ...over,
+});
+
+const FULL: CareerHours = { hours: CAREER_HOURS, resolved: true };
+const NONE: CareerHours = { hours: 0, resolved: true };
+const GHOST: CareerHours = { hours: 0, resolved: false };
+
+const close = (a: number | null, b: number) =>
+  assert.ok(a != null && Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
+
+const goalArcs = (g: CareerGoal[], hours = FULL) =>
+  buildCareerRing(g, TODAY, hours).arcs.filter((a) => a.goalId != null);
+
+// ---------------------------------------------------------------- the hours half
+
+test("the hours arc is half the ring and fills at CAREER_HOURS", () => {
+  const ring = buildCareerRing([goal()], TODAY, { hours: 24, resolved: true });
+  const hours = ring.arcs[0]!;
+  assert.equal(hours.key, "hours");
+  assert.equal(hours.weight, 0.5);
+  assert.equal(hours.fill, 0.5);
+  assert.equal(hours.fact, "24 of 48 h");
+});
+
+test("hours cap at the half — 60 hours is a full arc, not more", () => {
+  assert.equal(hoursFill({ hours: 60, resolved: true }), 1);
+  assert.equal(hoursFact(60), "60 of 48 h");
+  assert.equal(hoursFact(31.456), "31.5 of 48 h");
+  assert.equal(hoursFact(-3), "0 of 48 h");
+});
+
+test("no calendar is a GHOST hours arc, left out of the mean — never zero", () => {
+  const ring = buildCareerRing([goal()], TODAY, GHOST);
+  assert.equal(ring.arcs[0]!.fill, null);
+  assert.equal(ring.arcs[0]!.fact, "—");
+  assert.equal(ring.fill, 1, "the goals half alone, and it is on time");
+});
 
 // ---------------------------------------------------------------- which goals count
 
-test("a new goal is a FULL arc — nothing is expected of it yet", () => {
-  const g = goal({ createdAt: TODAY, deadline: addDays(TODAY, 30), progress: 0 });
-  assert.equal(expectedProgress(g.createdAt, g.deadline!, TODAY), 0);
-  const ring = buildCareerRing([g], TODAY);
-  assert.equal(ring.arcs[0]!.fill, 1);
-  assert.equal(ring.fill, 1);
-});
-
-test("on pace is full: half the time gone and half done", () => {
-  const g = goal({ progress: 0.5 }); // created 10 days ago, due in 10
-  const expected = expectedProgress(g.createdAt, g.deadline!, TODAY);
-  assert.equal(expected, 0.5);
-  assert.equal(paceFill(g.progress, expected), 1);
-  assert.equal(buildCareerRing([g], TODAY).fill, 1);
-});
-
-test("ahead of pace still caps at a full arc", () => {
-  const ring = buildCareerRing([goal({ progress: 0.9 })], TODAY);
-  assert.equal(ring.arcs[0]!.fill, 1);
-});
-
-test("behind pace is the share of the pace reached", () => {
-  // Half the time gone, a quarter done: half of where it should be.
-  const ring = buildCareerRing([goal({ progress: 0.25 })], TODAY);
-  assert.equal(ring.arcs[0]!.fill, 0.5);
-  assert.equal(ring.arcs[0]!.expected, 0.5);
-  assert.equal(ring.arcs[0]!.progress, 0.25);
-});
-
-test("past the deadline expected is 1, so the arc shows actual progress — and it STAYS", () => {
-  const g = goal({
-    createdAt: addDays(TODAY, -40),
-    deadline: addDays(TODAY, -5),
-    progress: 0.6,
-  });
-  assert.equal(expectedProgress(g.createdAt, g.deadline!, TODAY), 1);
-  const ring = buildCareerRing([g], TODAY);
-  assert.equal(ring.arcs.length, 1, "still in the ring until done or dropped");
-  assert.equal(ring.arcs[0]!.fill, 0.6);
-});
-
-test("on the deadline day itself, all of it is expected", () => {
-  const g = goal({ createdAt: addDays(TODAY, -20), deadline: TODAY });
-  assert.equal(expectedProgress(g.createdAt, g.deadline!, TODAY), 1);
-});
-
-test("a goal with NO deadline takes no arc", () => {
-  const g = goal({ deadline: null, progress: 0.3 });
-  assert.equal(countsTowardCareer(g), false);
-  const ring = buildCareerRing([g], TODAY);
-  assert.deepEqual(ring.arcs, []);
-});
-
-test("a DONE goal has left the ring, and so has anything not active", () => {
-  for (const status of ["done", "paused", "dropped"]) {
-    const g = goal({ status, progress: 1 });
-    assert.equal(countsTowardCareer(g), false, status);
-    assert.deepEqual(buildCareerRing([g], TODAY).arcs, [], status);
-  }
-});
-
-test("a malformed deadline is not a deadline", () => {
-  assert.equal(countsTowardCareer(goal({ deadline: "30 Sep" })), false);
-  assert.equal(countsTowardCareer(goal({ deadline: "2026-02-30" })), false);
-});
-
-// ---------------------------------------------------------------- no goals
-
-test("no counted goals is NULL — a ghost labelled 'no goals', never 0%", () => {
-  const empty = buildCareerRing([], TODAY);
-  assert.equal(empty.fill, null);
-  assert.deepEqual(empty.arcs, []);
-  const none = buildCareerRing(
-    [goal({ deadline: null }), goal({ id: 2, status: "done" })],
-    TODAY,
+test("a goal counts with a deadline, or with a dated subtask, and not otherwise", () => {
+  assert.equal(countsTowardCareer(goal(), TODAY), true);
+  assert.equal(
+    countsTowardCareer(goal({ deadline: null, subgoals: [sub({ due: TODAY })] }), TODAY),
+    true,
   );
-  assert.equal(none.fill, null);
+  assert.equal(countsTowardCareer(goal({ deadline: null }), TODAY), false);
+  assert.equal(countsTowardCareer(goal({ deadline: "30 Sep" }), TODAY), false);
 });
 
-// ---------------------------------------------------------------- the ring
-
-test("each counted goal is ONE EQUAL arc, and Career is their mean", () => {
-  const ring = buildCareerRing(
-    [
-      goal({ id: 1, progress: 0.5 }), // on pace -> 1
-      goal({ id: 2, progress: 0.25 }), // behind -> 0.5
-      goal({ id: 3, progress: 0 }), // nothing -> 0
-    ],
-    TODAY,
-  );
-  assert.equal(ring.arcs.length, 3);
-  for (const a of ring.arcs) close(a.weight, 1 / 3);
-  close(
-    ring.arcs.reduce((s, a) => s + a.weight, 0),
-    1,
-  );
-  close(ring.fill!, (1 + 0.5 + 0) / 3);
+test("a done, paused or dropped goal has left the ring", () => {
+  for (const status of ["done", "paused", "dropped"])
+    assert.equal(countsTowardCareer(goal({ status }), TODAY), false, status);
 });
-
-test("the ring is Career's, by its key and its one name", () => {
-  const ring = buildCareerRing([goal()], TODAY);
-  assert.equal(ring.key, "portfolio");
-  assert.equal(ring.name, PILLAR_NAME.portfolio);
-});
-
-test("arcs run soonest deadline first, then oldest goal", () => {
-  const ring = buildCareerRing(
-    [
-      goal({ id: 5, deadline: "2026-12-01" }),
-      goal({ id: 9, deadline: "2026-10-01" }),
-      goal({ id: 2, deadline: "2026-10-01" }),
-    ],
-    TODAY,
-  );
-  assert.deepEqual(
-    ring.arcs.map((a) => a.goalId),
-    [2, 9, 5],
-  );
-  assert.equal(ring.arcs[0]!.key, "goal-2");
-});
-
-test("each arc carries its title and the owner's line", () => {
-  const ring = buildCareerRing(
-    [goal({ title: "Thesis draft", deadline: "2026-09-30", progress: 0.6 })],
-    TODAY,
-  );
-  const a = ring.arcs[0]!;
-  assert.equal(a.label, "Thesis draft");
-  assert.equal(a.fact, "60% · due 30 Sep");
-  assert.equal(a.deadline, "2026-09-30");
-});
-
-// ---------------------------------------------------------------- the edges
 
 test("a goal is not in the ring of a day before it existed", () => {
-  const g = goal({ createdAt: TODAY, deadline: addDays(TODAY, 20) });
+  const g = goal({ createdAt: TODAY });
   assert.equal(existedOn(g.createdAt, addDays(TODAY, -1)), false);
-  // Not a full arc, which is what the created-today rule would otherwise make it: no arc,
-  // and with nothing else counted, the "no goals" ghost.
-  const back = buildCareerRing([g], addDays(TODAY, -3));
-  assert.deepEqual(back.arcs, []);
-  assert.equal(back.fill, null);
-  // On its own creation day it is in, and full.
-  assert.equal(buildCareerRing([g], TODAY).arcs[0]!.fill, 1);
+  assert.equal(countsTowardCareer(g, addDays(TODAY, -1)), false);
+  assert.equal(countsTowardCareer(g, TODAY), true);
 });
 
-test("a past day keeps the goals it did have, and only those", () => {
-  const old = goal({ id: 1, createdAt: addDays(TODAY, -20), progress: 0 });
-  const fresh = goal({ id: 2, createdAt: TODAY, deadline: addDays(TODAY, 30) });
-  const back = buildCareerRing([old, fresh], addDays(TODAY, -2));
+test("a dated subtask written down later does not put the goal in a past day's ring", () => {
+  const g = goal({
+    deadline: null,
+    subgoals: [sub({ due: addDays(TODAY, -2), createdAt: TODAY })],
+  });
+  assert.equal(countsTowardCareer(g, addDays(TODAY, -1)), false);
+  assert.equal(lateness(g, addDays(TODAY, -1)), null);
+});
+
+// ---------------------------------------------------------------- the cliff
+
+test("a goal is FULL before any date passes, however little is done", () => {
+  const g = goal({ progress: 0, deadline: addDays(TODAY, 1) });
+  assert.deepEqual(goalArcFill(g, TODAY), { fill: 1, fact: "on time", late: null });
+});
+
+test("a dated subtask past its date EMPTIES the slice, from the day after", () => {
+  const g = goal({ subgoals: [sub({ due: TODAY })] });
+  assert.equal(goalArcFill(g, TODAY).fill, 1, "the date itself is not late");
+  const after = goalArcFill(g, addDays(TODAY, 1));
+  assert.equal(after.fill, 0);
+  assert.equal(after.fact, "late · Official practice exam · 1d");
+});
+
+test("the goal's own deadline is an item: past it and unfinished, the slice is empty", () => {
+  const g = goal({ deadline: addDays(TODAY, -3) });
+  const r = goalArcFill(g, TODAY);
+  assert.equal(r.fill, 0);
+  assert.equal(r.fact, "late · deadline · 3d");
+});
+
+test("past its deadline with every subtask ticked, nothing is late", () => {
+  const g = goal({
+    deadline: addDays(TODAY, -3),
+    progress: 1,
+    subgoals: [sub({ done: true, doneOn: addDays(TODAY, -4) })],
+  });
+  assert.equal(goalArcFill(g, TODAY).fill, 1);
+});
+
+test("a goal with no subtasks past its deadline is late — nothing was done", () => {
+  const g = goal({ deadline: addDays(TODAY, -1), subgoals: [] });
+  assert.equal(goalArcFill(g, TODAY).fill, 0);
+});
+
+test("the most overdue item is the one named", () => {
+  const g = goal({
+    deadline: addDays(TODAY, -2),
+    subgoals: [
+      sub({ id: 1, title: "Book it", due: addDays(TODAY, -9) }),
+      sub({ id: 2, title: "Sit it", due: addDays(TODAY, -1) }),
+    ],
+  });
+  assert.deepEqual(lateness(g, TODAY), { item: "Book it", days: 9 });
+});
+
+test("ticking the late subtask restores the slice — and only from the day it was ticked", () => {
+  const due = addDays(TODAY, -5);
+  const g = goal({ subgoals: [sub({ due, done: true, doneOn: TODAY })] });
+  assert.equal(goalArcFill(g, TODAY).fill, 1);
+  assert.equal(goalArcFill(g, addDays(TODAY, -1)).fill, 0, "yesterday it was still late");
+});
+
+// ---------------------------------------------------------------- counted goals keep pace
+
+const counted = (over: Partial<CareerGoal> = {}): CareerGoal =>
+  goal({
+    id: 6,
+    title: "Algorithms",
+    createdAt: addDays(TODAY, -10),
+    deadline: addDays(TODAY, 10),
+    count: { done: 1, target: 150 },
+    progress: 1 / 150,
+    subgoals: [],
+    ...over,
+  });
+
+test("a counted goal fills by pace in the run-up", () => {
+  // Half the span gone: expected 0.5. 75 of 150 is on pace; 30 of 150 is 40% of pace.
+  assert.equal(expectedProgress(counted().createdAt, counted().deadline!, TODAY), 0.5);
   assert.deepEqual(
-    back.arcs.map((a) => a.goalId),
-    [1],
+    goalArcFill(counted({ count: { done: 75, target: 150 }, progress: 0.5 }), TODAY),
+    { fill: 1, fact: "on pace", late: null },
   );
-  // The old goal alone: nothing done, so the day reads as thin as it was.
-  assert.equal(back.fill, back.arcs[0]!.fill);
-  assert.equal(buildCareerRing([old, fresh], TODAY).arcs.length, 2);
+  const behind = goalArcFill(
+    counted({ count: { done: 30, target: 150 }, progress: 0.2 }),
+    TODAY,
+  );
+  close(behind.fill, 0.4);
+  assert.equal(behind.fact, "behind pace");
 });
 
-test("an unreadable creation date keeps the goal rather than hiding it", () => {
-  assert.equal(existedOn("", TODAY), true);
-  assert.equal(existedOn("not a date", TODAY), true);
-  assert.equal(buildCareerRing([goal({ createdAt: "" })], TODAY).arcs.length, 1);
+test("a counted goal made today expects nothing yet and is full", () => {
+  const g = counted({ createdAt: TODAY, count: { done: 0, target: 150 }, progress: 0 });
+  assert.equal(goalArcFill(g, TODAY).fill, 1);
 });
 
-test("a deadline on the creation day: full that day, actual progress after it", () => {
-  assert.equal(expectedProgress(TODAY, TODAY, TODAY), 0);
-  assert.equal(expectedProgress(TODAY, TODAY, addDays(TODAY, 1)), 1);
+test("a counted goal past its deadline is late like any other: EMPTY, not its progress", () => {
+  const g = counted({
+    deadline: addDays(TODAY, -1),
+    count: { done: 40, target: 150 },
+    progress: 40 / 150,
+  });
+  const r = goalArcFill(g, TODAY);
+  assert.equal(r.fill, 0);
+  assert.equal(r.fact, "late · deadline · 1d");
+});
+
+test("a counted goal that reached its target is not late past the date", () => {
+  const g = counted({
+    deadline: addDays(TODAY, -1),
+    count: { done: 150, target: 150 },
+    progress: 1,
+  });
+  assert.equal(goalArcFill(g, TODAY).fill, 1);
 });
 
 test("paceFill never divides by nothing and never leaves 0..1", () => {
-  assert.equal(paceFill(0, 0), 1);
-  assert.equal(paceFill(0.4, -1), 1);
+  assert.equal(paceFill(0.5, 0), 1);
   assert.equal(paceFill(2, 0.5), 1);
   assert.equal(paceFill(-1, 0.5), 0);
   assert.equal(paceFill(NaN, 0.5), 0);
 });
 
-test("the due label says the year only when it is not this year", () => {
-  assert.equal(dueLabel("2026-09-30", TODAY), "due 30 Sep");
-  assert.equal(dueLabel("2027-02-03", TODAY), "due 3 Feb 2027");
-  assert.equal(goalFact(1, "2026-12-25", TODAY), "100% · due 25 Dec");
-  assert.equal(goalFact(0.004, "2026-12-25", TODAY), "0% · due 25 Dec");
+// ---------------------------------------------------------------- the whole ring
+
+test("the goals share the other half equally, and Career is the weighted mean", () => {
+  const a = goal({ id: 1 });
+  const b = goal({ id: 2, title: "English test", subgoals: [sub({ due: addDays(TODAY, -1) })] });
+  const ring = buildCareerRing([a, b], TODAY, NONE);
+  const arcs = ring.arcs.filter((x) => x.goalId != null);
+  assert.deepEqual(arcs.map((x) => x.weight), [0.25, 0.25]);
+  assert.deepEqual(arcs.map((x) => x.fill), [1, 0]);
+  // hours 0 × ½ + (1 × ¼ + 0 × ¼) = 0.25
+  close(ring.fill, 0.25);
+});
+
+test("no goal that can be late is a GHOST half, and Career is the hours alone", () => {
+  const ring = buildCareerRing([goal({ deadline: null })], TODAY, {
+    hours: 12,
+    resolved: true,
+  });
+  assert.equal(ring.arcs.length, 2);
+  assert.equal(ring.arcs[1]!.key, "no-goals");
+  assert.equal(ring.arcs[1]!.fill, null);
+  close(ring.fill, 0.25);
+});
+
+test("both halves ghosts is null — drawn as an empty ghost, never 0%", () => {
+  assert.equal(buildCareerRing([], TODAY, GHOST).fill, null);
+});
+
+test("goal arcs run soonest deadline first, undated last, then oldest goal", () => {
+  const arcs = goalArcs([
+    goal({ id: 3, deadline: addDays(TODAY, 5) }),
+    goal({ id: 2, deadline: null, subgoals: [sub({ due: TODAY })] }),
+    goal({ id: 1, deadline: addDays(TODAY, 5) }),
+  ]);
+  assert.deepEqual(arcs.map((a) => a.goalId), [1, 3, 2]);
+});
+
+test("each goal arc carries its title and its line", () => {
+  const [arc] = goalArcs([goal()]);
+  assert.equal(arc!.label, "AWS Solutions Architect");
+  assert.equal(arc!.fact, "on time");
+  assert.equal(arc!.key, "goal-1");
+});
+
+test("the ring is Career's, by its key and its one name", () => {
+  const ring = buildCareerRing([], TODAY, FULL);
+  assert.equal(ring.key, "portfolio");
+  assert.equal(ring.name, PILLAR_NAME.portfolio);
+});
+
+test("an unreadable creation date keeps the goal rather than hiding it", () => {
+  assert.equal(existedOn("", TODAY), true);
+  assert.equal(countsTowardCareer(goal({ createdAt: "garbage" }), TODAY), true);
 });

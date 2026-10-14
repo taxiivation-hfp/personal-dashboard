@@ -54,13 +54,10 @@ import type { LogDay, LogEntry, LogKind } from "@/lib/dayLog";
  */
 
 /**
- * A kind's pillar, for its tab's fill — resolved through `toneColor`, so the OWNER'S
- * chosen colour from /colours wins over the CSS default, the exact resolution the rings
- * run. It was `var(--color-physical)` etc. here, which is only the default half of that
- * resolution, so a recoloured pillar left its ring one hue and its tabs another — two
- * screens disagreeing about what a colour means. The curated palette is certified for
- * white on top (the chip test in CLAUDE.md), which is what lets any of these fill a tab
- * behind white text.
+ * A kind's pillar, for its tab's fill — resolved through `toneColor`, the exact resolution
+ * the rings run, so a tab and a ring can never disagree about a pillar's hue. Both pillar
+ * hues are certified for white on top (the chip test in CLAUDE.md), which is what lets any
+ * of these fill a tab behind white text.
  *
  * null = NEUTRAL — the warm grey a habit with no pillar takes on the checklist, so a tab
  * and a tick row can never disagree about what "no pillar" looks like. White on
@@ -79,19 +76,10 @@ const KIND_PILLAR: Record<Exclude<LogKind, "drift">, PillarKey | null> = {
   ascnd: "physical",
 };
 
-/** Pillar key -> the owner's chosen colour, or null for the default. Fetched once from
- *  /api/pillars and threaded down; `toneColor` does the resolving. */
-type PillarColors = Partial<Record<PillarKey, string | null>>;
-
 /** A kind's fill. ONE resolver, so the tile's tabs, the reader's tabs and the dialog a
  *  row opens cannot end up three different hues for one kind. */
-const kindHue = (
-  pillar: PillarKey | null,
-  colors: PillarColors,
-): string =>
-  pillar == null
-    ? "var(--color-neutral)"
-    : toneColor(pillar, colors[pillar] ?? null);
+const kindHue = (pillar: PillarKey | null): string =>
+  pillar == null ? "var(--color-neutral)" : toneColor(pillar);
 
 /** What a kind is CALLED where its entry carries no meta of its own. */
 const KIND_LABEL: Record<LogKind, string> = {
@@ -177,10 +165,7 @@ const PRESS = {
  * do. The panel ground is not decoration: a tile's tabs expand OVER neighbouring cards,
  * and a transparent tab over someone else's page is unreadable.
  */
-function tabSkin(
-  e: LogEntry,
-  colors: PillarColors,
-): {
+function tabSkin(e: LogEntry): {
   className: string;
   style?: CSSProperties;
 } {
@@ -191,7 +176,7 @@ function tabSkin(
     };
   return {
     className: "text-white",
-    style: { background: kindHue(KIND_PILLAR[e.kind], colors) },
+    style: { background: kindHue(KIND_PILLAR[e.kind]) },
   };
 }
 
@@ -207,14 +192,12 @@ const tabWords = (e: LogEntry) => e.title ?? e.meta ?? KIND_LABEL[e.kind];
  */
 function AttachmentTab({
   e,
-  colors,
   className = "",
 }: {
   e: LogEntry;
-  colors: PillarColors;
   className?: string;
 }) {
-  const skin = tabSkin(e, colors);
+  const skin = tabSkin(e);
   return (
     <span
       className={`min-w-0 truncate font-serif text-micro leading-tight ${skin.className} ${className}`}
@@ -249,11 +232,9 @@ const TILE_LINES = 4;
  */
 function DayTile({
   day,
-  colors,
   onOpen,
 }: {
   day: LogDay;
-  colors: PillarColors;
   onOpen: () => void;
 }) {
   const pages = day.entries.filter((e) => e.kind === "journal");
@@ -323,7 +304,7 @@ function DayTile({
               }}
             >
               {others.map((e, i) => {
-                const skin = tabSkin(e, colors);
+                const skin = tabSkin(e);
                 return (
                   <span
                     key={i}
@@ -354,7 +335,6 @@ function DayTile({
             <AttachmentTab
               key={i}
               e={e}
-              colors={colors}
               className="rounded px-1.5 py-0.5"
             />
           ))}
@@ -413,13 +393,11 @@ const editable = (e: LogEntry): boolean =>
 
 function DayReader({
   day,
-  colors,
   onOpenPage,
   onOpenEntry,
   onClose,
 }: {
   day: LogDay;
-  colors: PillarColors;
   /** Open a journal page in the reader-editor. */
   onOpenPage: (id: number) => void;
   /** Open a non-journal entry in the dialog that owns its row. */
@@ -527,7 +505,6 @@ function DayReader({
                     <div className="flex items-center gap-2">
                       <AttachmentTab
                         e={e}
-                        colors={colors}
                         className="rounded px-2 py-0.5"
                       />
                       {/* `meta` alone, never joined with the kind label — for outreach
@@ -629,25 +606,6 @@ export default function DayLog({
     fetch("/api/chapter")
       .then((r) => r.json())
       .then((d) => !d.error && setChapters(d.chapters ?? {}))
-      .catch(() => {});
-  }, []);
-
-  /**
-   * The owner's pillar colours, for the tabs — fetched once, resolved through
-   * `toneColor` at the use site. Until (or unless) it answers, the map is empty and
-   * every tab wears its CSS default, which is the same fallback the rings draw with.
-   */
-  const [pillarColors, setPillarColors] = useState<PillarColors>({});
-  useEffect(() => {
-    fetch("/api/pillars")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error || !Array.isArray(d.pillars)) return;
-        const m: PillarColors = {};
-        for (const p of d.pillars as { key: PillarKey; color: string | null }[])
-          m[p.key] = p.color;
-        setPillarColors(m);
-      })
       .catch(() => {});
   }, []);
 
@@ -809,11 +767,7 @@ export default function DayLog({
             <ul className="mt-3 grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-5 lg:grid-cols-7">
               {mine.map((d) => (
                 <li key={d.date} className="min-w-0">
-                  <DayTile
-                    day={d}
-                    colors={pillarColors}
-                    onOpen={() => setOpenDate(d.date)}
-                  />
+                  <DayTile day={d} onOpen={() => setOpenDate(d.date)} />
                 </li>
               ))}
             </ul>
@@ -848,7 +802,6 @@ export default function DayLog({
       {openDay && (
         <DayReader
           day={openDay}
-          colors={pillarColors}
           onOpenPage={setPage}
           onOpenEntry={setEntry}
           onClose={() => setOpenDate(null)}
@@ -889,7 +842,7 @@ export default function DayLog({
               title: null,
               note: entry.body,
             }}
-            hue={toneColor("physical", pillarColors.physical ?? null)}
+            hue={toneColor("physical")}
             onSave={async (note, day) => {
               await fetch("/api/gym", {
                 method: "POST",
@@ -930,7 +883,7 @@ export default function DayLog({
               name={entry.label ?? KIND_LABEL[entry.kind]}
               date={entry.date}
               note={entry.body}
-              hue={kindHue(KIND_PILLAR[entry.kind], pillarColors)}
+              hue={kindHue(KIND_PILLAR[entry.kind])}
               // The entry exists, so the day is ticked — that is what put it in the log.
               done
               pages={cfg.pagesLabel ? entry.value : null}

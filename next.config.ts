@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
    * disturbing whatever the browser is pointed at.
    */
   distDir: process.env.NEXT_DIST_DIR || ".next",
+
+  // `next dev` otherwise writes an AGENTS.md and CLAUDE.md into the repo on every start.
+  // This repo keeps no markdown by the owner's ruling.
+  agentRules: false,
 };
 
 export default nextConfig;

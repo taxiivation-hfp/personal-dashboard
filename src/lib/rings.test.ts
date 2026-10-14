@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   CALORIE_FLOOR,
   HEALTH_METRICS,
-  PILLAR_DEFAULT_VAR,
   PILLAR_NAME,
   PILLAR_ORDER,
   STEPS_FLOOR,
@@ -56,9 +55,6 @@ test("display names come from ONE map: Health and Career", () => {
   assert.equal(buildHealthRing(counts()).key, "physical");
 });
 
-test("every live pillar has a default colour, and only the live pillars do", () => {
-  assert.deepEqual(Object.keys(PILLAR_DEFAULT_VAR).sort(), [...PILLAR_ORDER].sort());
-});
 
 // ---------------------------------------------------------------- the Health registry
 

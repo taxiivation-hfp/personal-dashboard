@@ -59,8 +59,8 @@ async function main() {
     console.log("added habits.escalate");
   }
 
-  // Per-skill segment colour on the Portfolio ring, picked at /colours. Nullable —
-  // NULL means the stable palette default — so this is purely additive.
+  // Per-skill segment colour on the Portfolio ring, from the retired colours page.
+  // Nullable — NULL means the default — so this is purely additive, and latched history.
   const skillCols = await client.execute("PRAGMA table_info(skills)");
   if (!skillCols.rows.some((r) => String(r.name) === "color")) {
     await client.execute("ALTER TABLE skills ADD COLUMN color TEXT");

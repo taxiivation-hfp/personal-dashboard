@@ -6,9 +6,9 @@
  * (NeetCode problems, LeetCode SQL 50) is a count, not a checklist, and 150 subgoal rows
  * would be a page nobody could read to say the thing one number says.
  *
- * ONE COMPONENT, TWO CALLERS — /goals and the Career drill-down — for the reason every
- * shared rule in this app has a single home: two steppers would eventually disagree about
- * what "+" does at 150 of 150, with no error and no failing test.
+ * ITS OWN COMPONENT rather than inline in the Career drill-down, for the reason every
+ * shared rule in this app has a single home: a second stepper would eventually disagree
+ * about what "+" does at 150 of 150, with no error and no failing test.
  *
  * THE VALUE IS SENT ABSOLUTELY, never as a delta (engine.setGoalCount). A double-fired
  * pointer or a retried request must not advance the tally twice — the same reasoning

@@ -21,8 +21,6 @@ import {
 } from "./goals";
 import {
   HEALTH_METRICS,
-  PILLAR_NAME,
-  PILLAR_ORDER,
   STEPS_FLOOR,
   isPillarKey,
   type RawCount,
@@ -38,18 +36,6 @@ export type { PillarKey };
 
 const num = (v: unknown) => (v == null ? 0 : Number(v));
 const str = (v: unknown) => (v == null ? null : String(v));
-
-/**
- * A pillar ROW — its key, display name and chosen colour. Only the two live pillars are ever
- * returned (see getPillars); the Social row stays in the database and never reaches a screen.
- */
-export type PillarView = {
-  key: PillarKey;
-  /** From PILLAR_NAME — "Health" / "Career" — never from the stored `pillars.name`. */
-  name: string;
-  priority: string;
-  color: string | null;
-};
 
 export type HabitView = {
   id: number;
@@ -91,6 +77,8 @@ export type HabitView = {
   streak: number;
 };
 
+/** A subtask. Satisfies `DatedSubtask` (subtasks.ts), which decides when it floats and
+ *  when it is late. */
 export type SubgoalView = {
   id: number;
   title: string;
@@ -99,6 +87,12 @@ export type SubgoalView = {
   /** What it is actually worth right now. Render THIS. */
   effectiveWeight: number;
   done: boolean;
+  /** Its optional date, 'YYYY-MM-DD', or null. Dated subtasks float and can be late. */
+  due: string | null;
+  /** The LOCAL day it was ticked, or null. */
+  doneOn: string | null;
+  /** The LOCAL day it was written down. */
+  createdAt: string;
 };
 
 /**
@@ -107,7 +101,8 @@ export type SubgoalView = {
  * it would hide a live Career goal that happened to be filed under Physical years ago.
  *
  * Satisfies `CareerGoal` (career.ts), so the Career ring can be rebuilt from a client's own
- * goals state with `buildCareerRing(goals, today)` and never disagree with /api/rings.
+ * goals state with `buildCareerRing(goals, today, hours)` and never disagree with
+ * /api/rings.
  */
 export type GoalView = {
   id: number;
@@ -125,11 +120,11 @@ export type GoalView = {
   subgoals: SubgoalView[];
   /** True ONLY when explicit overrides exceed 100%. An all-auto goal is well-formed. */
   overAllocated: boolean;
-  /** The goal's optional deadline, 'YYYY-MM-DD', or null. Only an ACTIVE goal WITH a
-   *  deadline takes an arc of the Career ring. */
+  /** The goal's optional deadline, 'YYYY-MM-DD', or null. An ACTIVE goal with a deadline
+   *  or a dated subtask takes an arc of the Career ring (career.ts). */
   deadline: string | null;
-  /** The LOCAL date ('YYYY-MM-DD', app timezone) the goal was created — the start of its
-   *  pace. */
+  /** The LOCAL date ('YYYY-MM-DD', app timezone) the goal was created — the start of a
+   *  counted goal's pace. */
   createdAt: string;
   /** The LOCAL date it was marked done, 'YYYY-MM-DD', or null. Cleared when a goal leaves
    *  'done'. A finished goal with no date is a fact with no place in a sequence. */
@@ -221,7 +216,6 @@ export type DayView = {
    * every other streak gets.
    */
   stepsStreak: number;
-  pillars: PillarView[];
 };
 
 /** One addition to a day's total. `note` is the food's name, or null — the schema always
@@ -433,29 +427,6 @@ export async function pillarMaps(db: Client) {
     byKey.set(key, num(p.id));
   }
   return { byId, byKey };
-}
-
-/**
- * The two live pillars, Health then Career — for /colours, /api/pillars and DayView.pillars.
- *
- * FILTERED to PILLAR_ORDER: the Social row is data, not a pillar. Named from PILLAR_NAME,
- * the one source of display names; `pillars.name` is kept in step by the pivot migration but
- * is not what is shown.
- */
-export async function getPillars(db: Client): Promise<PillarView[]> {
-  const r = await db.execute("SELECT key,priority,color FROM pillars");
-  const rows = new Map<PillarKey, { priority: string; color: string | null }>();
-  for (const p of r.rows) {
-    const key = String(p.key);
-    if (isPillarKey(key))
-      rows.set(key, { priority: String(p.priority), color: str(p.color) });
-  }
-  return PILLAR_ORDER.filter((k) => rows.has(k)).map((key) => ({
-    key,
-    name: PILLAR_NAME[key],
-    priority: rows.get(key)!.priority,
-    color: rows.get(key)!.color,
-  }));
 }
 
 async function loadMarks(db: Client, date: string) {
@@ -711,7 +682,6 @@ export async function getDayView(
     { events, connected: calendarConnected },
     marks,
     habitsOnly,
-    pillars,
     earned,
     calorieStreak,
     stepsStreak,
@@ -735,7 +705,6 @@ export async function getDayView(
     Promise.resolve(cal),
     loadMarks(db, date),
     habitsForDate(db, date),
-    getPillars(db),
     habitEntryHistory(db, date),
     calorieStreakFor(db, date, grace),
     stepsStreakFor(db, date, grace),
@@ -812,7 +781,6 @@ export async function getDayView(
     oneOffs,
     calorieStreak,
     stepsStreak,
-    pillars,
   };
 }
 
@@ -828,7 +796,7 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
     "SELECT id,title,target,target_count,done_count,status,deadline,created_at,completed_at FROM goals WHERE status != 'dropped' ORDER BY id",
   );
   const subs = await db.execute(
-    "SELECT id,goal_id,title,weight,done FROM subgoals ORDER BY goal_id, sort_order, id",
+    "SELECT id,goal_id,title,weight,done,due,done_on,created_at FROM subgoals ORDER BY goal_id, sort_order, id",
   );
 
   type RawSub = Omit<SubgoalView, "effectiveWeight">;
@@ -841,6 +809,10 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
       title: String(s.title),
       weight: num(s.weight),
       done: num(s.done) === 1,
+      due: str(s.due),
+      doneOn: str(s.done_on),
+      createdAt:
+        localDateOf(str(s.created_at)) ?? (str(s.created_at) ?? "").slice(0, 10),
     });
     byGoal.set(gid, list);
   }

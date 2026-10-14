@@ -1,6 +1,12 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+} from "react";
 import Link from "next/link";
 import Ring, {
   SegmentedRing,
@@ -13,7 +19,7 @@ import StepsLog from "./StepsLog";
 import StatsLink from "./StatsLink";
 import AdherenceTracker from "./AdherenceTracker";
 import { addDays } from "@/lib/dates";
-import { dueLabel } from "@/lib/career";
+import { subtaskLine } from "@/lib/subtasks";
 import { sessionTitle } from "@/lib/sessions";
 import {
   PILLAR_NAME,
@@ -96,15 +102,12 @@ const STROKE_OPEN = 13;
 export default function PillarSections({
   health,
   career,
-  colors,
   workouts,
   goals,
   tracker,
   date,
   today,
-  onSubgoal,
-  onGoalDone,
-  onGoalCount,
+  onGoals,
   onSaveWorkout,
   onDeleteWorkout,
   onOpenDay,
@@ -118,8 +121,6 @@ export default function PillarSections({
    * trip, and the route runs the same function, so the two can never disagree.
    */
   career: CareerRingView;
-  /** Owner-chosen hue per pillar, from the curated palette. */
-  colors: Partial<Record<PillarKey, string | null>>;
   /** Sessions logged ON the viewed day — the Log buttons' chips. */
   workouts: Workout[];
   /** Every non-dropped goal, for Career opened. [] before the first load. */
@@ -130,10 +131,13 @@ export default function PillarSections({
   date: string;
   /** The real today — the workout dialog's date cap, and the tracker's anchor. */
   today?: string;
-  onSubgoal: (id: number, done: boolean) => Promise<void>;
-  onGoalDone: (id: number, done: boolean) => Promise<void>;
-  /** A COUNTED goal's tally, set absolutely. */
-  onGoalCount: (id: number, count: number) => Promise<void>;
+  /**
+   * EVERY goal write goes through this one wire — Today's `mutateGoals`, which fetches,
+   * reads the refreshed `goals` off the reply and sets them, so the Career ring is rebuilt
+   * on this client the same beat the list changes. The routes (/api/goals, /api/subgoals)
+   * all answer with the whole collection, which is what makes one wire enough.
+   */
+  onGoals: (url: string, init: RequestInit) => Promise<void>;
   /**
    * id null = log a NEW session; an id edits that one.
    *
@@ -154,6 +158,13 @@ export default function PillarSections({
   onOpenRecord: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  /** The new-goal form, and each goal's "add a subtask" draft. Controlled, because a
+   *  submit has to clear them; the edit fields on existing rows are uncontrolled and save
+   *  on blur, the way the old /goals screen's did. */
+  const [newGoal, setNewGoal] = useState("");
+  const [newDeadline, setNewDeadline] = useState("");
+  const [newCount, setNewCount] = useState("");
+  const [newSub, setNewSub] = useState<Record<number, string>>({});
   /** Which pillar is expanded. One at a time, so the column never outgrows its window. */
   const [open, setOpen] = useState<PillarKey | null>(null);
   /** The steps trend, raised from the Steps part row. A DIALOG rather than the inline
@@ -339,12 +350,27 @@ export default function PillarSections({
     }
   };
 
+  /** One goal write: `key` names what is busy, `body` is JSON. */
+  const goalWrite = (
+    key: string,
+    url: string,
+    method: "POST" | "PATCH" | "DELETE",
+    body?: unknown,
+  ) =>
+    run(key, () =>
+      onGoals(url, {
+        method,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+    );
+
   const ringOf = (pk: PillarKey): HealthRingView | CareerRingView | null =>
     pk === "physical" ? health : career;
 
-  /** Career with no counted goal: an empty DASHED ghost, and the centre says "no goals"
-   *  rather than "0%" (spec §1). Health never ghosts as a whole — a null fill there means
-   *  the fetch has not landed, which is a different statement and draws a plain track. */
+  /** Career with nothing to measure — no calendar AND no goal that can be late — is an
+   *  empty DASHED ghost, and the centre says "no goals" rather than "0%" (spec §1). Health
+   *  never ghosts as a whole — a null fill there means the fetch has not landed, which is a
+   *  different statement and draws a plain track. */
   const isGhost = (pk: PillarKey, ring: HealthRingView | CareerRingView | null) =>
     pk === "portfolio" && ring?.fill == null;
 
@@ -401,7 +427,6 @@ export default function PillarSections({
             size={RING_CLOSED}
             stroke={STROKE_CLOSED}
             tone={pk}
-            color={colors[pk]}
             // The pillar's own lamp, in both layouts. Constant — see `glow` and The One
             // Lamp Rule; it carries the hue and never the fill.
             glow
@@ -519,10 +544,7 @@ export default function PillarSections({
                     size={18}
                     stroke={2.5}
                     tone="physical"
-                    color={segmentShade(
-                      colors.physical ?? TONE_HEX.physical,
-                      i,
-                    )}
+                    color={segmentShade(TONE_HEX.physical, i)}
                   />
                 </span>
 
@@ -682,50 +704,153 @@ export default function PillarSections({
     );
   };
 
+  /** The field style every edit-in-place input here shares: the rule is invisible until
+   *  focus, because a column of resting underlines would turn the list back into a form. */
+  const FIELD =
+    "min-w-0 border-b border-transparent bg-transparent pb-0.5 outline-none transition-colors focus:border-[var(--color-accent)]";
+  /** A field whose rule is always drawn: the ones that hold a SETTING (a date, a weight)
+   *  rather than the owner's own words. */
+  const SETTING =
+    "border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-micro tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]";
+  const LINK_BTN =
+    "shrink-0 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40";
+
   /**
-   * CAREER opened: the active goals, WITH OR WITHOUT a deadline.
+   * CAREER opened: the goals, EDITED IN PLACE. The /goals screen is gone (the owner's
+   * ruling, 2026-10-15) and everything it did lives here: title, deadline, mark done, drop,
+   * the subtasks with their weights, a new goal, and the finished ones with "reopen".
    *
-   * The RING counts only the ones with a deadline — a goal with no deadline has no pace to
-   * be on, so it has nothing to say to an arc. The LIST shows all of them, because a goal
-   * with no deadline is still a goal you are working on, and a screen that hid it would be
-   * the app deciding what counts as work.
+   * EVERY GOAL IS A CAREER GOAL since the Health & Career pivot, so there is no pillar
+   * picker. Weights: blank means AUTO — the subtask takes an equal share of whatever the
+   * explicit ones leave behind (goals.ts) — and the auto share is shown as the field's
+   * placeholder, so the column of numbers is always the real split. Progress has no field:
+   * it is derived from the ticks, and letting it be typed is what let the stored column
+   * drift from the subtasks that define it.
+   *
+   * The RING counts only the active goals with a deadline or a dated subtask — something
+   * that can be late (career.ts). The LIST shows every active goal, because a goal with no
+   * date is still a goal you are working on. An empty date field CLEARS a date (the routes
+   * read "" as null), which is how a goal or a subtask stops being able to fail.
+   *
+   * THE HOURS HALF leads the list: the fortnight's Work Projects hours against the 48 that
+   * fill it, from the same arc the donut draws. Each goal's line under its figure is its
+   * arc's own fact — "on time", "on pace", or "late · item · Nd" — so the list and the
+   * donut cannot disagree about why a slice is empty.
    */
   const careerBody = () => {
     const active = goals.filter((g) => g.status === "active");
+    const finished = goals.filter((g) => g.status === "done");
+    const hoursArc = career.arcs.find((a) => a.key === "hours");
+    const arcOf = (goalId: number) =>
+      career.arcs.find((a) => a.goalId === goalId) ?? null;
+
+    /** Save a text field on blur — only if it changed and is not blank. */
+    const saveTitle = (key: string, url: string, was: string) =>
+      (e: FocusEvent<HTMLInputElement>) => {
+        const v = e.target.value.trim();
+        if (v && v !== was) void goalWrite(key, url, "PATCH", { title: v });
+      };
+
     return (
       <>
+        {/* The hours half, as a row of the same shape as a Health part: the marker in the
+            arc's shade, the name, the real number. A ghost prints a dash — nobody measured. */}
+        {hoursArc && (
+          <div className="detail-enter flex items-center gap-x-2.5 border-t border-[var(--color-line)] py-2.5">
+            <span className="flex w-5 shrink-0 items-center justify-center">
+              <Ring
+                fill={hoursArc.fill}
+                dashed={hoursArc.fill == null}
+                size={18}
+                stroke={2.5}
+                tone="portfolio"
+                color={segmentShade(TONE_HEX.portfolio, 0)}
+              />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-small">
+              {hoursArc.label}
+            </span>
+            <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+              {hoursArc.fact}
+            </span>
+          </div>
+        )}
+
         <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
           {active.map((g, i) => (
             <li
               key={g.id}
               className="detail-enter py-3"
-              style={{ "--enter-delay": `${(i + 1) * 45}ms` } as CSSProperties}
+              style={{ "--enter-delay": `${(i + 2) * 45}ms` } as CSSProperties}
             >
-              <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 flex-1 font-serif text-body">{g.title}</p>
-                {/* Marking done is the OWNER's call — goals are never auto-completed at
-                    100%. The goal leaves this list on the next `goals` update, which is
-                    correct: /goals is where a finished goal is still visible. */}
-                <button
-                  type="button"
-                  onClick={() => run(`gd${g.id}`, () => onGoalDone(g.id, true))}
-                  disabled={busy === `gd${g.id}`}
-                  className="shrink-0 rounded-full border border-[var(--color-line-strong)] px-2.5 py-1 text-micro transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
-                >
-                  mark done
-                </button>
-              </div>
+              {/* The owner's own title, serif, in the field it is edited in. */}
+              <input
+                defaultValue={g.title}
+                aria-label="Goal title"
+                onBlur={saveTitle(`gt${g.id}`, `/api/goals/${g.id}`, g.title)}
+                className={`${FIELD} w-full font-serif text-body`}
+              />
 
-              <p className="mt-0.5 text-micro tabular-nums text-[var(--color-muted)]">
-                {g.deadline ? dueLabel(g.deadline, date) : "no deadline"} ·{" "}
-                {Math.round(g.progress * 100)}%
-              </p>
+              {/* The deadline, the figure and the two decisions, on one muted line.
+                  The date field is KEYED BY THE STORED VALUE: it is uncontrolled, and a
+                  date the server normalised or refused would otherwise sit on screen as
+                  if it had been saved. */}
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-[var(--color-muted)]">
+                <label className="flex items-center gap-1.5">
+                  due
+                  <input
+                    key={`${g.id}-${g.deadline ?? ""}`}
+                    type="date"
+                    defaultValue={g.deadline ?? ""}
+                    aria-label={`Deadline for ${g.title}`}
+                    onBlur={(e) =>
+                      (e.target.value || null) !== g.deadline &&
+                      goalWrite(`gd${g.id}`, `/api/goals/${g.id}`, "PATCH", {
+                        deadline: e.target.value || null,
+                      })
+                    }
+                    className={SETTING}
+                  />
+                </label>
+                <span className="tabular-nums">
+                  {Math.round(g.progress * 100)}%
+                </span>
+                {/* The arc's own line, or why there is no arc. */}
+                <span className="min-w-0 truncate">
+                  · {arcOf(g.id)?.fact ?? "no dates"}
+                </span>
+                <span className="ml-auto flex items-center gap-3">
+                  {/* Marking done is the OWNER's call — goals are never auto-completed
+                      at 100%. The goal moves to the finished list below. */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      goalWrite(`gs${g.id}`, `/api/goals/${g.id}`, "PATCH", {
+                        status: "done",
+                      })
+                    }
+                    disabled={busy === `gs${g.id}`}
+                    className={LINK_BTN}
+                  >
+                    mark done
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      confirm(`Drop "${g.title}"? Its subtasks are kept.`) &&
+                      goalWrite(`gx${g.id}`, `/api/goals/${g.id}`, "DELETE")
+                    }
+                    disabled={busy === `gx${g.id}`}
+                    className={LINK_BTN}
+                  >
+                    drop
+                  </button>
+                </span>
+              </div>
 
               {/* The track is a rule, not a recessed slab: --color-panel-2 sits two points
                   off the page and the bar would lose its ground entirely.
-                  scaleX, not width: transform is composited and skips layout. At this
-                  height the rounded caps distort by a fraction of a pixel, which is
-                  invisible and worth the free frame. */}
+                  scaleX, not width: transform is composited and skips layout. */}
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-line)]">
                 <div
                   className="motion-data h-full w-full origin-left rounded-full bg-[var(--color-accent)]"
@@ -741,55 +866,168 @@ export default function PillarSections({
                   target={g.count.target}
                   busy={busy === `gc${g.id}`}
                   label={g.title}
-                  onSet={(n) => run(`gc${g.id}`, () => onGoalCount(g.id, n))}
+                  onSet={(n) =>
+                    goalWrite(`gc${g.id}`, `/api/goals/${g.id}`, "PATCH", {
+                      count: n,
+                    })
+                  }
                 />
               ) : (
                 <>
-              <ul className="mt-2.5">
-                {g.subgoals.map((s) => (
-                  <li key={s.id}>
-                    <button
-                      onClick={() => run(`sg${s.id}`, () => onSubgoal(s.id, !s.done))}
-                      aria-pressed={s.done}
-                      disabled={busy === `sg${s.id}`}
-                      className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
-                    >
-                      <span
-                        aria-hidden
-                        className="h-3.5 w-3.5 shrink-0 rounded-[4px] transition-colors"
-                        style={
-                          s.done
-                            ? { background: "var(--color-accent)" }
-                            : { border: "1px solid var(--color-line-strong)" }
-                        }
-                      />
-                      <span
-                        className={`min-w-0 flex-1 truncate font-serif text-small ${
-                          s.done ? "text-[var(--color-muted)]" : ""
-                        }`}
-                      >
-                        {s.title}
-                      </span>
-                      <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
-                        {Math.round(s.effectiveWeight * 100)}%
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                  <ul className="mt-2">
+                    {g.subgoals.map((sg) => (
+                      <li key={sg.id} className="py-1">
+                        <div className="flex items-center gap-2">
+                          {/* The tick is its own button, so the title beside it can be a
+                              field — a control inside a control is not a thing. The tick
+                              belongs to the day on screen (subtasks.ts, done_on). */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              goalWrite(
+                                `sg${sg.id}`,
+                                `/api/subgoals/${sg.id}`,
+                                "PATCH",
+                                { done: !sg.done, date },
+                              )
+                            }
+                            aria-pressed={sg.done}
+                            aria-label={`${sg.done ? "Untick" : "Tick"} ${sg.title}`}
+                            disabled={busy === `sg${sg.id}`}
+                            className="-ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-panel)] disabled:opacity-40"
+                          >
+                            <span
+                              aria-hidden
+                              className="h-3.5 w-3.5 rounded-[4px] transition-colors"
+                              style={
+                                sg.done
+                                  ? { background: "var(--color-accent)" }
+                                  : { border: "1px solid var(--color-line-strong)" }
+                              }
+                            />
+                          </button>
+                          <input
+                            defaultValue={sg.title}
+                            aria-label="Subtask title"
+                            onBlur={saveTitle(
+                              `st${sg.id}`,
+                              `/api/subgoals/${sg.id}`,
+                              sg.title,
+                            )}
+                            className={`${FIELD} flex-1 font-serif text-small ${
+                              sg.done ? "text-[var(--color-muted)]" : ""
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              confirm(`Delete "${sg.title}"?`) &&
+                              goalWrite(
+                                `sx${sg.id}`,
+                                `/api/subgoals/${sg.id}`,
+                                "DELETE",
+                              )
+                            }
+                            disabled={busy === `sx${sg.id}`}
+                            aria-label={`Delete ${sg.title}`}
+                            className="shrink-0 px-1 text-body leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] disabled:opacity-40"
+                          >
+                            ×
+                          </button>
+                        </div>
 
-              {g.subgoals.length === 0 && (
-                <p className="mt-2 text-micro text-[var(--color-muted)]">
-                  No subtasks yet
-                </p>
-              )}
-              {/* Fires only when explicit overrides exceed 100% — an all-auto goal is
-                  well-formed and must never warn. */}
-              {g.overAllocated && (
-                <p className="mt-2 text-micro text-[var(--color-muted)]">
-                  set weights total more than 100%
-                </p>
-              )}
+                        {/* ITS SETTINGS, on a line of their own under the title: the date
+                            that makes it float and lets it be late, the weight, and where
+                            it stands against the date. Both fields are KEYED BY THE STORED
+                            VALUE for the reason the goal's date field is. Blank weight is
+                            auto, and the placeholder prints what auto currently comes to. */}
+                        <div className="ml-7 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-[var(--color-muted)]">
+                          <label className="flex items-center gap-1.5">
+                            due
+                            <input
+                              key={`${sg.id}-${sg.due ?? ""}`}
+                              type="date"
+                              defaultValue={sg.due ?? ""}
+                              aria-label={`Date for ${sg.title}`}
+                              onBlur={(e) =>
+                                (e.target.value || null) !== sg.due &&
+                                goalWrite(
+                                  `sd${sg.id}`,
+                                  `/api/subgoals/${sg.id}`,
+                                  "PATCH",
+                                  { due: e.target.value || null },
+                                )
+                              }
+                              className={SETTING}
+                            />
+                          </label>
+                          <label className="flex items-center gap-1">
+                            <input
+                              key={`${sg.id}-${sg.weight}`}
+                              type="number"
+                              min={0}
+                              max={100}
+                              placeholder={String(Math.round(sg.effectiveWeight * 100))}
+                              aria-label={`Weight for ${sg.title}, percent, blank for auto`}
+                              defaultValue={
+                                sg.weight > 0 ? Math.round(sg.weight * 100) : ""
+                              }
+                              onBlur={(e) => {
+                                const w =
+                                  e.target.value === ""
+                                    ? 0
+                                    : Number(e.target.value) / 100;
+                                if (w !== sg.weight)
+                                  void goalWrite(
+                                    `sw${sg.id}`,
+                                    `/api/subgoals/${sg.id}`,
+                                    "PATCH",
+                                    { weight: w },
+                                  );
+                              }}
+                              className={`${SETTING} w-9 text-right`}
+                            />
+                            %
+                          </label>
+                          {subtaskLine(sg, date) && (
+                            <span className="tabular-nums">{subtaskLine(sg, date)}</span>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* Fires only when explicit overrides exceed 100% — an all-auto goal is
+                      well-formed and must never warn. */}
+                  {g.overAllocated && (
+                    <p className="mt-1 text-micro text-[var(--color-muted)]">
+                      set weights total more than 100%
+                    </p>
+                  )}
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const t = (newSub[g.id] ?? "").trim();
+                      if (!t) return;
+                      setNewSub({ ...newSub, [g.id]: "" });
+                      void goalWrite(`sn${g.id}`, "/api/subgoals", "POST", {
+                        goal_id: g.id,
+                        title: t,
+                      });
+                    }}
+                    className="mt-1.5"
+                  >
+                    <input
+                      value={newSub[g.id] ?? ""}
+                      onChange={(e) =>
+                        setNewSub({ ...newSub, [g.id]: e.target.value })
+                      }
+                      placeholder="Add a subtask"
+                      aria-label={`Add a subtask to ${g.title}`}
+                      className={`${FIELD} w-full font-serif text-small placeholder:text-[var(--color-muted)]`}
+                    />
+                  </form>
                 </>
               )}
             </li>
@@ -797,35 +1035,108 @@ export default function PillarSections({
 
           {active.length === 0 && (
             <li className="py-3 text-small text-[var(--color-muted)]">
-              Nothing in flight.{" "}
-              <Link
-                href="/goals"
-                className="text-[var(--color-ink)] underline decoration-[var(--color-line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--color-accent)]"
-              >
-                add one
-              </Link>
+              Nothing in flight.
             </li>
           )}
         </ul>
 
-        {/* Renaming, reweighting and deadlines all live on /goals — this column ticks
-            subtasks and marks a goal done, and nothing else. */}
-        <div
-          className="detail-enter"
+        {/* A NEW GOAL. Serif, because what gets typed here is a goal title — the same
+            words that render serif the moment they are saved. The deadline and the count
+            beside it are the app's own vocabulary, so they stay sans. All three clear on
+            the one submit: a date left standing behind a title that has gone would quietly
+            become the next goal's deadline. "of" is how many items a COUNTED goal has;
+            blank means the goal takes subtasks instead, hence a dash and never a 0. */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const t = newGoal.trim();
+            if (!t) return;
+            setNewGoal("");
+            setNewDeadline("");
+            setNewCount("");
+            void goalWrite("gn", "/api/goals", "POST", {
+              title: t,
+              deadline: newDeadline || null,
+              targetCount: newCount === "" ? null : Number(newCount),
+            });
+          }}
+          className="detail-enter mt-4"
           style={
-            {
-              "--enter-delay": `${(active.length + 1) * 45}ms`,
-            } as CSSProperties
+            { "--enter-delay": `${(active.length + 1) * 45}ms` } as CSSProperties
           }
         >
-          <Link
-            href="/goals"
-            className="mt-3 inline-flex items-center gap-1.5 text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
+          <input
+            value={newGoal}
+            onChange={(e) => setNewGoal(e.target.value)}
+            placeholder="New goal"
+            aria-label="New goal"
+            className={`${SETTING} w-full font-serif text-body tabular-nums`}
+          />
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-[var(--color-muted)]">
+            <label className="flex items-center gap-1.5">
+              due
+              <input
+                type="date"
+                value={newDeadline}
+                onChange={(e) => setNewDeadline(e.target.value)}
+                className={SETTING}
+              />
+            </label>
+            <label className="flex items-center gap-1.5">
+              of
+              <input
+                type="number"
+                min={1}
+                value={newCount}
+                onChange={(e) => setNewCount(e.target.value)}
+                placeholder="—"
+                aria-label="How many items, for a counted goal"
+                className={`${SETTING} w-12`}
+              />
+            </label>
+          </div>
+        </form>
+
+        {/* THE FINISHED ONES, kept in sight: the surface that writes goals must not be
+            the surface that loses them. Reopening clears completed_at server-side. A goal
+            finished before the stamp existed is undated — an undated fact, not a missing
+            one. Dropped goals are gone from every list, as before. */}
+        {finished.length > 0 && (
+          <div
+            className="detail-enter mt-5"
+            style={
+              { "--enter-delay": `${(active.length + 2) * 45}ms` } as CSSProperties
+            }
           >
-            edit
-            <span aria-hidden>→</span>
-          </Link>
-        </div>
+            <div className="section-head">
+              <h3 className="text-micro font-semibold">Finished</h3>
+            </div>
+            <ul className="divide-y divide-[var(--color-line)]">
+              {finished.map((g) => (
+                <li key={g.id} className="flex items-baseline gap-2 py-1.5">
+                  <span className="min-w-0 flex-1 truncate font-serif text-small text-[var(--color-muted)]">
+                    {g.title}
+                  </span>
+                  <span className="shrink-0 text-micro tabular-nums text-[var(--color-muted)]">
+                    {g.completedAt ? shortDay(g.completedAt) : "done"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      goalWrite(`gs${g.id}`, `/api/goals/${g.id}`, "PATCH", {
+                        status: "active",
+                      })
+                    }
+                    disabled={busy === `gs${g.id}`}
+                    className={LINK_BTN}
+                  >
+                    reopen
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </>
     );
   };
@@ -866,7 +1177,6 @@ export default function PillarSections({
               size={RING_OPEN}
               stroke={STROKE_OPEN}
               tone={pk}
-              color={colors[pk]}
               glow
               spin
               kick={kick.pillar === pk ? kick.n : 0}
@@ -942,7 +1252,7 @@ export default function PillarSections({
                 gymLog?.find((x) => x.id === openLog.id) ??
                 null)
           }
-          hue={toneColor("physical", colors.physical)}
+          hue={toneColor("physical")}
           onSave={async (note, day) => {
             await onSaveWorkout(openLog.kind, note, openLog.id, day);
             refreshGymLog();

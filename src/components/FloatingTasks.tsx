@@ -10,7 +10,6 @@ import {
   type RefObject,
 } from "react";
 import HabitBox from "./HabitBox";
-import type { DayTaskView } from "@/lib/queries";
 
 /**
  * TASKS, FLOATING IN THE SPACE AROUND THE HERO RING — the owner's ruling (spec §4).
@@ -22,6 +21,12 @@ import type { DayTaskView } from "@/lib/queries";
  *
  * So the band IS the hero row now. This component owns it: the ring and its caption arrive as
  * `children` and sit in the middle, and the cards are laid out on two rails either side.
+ *
+ * TWO KINDS OF CARD share the rails since 2026-10-15: the day's one-off tasks, and a goal's
+ * DATED SUBTASKS from a week before their date (subtasks.ts). Today.tsx builds both into
+ * one `FloatCard` list; this component does not know which is which beyond the goal name a
+ * subtask card carries as its second line, so the two kinds are told apart on the card and
+ * nowhere else.
  *
  * NOTHING IS DRAWN WHEN THERE ARE NO TASKS — no rails, no heading, no "nothing due" line. An
  * empty frame is furniture claiming a feature is in use; the honest drawing of an empty list
@@ -54,13 +59,29 @@ const CARD = "record-card w-[11.5rem] max-w-full p-2.5!";
 // padding would otherwise win and a 184px card would give its title 116px of line. The bang
 // is the narrow fix; the alternative was a second card class in globals.css for one padding.
 
+/** One card on the rails — a one-off task, or a goal's dated subtask. */
+export type FloatCard = {
+  /** Unique across both kinds: `t<id>` for a task, `s<id>` for a subtask. */
+  key: string;
+  title: string;
+  /** A subtask's goal, printed under the title. null for a one-off task. */
+  sub: string | null;
+  done: boolean;
+  /** "carried 3d", "due in 3d", "late 2d" — a fact, never a penalty. null when nothing. */
+  line: string | null;
+  /** The day it is FOR — the slot order's first key. */
+  due: string;
+  /** The slot order's second key: the row id, which never changes. */
+  order: number;
+};
+
 export default function FloatingTasks({
-  tasks,
+  cards,
   onToggle,
   children,
 }: {
-  tasks: DayTaskView[];
-  onToggle: (id: number, done: boolean) => void;
+  cards: FloatCard[];
+  onToggle: (card: FloatCard, done: boolean) => void;
   /** The hero block — the ring and its caption. This component owns the BAND and lays the
    *  rails out either side of this. */
   children: ReactNode;
@@ -87,10 +108,14 @@ export default function FloatingTasks({
    */
   const ordered = useMemo(
     () =>
-      [...tasks].sort((a, b) =>
-        a.due === b.due ? a.id - b.id : a.due < b.due ? -1 : 1,
+      [...cards].sort((a, b) =>
+        a.due === b.due
+          ? a.order - b.order || a.key.localeCompare(b.key)
+          : a.due < b.due
+            ? -1
+            : 1,
       ),
-    [tasks],
+    [cards],
   );
 
   /** The popover is aimed at a card that may stop existing: the day can be stepped from the
@@ -98,7 +123,7 @@ export default function FloatingTasks({
    *  Keyed on the ID SET rather than on `tasks`, deliberately — a refresh caused by ticking
    *  a task INSIDE the popover must leave it open, because "clear three of these" is one
    *  gesture and not three. */
-  const ids = ordered.map((t) => t.id).join(",");
+  const ids = ordered.map((t) => t.key).join(",");
   useEffect(() => setAnchor(null), [ids]);
 
   /**
@@ -122,7 +147,7 @@ export default function FloatingTasks({
     };
   }, [open]);
 
-  if (tasks.length === 0)
+  if (cards.length === 0)
     return <div className="flex justify-center">{children}</div>;
 
   // Six slots. A seventh task does not get a seventh card — the sixth becomes the way to the
@@ -133,7 +158,7 @@ export default function FloatingTasks({
 
   /** Slot index -> which rail. Even LEFT, odd right, so the first task lands on the side the
    *  eye reaches first and a single task never sits alone on the right. */
-  const slots: (DayTaskView | "more")[] = overflow ? [...shown, "more"] : shown;
+  const slots: (FloatCard | "more")[] = overflow ? [...shown, "more"] : shown;
   /** The rail's members WITH their slot index, which the card needs: below `lg` the rails
    *  stop being boxes and the index becomes the card's `order` in one column. */
   const rail = (side: 0 | 1) =>
@@ -141,10 +166,10 @@ export default function FloatingTasks({
       .map((s, i) => [s, i] as const)
       .filter(([, i]) => i % 2 === side);
 
-  const card = (t: DayTaskView, slot: number) => (
-    <li key={t.id} className={CARD} style={{ order: slot + 1 }}>
+  const card = (t: FloatCard, slot: number) => (
+    <li key={t.key} className={CARD} style={{ order: slot + 1 }}>
       <button
-        onClick={() => onToggle(t.id, !t.done)}
+        onClick={() => onToggle(t, !t.done)}
         aria-pressed={t.done}
         className="flex w-full items-start gap-2.5 text-left"
       >
@@ -165,12 +190,18 @@ export default function FloatingTasks({
           >
             {t.title}
           </span>
-          {/* How long it has waited, stated plainly. No red, no "overdue", no escalating
-              weight — the honest-logging rule covers this list too, and a list that starts
-              scolding is one you stop writing to. */}
-          {!t.done && t.carried > 0 && (
+          {/* The goal a subtask belongs to — the one mark that tells the two kinds apart. */}
+          {t.sub && (
+            <span className="mt-0.5 block truncate text-micro text-[var(--color-muted)]">
+              {t.sub}
+            </span>
+          )}
+          {/* How long it has waited, or how long it has: stated plainly. No red, no
+              "overdue", no escalating weight — the honest-logging rule covers this list
+              too, and a list that starts scolding is one you stop writing to. */}
+          {!t.done && t.line && (
             <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
-              carried {t.carried}d
+              {t.line}
             </span>
           )}
         </span>
@@ -197,7 +228,7 @@ export default function FloatingTasks({
     </li>
   );
 
-  const draw = ([slot, i]: readonly [DayTaskView | "more", number]) =>
+  const draw = ([slot, i]: readonly [FloatCard | "more", number]) =>
     slot === "more" ? more(i) : card(slot, i);
 
   return (
@@ -240,7 +271,7 @@ export default function FloatingTasks({
         <MorePopover
           anchor={anchor}
           trigger={moreRef}
-          tasks={rest}
+          cards={rest}
           onToggle={onToggle}
           onClose={() => setAnchor(null)}
         />
@@ -264,7 +295,7 @@ export default function FloatingTasks({
 function MorePopover({
   anchor,
   trigger,
-  tasks,
+  cards,
   onToggle,
   onClose,
 }: {
@@ -273,8 +304,8 @@ function MorePopover({
    *  button's own toggle would fight: the capture-phase handler would shut the popover on the
    *  way down and the click would reopen it on the way up. */
   trigger: RefObject<HTMLButtonElement | null>;
-  tasks: DayTaskView[];
-  onToggle: (id: number, done: boolean) => void;
+  cards: FloatCard[];
+  onToggle: (card: FloatCard, done: boolean) => void;
   onClose: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -286,7 +317,7 @@ function MorePopover({
   useLayoutEffect(() => {
     const r = box.current?.getBoundingClientRect();
     if (r?.height) setH(r.height);
-  }, [tasks.length]);
+  }, [cards.length]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -334,13 +365,13 @@ function MorePopover({
       style={{ position: "fixed", left, top }}
     >
       <ul>
-        {tasks.map((t) => (
+        {cards.map((t) => (
           <li
-            key={t.id}
+            key={t.key}
             className="border-t border-[var(--color-line)] first:border-t-0"
           >
             <button
-              onClick={() => onToggle(t.id, !t.done)}
+              onClick={() => onToggle(t, !t.done)}
               aria-pressed={t.done}
               className="flex w-full items-start gap-2.5 py-2 text-left"
             >
@@ -353,9 +384,14 @@ function MorePopover({
                 >
                   {t.title}
                 </span>
-                {!t.done && t.carried > 0 && (
+                {t.sub && (
+                  <span className="mt-0.5 block truncate text-micro text-[var(--color-muted)]">
+                    {t.sub}
+                  </span>
+                )}
+                {!t.done && t.line && (
                   <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
-                    carried {t.carried}d
+                    {t.line}
                   </span>
                 )}
               </span>

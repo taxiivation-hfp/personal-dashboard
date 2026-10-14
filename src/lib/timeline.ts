@@ -200,8 +200,8 @@ export const centreOn = (wx: number, wy: number, s: number, viewW: number, viewH
 // window (a few of the owner's words, with a tint). Both are rows of timeline_windows.
 
 /**
- * A text window's tint, from a CURATED set — the pillar palette's eight hues mixed
- * 72% toward white, and never a free hex field (the /colours ruling). Every value is
+ * A text window's tint, from a CURATED set — eight hues (the old pillar palette) mixed
+ * 72% toward white, and never a free hex field. Every value is
  * measured: ink clears 4.5:1 on all of them by a wide margin (a test pins it), and each
  * is distinct from paper. MUTED text is deliberately never printed on a tint — it fails
  * 4.5:1 on anything tinted enough to read as a colour, so a text window's controls are

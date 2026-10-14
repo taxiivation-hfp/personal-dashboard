@@ -57,7 +57,7 @@ function makeClient(): Client {
  * again, once. A database that has never been stamped (brand new, or older than this
  * latch) still walks the whole ladder, exactly as before.
  */
-const ENSURE_VERSION = "2026-10-14.1";
+const ENSURE_VERSION = "2026-10-15.1";
 
 async function isEnsured(c: Client): Promise<boolean> {
   try {
@@ -148,6 +148,23 @@ async function ensure(c: Client): Promise<Client> {
     await c.execute(
       `ALTER TABLE goals ADD COLUMN deadline TEXT
          CHECK (deadline IS NULL OR deadline GLOB '????-??-??')`,
+    );
+  }
+
+  // A subtask's optional DUE date and the day it was TICKED — the owner's ruling,
+  // 2026-10-15 (src/lib/subtasks.ts). Both nullable with no default: every existing
+  // subtask is undated, and a done row with no `done_on` reads as done since forever.
+  // A nullable ADD COLUMN cannot lose a row, so no migrate.mjs block and no backup step.
+  if (!(await has("subgoals", "due"))) {
+    await c.execute(
+      `ALTER TABLE subgoals ADD COLUMN due TEXT
+         CHECK (due IS NULL OR due GLOB '????-??-??')`,
+    );
+  }
+  if (!(await has("subgoals", "done_on"))) {
+    await c.execute(
+      `ALTER TABLE subgoals ADD COLUMN done_on TEXT
+         CHECK (done_on IS NULL OR done_on GLOB '????-??-??')`,
     );
   }
 
@@ -457,11 +474,9 @@ async function ensure(c: Client): Promise<Client> {
    *             pillar. Tidy room -> no pillar.
    *
    * CAREER'S COLOUR IS SET WITH COALESCE, not written over. §9 names a colour only for
-   * `physical` — the live Rust had to go — but §1 fixes Career = Plum, and `pillars.color`
-   * is NULLABLE: the seed inserts the rows with no colour and `/colours` can clear one back
-   * to the CSS token, which still falls back to Iris. A null colour would draw Career in the
-   * wrong hue on any database but the owner's (where the row already holds #7d5a72). COALESCE
-   * fills the hole and never overrules a colour the owner picked from the palette.
+   * `physical` — the live Rust had to go — but §1 fixes Career = Plum. The `pillars.color`
+   * column is HISTORY now: the hues are hardcoded (globals.css and PillarRing.TONE_HEX) and
+   * nothing reads the column, but the migration is latched and its statements stay as run.
    *
    * MATCHED BY system_key WHERE ONE EXISTS, so a habit the owner renamed is still found;
    * otherwise by EXACT NAME — and, for `Calendar`, the pillar §9 names it with (NULL), since

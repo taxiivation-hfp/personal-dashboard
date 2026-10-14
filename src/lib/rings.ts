@@ -14,8 +14,9 @@
 // what that drawing needs: each arc's share of the circle, its capped fill, and the real,
 // uncapped number printed beside it.
 //
-// HEALTH fills from five parts defined in HEALTH_METRICS. CAREER fills from goals and its
-// maths lives in career.ts; both produce the same drawing-ready shape, PillarRingView.
+// HEALTH fills from five parts defined in HEALTH_METRICS. CAREER fills from Work Projects
+// hours and goals, and its maths lives in career.ts; both produce the same drawing-ready
+// shape, PillarRingView.
 //
 // Thresholds are the owner's MINIMUMS, not stretch goals. There is no progression here: no
 // XP, no levels, no points, no ring streaks, no fortnight-over-fortnight comparison. A thin
@@ -48,37 +49,6 @@ export const PILLAR_NAME: Record<PillarKey, string> = {
  *  a PillarKey. */
 export const isPillarKey = (k: unknown): k is PillarKey =>
   k === "physical" || k === "portfolio";
-
-/**
- * The pillar palette the owner may choose from.
- *
- * A CURATED set, not a hex picker. Every value is checked against the beige page for
- * contrast, so no choice can make the app unreadable. The amber accent, the ink and the
- * three block states stay fixed and are not offered here — one accent is what keeps the
- * page quiet, and the block states deliberately avoid a severity ramp.
- */
-// Every value is verified at >=3:1 against the page (it is drawn as a ring stroke) AND
-// >=4.5:1 with white on top (it is also a filled chip with white text). Moss was #4a8271,
-// which measured 4.45 with white — a real fail, darkened to #467c6c.
-export const PILLAR_PALETTE: { name: string; hex: string }[] = [
-  { name: "Moss", hex: "#467c6c" },
-  { name: "Olive", hex: "#6d7a45" },
-  { name: "Clay", hex: "#8c7434" },
-  { name: "Rust", hex: "#9a6448" },
-  { name: "Plum", hex: "#7d5a72" },
-  { name: "Iris", hex: "#67609b" },
-  { name: "Slate", hex: "#5b6b7c" },
-  { name: "Teal", hex: "#3f7d80" },
-];
-
-/** The CSS variable each pillar falls back to when it has no chosen colour. */
-export const PILLAR_DEFAULT_VAR: Record<PillarKey, string> = {
-  physical: "var(--color-physical)",
-  portfolio: "var(--color-portfolio)",
-};
-
-export const isPaletteHex = (hex: string): boolean =>
-  PILLAR_PALETTE.some((p) => p.hex === hex);
 
 /** The rolling window: 14 days ending on the day being viewed, both ends inclusive. */
 export const WINDOW_DAYS = 14;
@@ -259,7 +229,8 @@ export type ArcView = {
    * nothing.
    */
   fill: number | null;
-  /** The real number, never capped: "11 of 8", "11/14", "84k of 98k", "60% · due 30 Sep". */
+  /** The real number, never capped: "11 of 8", "11/14", "84k of 98k", "31.5 of 48 h" — or
+   *  a goal's line: "on time", "late · Official practice exam · 3d". */
   fact: string;
 };
 
@@ -274,15 +245,10 @@ export type HealthArc = ArcView & {
   workoutKind: WorkoutKind | null;
 };
 
-/** A Career arc: one counted goal. Built in career.ts. */
+/** A Career arc: the hours half, one counted goal, or the "no goals" ghost half. Built in
+ *  career.ts. `goalId` is set only on a goal's arc. */
 export type CareerArc = ArcView & {
-  goalId: number;
-  /** YYYY-MM-DD. Every counted goal has one — a goal without a deadline is not in the ring. */
-  deadline: string;
-  /** The goal's real progress, 0..1 (goals.ts). `fill` is progress against pace, not this. */
-  progress: number;
-  /** How much of the goal the calendar expects done by the viewed day, 0..1. */
-  expected: number;
+  goalId: number | null;
 };
 
 export type HealthRingView = {
@@ -297,11 +263,12 @@ export type CareerRingView = {
   key: "portfolio";
   name: string;
   /**
-   * Mean of the arc fills, 0..1 — or null when NO goal counts, which is drawn as an empty
-   * dashed ghost labelled "no goals", never as "0%".
+   * Weighted mean of the arc fills that exist, 0..1 — or null when BOTH halves are ghosts
+   * (no calendar and no goal that can be late), drawn as an empty dashed ghost.
    */
   fill: number | null;
-  /** One EQUAL arc per counted goal, soonest deadline first. Empty when fill is null. */
+  /** The hours arc (weight ½), then one EQUAL arc per counted goal sharing the other half,
+   *  soonest deadline first — or a single "no goals" ghost arc in their place. */
   arcs: CareerArc[];
 };
 

@@ -84,6 +84,9 @@ export const HOUR_CATEGORIES: {
   { id: null, google: "default", label: "Uni" },
 ];
 
+/** The category whose hours fill half the CAREER ring (career.ts). */
+export const CAREER_HOURS_CATEGORY: HourCategoryLabel = "Work Projects";
+
 /** The category a colour belongs to, or null when it is not an hours category. */
 export function categoryOf(colorId: ColorId): HourCategoryLabel | null {
   return HOUR_CATEGORIES.find((c) => c.id === colorId)?.label ?? null;

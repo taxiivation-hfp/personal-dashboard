@@ -194,9 +194,8 @@ export default function SessionHistory({ today }: { today: string }) {
 
   /** A session wears its PILLAR's hue, and every session on this page is HEALTH now — the
    *  skills half is gone. Kept as a call rather than inlined so the one place that decides
-   *  it stays one place. `null` for the colour: this page does not read /api/pillars, so
-   *  it draws Health's default. */
-  const hue = toneColor("physical", null);
+   *  it stays one place. */
+  const hue = toneColor("physical");
 
   return (
     // The WINDOW LOOK, the same architecture the record and the journal wear: the masthead

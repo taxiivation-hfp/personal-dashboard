@@ -261,7 +261,7 @@ function TextEditor({
         className="block w-full resize-none bg-transparent font-serif text-small leading-snug text-[var(--color-ink)] outline-none"
       />
       {/* THE SWATCHES — paper first, behind a hairline, then the curated tints; the
-          chosen one wears the ink rim, the /colours idiom. No hex field, ever. */}
+          chosen one wears the ink rim. No hex field, ever. */}
       <div className="mt-2.5 flex flex-wrap items-center gap-1">
         <button
           type="button"
@@ -1009,12 +1009,6 @@ export default function Timeline({
                         "every step ticked"
                       )}
                     </p>
-                    <a
-                      href="/goals"
-                      className="mt-2 inline-block text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline"
-                    >
-                      open goals →
-                    </a>
                   </>
                 ) : editing === w.id ? (
                   <TextEditor

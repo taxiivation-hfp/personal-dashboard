@@ -17,7 +17,6 @@ import {
   CALORIE_FLOOR,
   PILLAR_NAME,
   type ArcView,
-  type PillarKey,
   type PillarRingView,
 } from "@/lib/rings";
 
@@ -39,8 +38,8 @@ import {
  *
  * THERE IS NO SCORE ON IT ANY MORE, and no task history. The owner's ruling of 2026-09-18
  * deleted the productivity points (the Hours chart is MINUTES now, stacked by category) and
- * deleted the In flight / Achieved board — goals are read and edited on /goals and in the
- * Career ring's drill-down, and a carrying task list was never a thing this app scored, so a
+ * deleted the In flight / Achieved board — goals are read and edited in the Career ring's
+ * drill-down, and a carrying task list was never a thing this app scored, so a
  * record of it was a record of nothing it believes in.
  *
  * A day with no entry draws NOTHING, everywhere. Most days in a 90-day window are blank in
@@ -169,14 +168,13 @@ export default function Dashboard({
   const [trends, setTrends] = useState<TrendDay[] | null>(null);
   const [rings, setRings] = useState<PillarRingView[] | null>(null);
   const [facts, setFacts] = useState<PillarFacts | null>(null);
-  const [colors, setColors] = useState<Partial<Record<PillarKey, string | null>>>({});
   const [streak, setStreak] = useState<number | null>(null);
 
   // The fortnight is fixed — it is what the rings mean — so it loads once and does not
   // move when the window control does. Only the two time series below answer to that.
   //
   // /api/goals and /api/tasks?all=1 are GONE with the In flight / Achieved board (spec §6).
-  // Goals live on /goals and inside the Career ring; there is no task history anywhere.
+  // Goals live inside the Career ring; there is no task history anywhere.
   useEffect(() => {
     let alive = true;
     fetch(`/api/rings?date=${date}`)
@@ -192,9 +190,6 @@ export default function Dashboard({
       .then((d) => {
         if (!alive || d.error) return;
         setStreak(d.streak ?? 0);
-        setColors(
-          Object.fromEntries((d.pillars ?? []).map((p: { key: PillarKey; color: string | null }) => [p.key, p.color])),
-        );
       })
       .catch(() => {});
     return () => {
@@ -492,16 +487,16 @@ export default function Dashboard({
                   key={p.key}
                   className="flex flex-col items-center border-t border-[var(--color-line)] pt-5"
                 >
-                  {/* A Career with no counted goal is an empty DASHED ghost labelled
-                      "no goals", never "0%" (spec §1): nothing is being neglected, there is
-                      simply nothing to pace against. */}
+                  {/* A Career with nothing to measure — no calendar and no goal that can
+                      be late — is an empty DASHED ghost labelled "no goals", never "0%"
+                      (spec §1): nothing is being neglected, there is simply nothing to
+                      judge. */}
                   <SegmentedRing
                     arcs={p.arcs}
                     ghost={p.fill == null && p.key === "portfolio"}
                     size={170}
                     stroke={11}
                     tone={p.key}
-                    color={colors[p.key]}
                     spin
                     glow
                   >
@@ -558,7 +553,7 @@ export default function Dashboard({
                           className="motion-data block h-full w-full origin-left rounded-full"
                           style={{
                             transform: `scaleX(${arc.fill})`,
-                            background: toneColor(p.key, colors[p.key]),
+                            background: toneColor(p.key),
                           }}
                         />
                       )}

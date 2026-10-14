@@ -1,179 +1,235 @@
-// The CAREER ring — goals measured against their own pace. PURE: no DB, no React. Its only
-// imports are ./dates.ts and ./rings.ts, both import-free, so it runs under `node --test`
-// with no setup (the adherence.ts arrangement).
+// The CAREER ring. PURE: no DB, no React. Its imports are ./dates.ts, ./rings.ts and
+// ./subtasks.ts, none of which import anything further, so it runs under `node --test`
+// with no setup.
 //
-// The owner's ruling of 2026-09-18. Career fills from GOALS, and only from goals: calendar
-// blocks are not linked to them, the Basil project-hours lap is gone, and skills are not
-// part of Career. A goal is a project; its subgoals are its subtasks; `progress` is the
-// existing goals.ts rule (the sum of done subgoal weights), derived on read and never here.
+// THE OWNER'S RULING OF 2026-10-15, replacing the pace rule of 2026-09-18. Career is TWO
+// HALVES:
 //
-// WHICH GOALS COUNT: status 'active' AND a deadline, AND created on or before the day being
-// viewed. A goal with no deadline has no pace to be on, so it has nothing to say to a ring —
-// it still lists when Career is opened. A done or dropped goal has left the ring. A goal made
-// after the viewed day was never part of it.
+//   HOURS      half the ring. Work Projects (Basil) hours worked in the rolling fortnight,
+//              by the app's one definition of a worked hour (productivity.ts: adhered is
+//              whole, a drift is its slider fraction, a skip is nothing). CAREER_HOURS of
+//              them fill the half. Unresolvable (no calendar) is a GHOST arc, never zero.
 //
-// EACH COUNTED GOAL IS ONE EQUAL ARC, filled by whether it is ON PACE:
+//   DEADLINES  the other half, split EQUALLY across the goals that can be late. A goal's
+//              slice is FULL unless something in it is LATE, and then it is EMPTY — a cliff,
+//              from the day after the date, no ramp. Late means: a dated subtask unticked
+//              past its date, or the goal itself past its deadline and not finished. Nothing
+//              is subtracted before a date has passed, however little is done.
 //
-//   expected = clamp((today − created) ÷ (deadline − created), 0, 1)
-//   fill     = min(1, progress ÷ expected), and 1 when nothing is expected yet
+//              COUNTED GOALS (goals.ts) keep the PACE rule in the run-up, because a count is a
+//              pace by nature and a 1-of-150 that read full for three months would be the
+//              exact absence of urgency this change exists to fix: fill = progress ÷ the
+//              elapsed share of the goal's span. Past the date, late like any other: empty.
 //
-// So a goal half-way through its time and half-way done is a full arc, and a goal created
-// this morning is full because nothing is expected of it yet. PAST THE DEADLINE expected is
-// 1 and the arc shows actual progress; it stays in the ring until it is ticked done or
-// dropped. No red, no "overdue" wording — a thin arc is information, not a verdict.
+// WHICH GOALS COUNT: status 'active', created on or before the viewed day, and holding
+// SOMETHING THAT CAN BE LATE — a deadline, or a dated subtask. A goal with neither has
+// nothing to fail at; it still lists when Career is opened. No goal that can be late is a
+// ghost half, and Career is then the hours alone.
 //
-// Career % is the MEAN of the counted arcs. No counted goals is not 0%: it is null, drawn as
-// an empty dashed ghost labelled "no goals".
-//
-// `today` is always passed in, never read, so every function here is testable and a past
-// day can be viewed against its own date. Dates are local 'YYYY-MM-DD' strings throughout.
+// `today` is always passed in, never read, so a past day is judged against its own date:
+// lateness by the dates, done-ness by `done_on` (subtasks.ts). Counts are not versioned, so
+// a past day sees today's tally — the one place this ring still reads the present.
 
 import { daysBetween, isISODate } from "./dates.ts";
 import {
   PILLAR_NAME,
+  weightedFill,
   type CareerArc,
   type CareerRingView,
 } from "./rings.ts";
+import {
+  daysLate,
+  doneOn,
+  subtaskExistedOn,
+  type DatedSubtask,
+} from "./subtasks.ts";
+
+/** Work Projects hours that fill the hours half, per rolling fortnight. */
+export const CAREER_HOURS = 48;
 
 /** What the ring needs of a goal. GoalView (queries.ts) satisfies it. */
 export type CareerGoal = {
   id: number;
   title: string;
   status: string;
-  /** 'YYYY-MM-DD', or null for a goal with no deadline. */
+  /** 'YYYY-MM-DD', or null. */
   deadline: string | null;
   /** The LOCAL date the goal was created, 'YYYY-MM-DD'. */
   createdAt: string;
   /** 0..1, from goals.ts. */
   progress: number;
+  /** A COUNTED goal's tally, or null for a checklist goal. */
+  count: { done: number; target: number } | null;
+  subgoals: DatedSubtask[];
 };
+
+/** The fortnight's Work Projects hours. `resolved` false = the calendar did not answer. */
+export type CareerHours = { hours: number; resolved: boolean };
 
 const clamp01 = (n: number): number =>
   Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
 
-/** Does this goal take an arc? Active, with a real deadline. */
-export function countsTowardCareer(
-  g: Pick<CareerGoal, "status" | "deadline">,
-): g is Pick<CareerGoal, "status"> & { deadline: string } {
-  return g.status === "active" && isISODate(g.deadline);
-}
-
-/**
- * Did this goal exist on the day being viewed? A goal is only ever in the ring of a day at or
- * after its creation — see `buildCareerRing` for why that is a filter rather than a fill.
- */
+/** Did this goal exist on the day being viewed? An unreadable stamp keeps the goal. */
 export function existedOn(createdAt: string, today: string): boolean {
-  // An unreadable stamp keeps the goal rather than hiding it: queries.ts already falls back
-  // to the first ten characters of a corrupt `created_at`, and a goal is a thing the owner
-  // wrote down — it should not vanish from a ring because its date is unparseable.
   return !isISODate(createdAt) || createdAt <= today;
 }
 
+/** The goal's subtasks that existed on `today`. */
+const subtasksOn = (g: CareerGoal, today: string): DatedSubtask[] =>
+  g.subgoals.filter((s) => subtaskExistedOn(s.createdAt, today));
+
+/** Does this goal take a slice on `today`? Active, existed, and something in it can be late. */
+export function countsTowardCareer(g: CareerGoal, today: string): boolean {
+  if (g.status !== "active" || !existedOn(g.createdAt, today)) return false;
+  return (
+    isISODate(g.deadline) ||
+    subtasksOn(g, today).some((s) => isISODate(s.due))
+  );
+}
+
+/** What is late in a goal: the most overdue item, named, and by how many days. */
+export type Lateness = { item: string; days: number };
+
 /**
- * How much of the goal should be done by `today`, 0..1.
+ * The most overdue thing in a goal on `today`, or null when nothing is.
  *
- * - PAST the deadline: 1, always — the arc then shows actual progress.
- * - Otherwise the elapsed share of the goal's own span, clamped. A goal created today
- *   expects 0. (A day BEFORE the goal existed also computes 0 here, but no ring is ever
- *   built from one: `buildCareerRing` drops the goal from that day entirely.)
- * - A goal whose deadline is on or before its creation day has no span to divide. Until
- *   that deadline has passed nothing is expected of it (the created-today rule); after, it
- *   is past its deadline like any other.
+ * The goal's own deadline is an item like any other: past it and not finished, the goal is
+ * late by the days since. "Finished" is every subtask ticked as of that day for a checklist
+ * goal (a goal with no subtasks has done nothing), or the full count for a counted one.
+ */
+export function lateness(g: CareerGoal, today: string): Lateness | null {
+  let worst: Lateness | null = null;
+  const consider = (item: string, days: number) => {
+    if (days > 0 && (!worst || days > worst.days)) worst = { item, days };
+  };
+  const subs = subtasksOn(g, today);
+  for (const s of subs) consider(s.title, daysLate(s, today));
+  if (isISODate(g.deadline) && today > g.deadline) {
+    const finished = g.count
+      ? g.count.done >= g.count.target
+      : subs.length > 0 && subs.every((s) => doneOn(s, today));
+    if (!finished) consider("deadline", daysBetween(g.deadline, today));
+  }
+  return worst;
+}
+
+/**
+ * How much of a COUNTED goal should be done by `today`, 0..1 — the elapsed share of its own
+ * span, clamped. A goal created today expects 0; on or past the deadline, 1. A deadline on
+ * or before the creation day has no span, so nothing is expected until it has passed.
  */
 export function expectedProgress(
   createdAt: string,
   deadline: string,
   today: string,
 ): number {
-  if (today > deadline) return 1;
+  if (today >= deadline) return 1;
   if (!isISODate(createdAt)) return 0;
   const span = daysBetween(createdAt, deadline);
   if (span <= 0) return 0;
   return clamp01(daysBetween(createdAt, today) / span);
 }
 
-/**
- * The arc's fill: progress against pace, capped at 1. `expected <= 0` is a full arc —
- * nothing is expected of the goal yet, so nothing can be behind.
- */
+/** Progress against pace, capped at 1. `expected <= 0` is a full arc — nothing is expected
+ *  of the goal yet, so nothing can be behind. */
 export function paceFill(progress: number, expected: number): number {
   if (!(expected > 0)) return 1;
   return Math.min(1, clamp01(progress) / expected);
 }
 
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/**
- * "due 30 Sep" — with the year only when it is not `today`'s year ("due 3 Feb 2027").
- * Written out rather than Intl so the words never depend on the ICU build.
- */
-export function dueLabel(deadline: string, today: string): string {
-  const [y, m, d] = deadline.split("-").map(Number);
-  const year = today.slice(0, 4) === deadline.slice(0, 4) ? "" : ` ${y}`;
-  return `due ${d} ${MONTHS[(m ?? 1) - 1] ?? ""}${year}`;
-}
-
-/** A goal's line under the Career ring: "60% · due 30 Sep". The percentage is the goal's
- *  real progress (rounded, the app's convention), not its pace. */
-export function goalFact(
-  progress: number,
-  deadline: string,
+/** A goal's slice fill and its line, by the rules above. */
+export function goalArcFill(
+  g: CareerGoal,
   today: string,
-): string {
-  return `${Math.round(clamp01(progress) * 100)}% · ${dueLabel(deadline, today)}`;
+): { fill: number; fact: string; late: Lateness | null } {
+  const late = lateness(g, today);
+  if (late) return { fill: 0, fact: `late · ${late.item} · ${late.days}d`, late };
+  if (g.count && isISODate(g.deadline)) {
+    const fill = paceFill(
+      g.progress,
+      expectedProgress(g.createdAt, g.deadline, today),
+    );
+    return { fill, fact: fill >= 1 ? "on pace" : "behind pace", late: null };
+  }
+  return { fill: 1, fact: "on time", late: null };
+}
+
+/** "31.5 of 48 h" — one decimal only when it is not whole. */
+export function hoursFact(hours: number): string {
+  const h = Math.max(0, Number.isFinite(hours) ? hours : 0);
+  const shown = Math.round(h * 10) / 10;
+  return `${shown} of ${CAREER_HOURS} h`;
+}
+
+/** The hours half's fill: min(1, hours ÷ CAREER_HOURS), or null when unresolved. */
+export function hoursFill(h: CareerHours): number | null {
+  if (!h.resolved) return null;
+  return clamp01(h.hours / CAREER_HOURS);
 }
 
 /**
- * The CAREER ring for the day `today`: one equal arc per counted goal, soonest deadline
- * first (then oldest goal first), and the mean of their fills.
+ * The CAREER ring for the day `today`: the hours arc (half the circle), then one equal arc
+ * per counted goal sharing the other half, soonest deadline first (undated last, then
+ * oldest goal first). Career is the weighted mean of the arcs that have a fill — a ghost
+ * half is left out, never counted as 0 — and null only when both halves are ghosts.
  *
- * A GOAL THAT DID NOT EXIST YET IS NOT IN A PAST DAY'S RING. Without that filter the
- * created-today rule ("nothing is expected of it yet" → a full arc) would also apply to every
- * day before the goal was written down, so stepping back a week would show Career filled by
- * work that had not been decided on — a past day growing a figure out of something done
- * since, which is the backdating rule this app already runs under for tasks. Dropped, the day
- * simply has one arc fewer, or the "no goals" ghost.
- *
- * Goals are not versioned otherwise: a past day still shows TODAY's progress against the pace
- * that day expected. That is stated in /api/rings and is the only honest thing available —
- * nothing records what a goal's progress was on a Tuesday.
+ * A GOAL THAT DID NOT EXIST YET IS NOT IN A PAST DAY'S RING, nor is a subtask: stepping back
+ * a week must not show a day failing at something that had not been decided on. Dropped,
+ * the day simply has one arc fewer.
  */
 export function buildCareerRing(
   goals: CareerGoal[],
   today: string,
+  hours: CareerHours,
 ): CareerRingView {
   const counted = goals
-    .filter((g) => existedOn(g.createdAt, today))
-    .filter((g): g is CareerGoal & { deadline: string } =>
-      countsTowardCareer(g),
-    )
-    .sort((a, b) => a.deadline.localeCompare(b.deadline) || a.id - b.id);
+    .filter((g) => countsTowardCareer(g, today))
+    .sort(
+      (a, b) =>
+        (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999") ||
+        a.id - b.id,
+    );
+
+  const arcs: CareerArc[] = [
+    {
+      key: "hours",
+      label: "Work Projects",
+      weight: 0.5,
+      fill: hoursFill(hours),
+      // A ghost prints a dash, the app's word for "nobody measured".
+      fact: hours.resolved ? hoursFact(hours.hours) : "—",
+      goalId: null,
+    },
+  ];
 
   const n = counted.length;
-  const arcs: CareerArc[] = counted.map((g) => {
-    const expected = expectedProgress(g.createdAt, g.deadline, today);
-    return {
-      key: `goal-${g.id}`,
-      label: g.title,
-      weight: 1 / n,
-      fill: paceFill(g.progress, expected),
-      fact: goalFact(g.progress, g.deadline, today),
-      goalId: g.id,
-      deadline: g.deadline,
-      progress: clamp01(g.progress),
-      expected,
-    };
-  });
+  if (n === 0) {
+    arcs.push({
+      key: "no-goals",
+      label: "no goals",
+      weight: 0.5,
+      fill: null,
+      fact: "—",
+      goalId: null,
+    });
+  } else {
+    for (const g of counted) {
+      const { fill, fact } = goalArcFill(g, today);
+      arcs.push({
+        key: `goal-${g.id}`,
+        label: g.title,
+        weight: 0.5 / n,
+        fill,
+        fact,
+        goalId: g.id,
+      });
+    }
+  }
 
   return {
     key: "portfolio",
     name: PILLAR_NAME.portfolio,
-    // A plain mean — the arcs are equal. Summed from the fills rather than through the
-    // weights, so 1/3 + 1/3 + 1/3 can never read 99.99%.
-    fill: n ? arcs.reduce((s, a) => s + (a.fill ?? 0), 0) / n : null,
+    fill: weightedFill(arcs),
     arcs,
   };
 }

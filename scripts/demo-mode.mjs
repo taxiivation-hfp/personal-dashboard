@@ -308,7 +308,7 @@ function planGoals(s) {
     die(`Expected active goals matching ${KEEP_GOALS.join(", ")} but found: ${keep.map((g) => g.title).join(", ") || "none"}.\nActive goals: ${active.map((g) => g.title).join(", ")}\nEdit KEEP_GOALS at the top of demo-mode.mjs. Nothing was changed.`);
   const ops = [];
   // Every goal that is not kept and not already dropped — active, done or paused — is hidden:
-  // /goals and the timeline list done and paused goals too. `off` restores each one's status.
+  // the Career ring and the timeline list done and paused goals too. `off` restores each one's status.
   for (const g of s.goals)
     if (!keep.includes(g) && g.status !== "dropped") ops.push({ t: "update", table: "goals", key: { id: g.id }, before: { status: g.status }, after: { status: "dropped" } });
   planGoals.hidden = s.goals.filter((g) => !keep.includes(g) && g.status !== "dropped").map((g) => `${g.title} (${g.status})`);

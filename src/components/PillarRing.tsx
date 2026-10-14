@@ -106,12 +106,8 @@ const TONE: Record<PillarKey | "accent", string> = {
   portfolio: "var(--color-portfolio)",
 };
 
-/** An owner-chosen hue wins over the default. `color` is always from the curated
- *  palette — engine.setPillarColor refuses anything else. */
-export const toneColor = (
-  tone: PillarKey | "accent",
-  color?: string | null,
-): string => color ?? TONE[tone];
+/** A tone's CSS token. The hues are fixed — there is no owner-chosen colour any more. */
+export const toneColor = (tone: PillarKey | "accent"): string => TONE[tone];
 
 /**
  * How much bigger than the ring the bloom's box is.
@@ -257,7 +253,7 @@ export default function Ring({
             cy={size / 2}
             r={r}
             fill="none"
-            stroke={toneColor(tone, color)}
+            stroke={color ?? toneColor(tone)}
             strokeWidth={stroke}
             // BUTT, never round: round caps add half a stroke width at each end, which
             // makes the smallest non-zero fills read as roughly half again their true
@@ -309,8 +305,8 @@ const wantsMotion = (): boolean =>
   !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
- * The DEFAULT pillar hues as hex, because `segmentShade` has to do arithmetic on a colour
- * and `var(--color-portfolio)` is not a number.
+ * The pillar hues as hex, because `segmentShade` has to do arithmetic on a colour and
+ * `var(--color-portfolio)` is not a number.
  *
  * MUST move with the tokens in globals.css. There is no way to resolve a CSS variable
  * during render that also works server-side — the same constraint that forced
@@ -435,7 +431,6 @@ export function SegmentedRing({
   size,
   stroke,
   tone,
-  color = null,
   spin = false,
   kick = 0,
   glow = false,
@@ -458,7 +453,6 @@ export function SegmentedRing({
   size: number;
   stroke: number;
   tone: PillarKey;
-  color?: string | null;
   /**
    * Rotate, idly and forever — see the SPIN_* constants. Opt-in, because rotation is a
    * statement about the surface: the pillar column is a glance, where a slow turn reads as
@@ -484,12 +478,9 @@ export function SegmentedRing({
 }) {
   const cx = size / 2;
   const cy = size / 2;
-  /**
-   * HEX, not the var() token, because `segmentShade` does arithmetic on it. The owner's
-   * chosen colour arrives as hex already; only the defaults needed mirroring — see
-   * TONE_HEX and its must-move-together warning.
-   */
-  const hue = color ?? TONE_HEX[tone];
+  // HEX, not the var() token, because `segmentShade` does arithmetic on it — see TONE_HEX
+  // and its must-move-together warning.
+  const hue = TONE_HEX[tone];
   const trackId = `lit-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
   // ONE THICKNESS, ONE RADIUS. Nothing is inset for a band any more, so the donut is drawn

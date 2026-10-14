@@ -238,6 +238,12 @@ CREATE TABLE IF NOT EXISTS timeline_positions (
 -- Subgoals. A goal's progress is the SUM OF COMPLETED SUBGOAL WEIGHTS — nothing is
 -- inferred from activity, and no count of finished items feeds it. Weights are
 -- fractions of the parent and are intended to sum to 1.0.
+--
+-- `due` and `done_on` — the owner's ruling, 2026-10-15 (src/lib/subtasks.ts). A dated
+-- subtask floats on the hero rails from a week before its date and is LATE past it, which
+-- empties its goal's slice of the Career ring. `done_on` is the LOCAL day it was ticked,
+-- for the same reason day_tasks records one: a past day's record must not change because
+-- of a tick made since. An existing database gets both from client.ts's ensure().
 CREATE TABLE IF NOT EXISTS subgoals (
   id         INTEGER PRIMARY KEY,
   goal_id    INTEGER NOT NULL REFERENCES goals(id),
@@ -245,7 +251,9 @@ CREATE TABLE IF NOT EXISTS subgoals (
   weight     REAL NOT NULL DEFAULT 0 CHECK (weight >= 0 AND weight <= 1),
   done       INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  due        TEXT CHECK (due IS NULL OR due GLOB '????-??-??'),
+  done_on    TEXT CHECK (done_on IS NULL OR done_on GLOB '????-??-??')
 );
 CREATE INDEX IF NOT EXISTS idx_subgoals_goal ON subgoals(goal_id, sort_order);
 
