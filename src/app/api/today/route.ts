@@ -11,9 +11,9 @@ export async function GET(req: Request) {
     const db = await getDb();
     const date = new URL(req.url).searchParams.get("date");
     const d = isISODate(date) ? date : todayISO();
-    // Blocks come from the real calendar — the app never invents them.
-    const cal = await getCalendarForDate(d);
-    return Response.json(await getDayView(db, d, cal.events, cal.connected));
+    // Blocks come from the real calendar — the app never invents them. Passed as a promise
+    // so the Google call and the database reads overlap.
+    return Response.json(await getDayView(db, d, getCalendarForDate(d)));
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : String(e) },

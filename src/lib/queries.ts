@@ -1,4 +1,4 @@
-// Read models. No XP, no levels, no points — see CLAUDE.md.
+// Read models. No XP, no levels, no points.
 
 import type { Client } from "./db/client";
 import { groupByDay, firstLine, type LogDay, type LogEntry } from "./dayLog";
@@ -11,9 +11,8 @@ import {
   type BlockState,
   type HabitTally,
 } from "./adherence";
-import { rfc3339, todayISO } from "./dates";
+import { todayISO, localDateOf } from "./dates";
 import type { CalEvent } from "./google";
-import { addDays, localDateOf } from "./dates";
 import {
   deriveWeights,
   goalProgress,
@@ -25,7 +24,6 @@ import {
   PILLAR_NAME,
   PILLAR_ORDER,
   STEPS_FLOOR,
-  WINDOW_DAYS,
   isPillarKey,
   type RawCount,
   type PillarKey,
@@ -136,24 +134,6 @@ export type GoalView = {
   /** The LOCAL date it was marked done, 'YYYY-MM-DD', or null. Cleared when a goal leaves
    *  'done'. A finished goal with no date is a fact with no place in a sequence. */
   completedAt: string | null;
-};
-
-export type SkillView = {
-  id: number;
-  name: string;
-  pillar: PillarKey | null;
-  state: "always_on" | "active" | "parked";
-  /** Lifetime SESSIONS logged. A count of times you turned up — not a score, not a level.
-   *  Only ever accumulates, so this is the continuity number. Was lifetime minutes. */
-  sessions: number;
-  /** Sessions in the rolling 14-day window — the LIVE number. Answers "what am I on
-   *  now", which the lifetime total cannot. ROWS, not distinct days: two sittings at the
-   *  piano on one Saturday are two sessions, the ruling gym already runs under. */
-  sessions14: number;
-  /** The window's sessions themselves, newest first — the log the dialog reopens. Skills
-   *  hold few enough of these that a list is cheaper than a second round trip per skill. */
-  recent: { id: number; date: string; note: string }[];
-  staleDays: number | null;
 };
 
 export type JournalView = {
@@ -340,57 +320,6 @@ export async function allDayTasks(db: Client): Promise<RecordTask[]> {
 /** One past day of the calorie log, for the dialog's sidebar. */
 export type CalorieDay = { date: string; total: number; entries: CalorieEntry[] };
 
-// eventWorkIn (adhered calendar events over a window, for the Social ring and the Basil
-// project-hours lap) is gone with both of its readers — parked in archive/social/.
-
-/** One skill's slice of the Portfolio ring: who it is, how it stands, and how many
- *  sessions the window holds. Only skills with at least one session appear — the ring is
- *  a record of the fortnight, not a roster. */
-export type SkillSlice = {
-  id: number;
-  name: string;
-  state: string;
-  /** Owner-chosen palette hex, or null for the id-cycled default. */
-  color: string | null;
-  sessions: number;
-};
-
-export async function skillSlices(
-  db: Client,
-  from: string,
-  to: string,
-): Promise<SkillSlice[]> {
-  const r = await db.execute({
-    sql: `SELECT s.id, s.name, s.state, s.color, COUNT(t.id) AS sessions
-          FROM skill_time t JOIN skills s ON s.id = t.skill_id
-          WHERE t.date BETWEEN ? AND ?
-          GROUP BY s.id ORDER BY sessions DESC, s.sort_order`,
-    args: [from, to],
-  });
-  return r.rows.map((x) => ({
-    id: Number(x.id),
-    name: String(x.name),
-    state: String(x.state),
-    color: x.color == null ? null : String(x.color),
-    sessions: num(x.sessions),
-  }));
-}
-
-/** Every skill's name and chosen colour, for the /colours page. */
-export async function skillColours(
-  db: Client,
-): Promise<{ id: number; name: string; state: string; color: string | null }[]> {
-  const r = await db.execute(
-    "SELECT id, name, state, color FROM skills ORDER BY sort_order, id",
-  );
-  return r.rows.map((x) => ({
-    id: Number(x.id),
-    name: String(x.name),
-    state: String(x.state),
-    color: x.color == null ? null : String(x.color),
-  }));
-}
-
 /** Day titles across a range, for the strip and the day ahead. */
 export async function dayTitlesBetween(
   db: Client,
@@ -463,26 +392,6 @@ export async function calorieDays(
     total: entries.reduce((s, e) => s + e.kcal, 0),
     entries,
   }));
-}
-
-// ---------------------------------------------------------------- adherence config
-
-export type AdherenceConfig = {
-  /** Non-negotiables count from this date onward. null = never (blocks only). */
-  habitsSince: string | null;
-  /** 'HH:MM' local. Before this, an unticked habit is not in the denominator. */
-  cutoff: string;
-};
-
-export async function getAdherenceConfig(db: Client): Promise<AdherenceConfig> {
-  const r = await db.execute(
-    "SELECT key,value FROM app_meta WHERE key IN ('adherence_habits_since','habit_cutoff')",
-  );
-  const m = new Map(r.rows.map((x) => [String(x.key), String(x.value)]));
-  return {
-    habitsSince: m.get("adherence_habits_since") ?? null,
-    cutoff: m.get("habit_cutoff") ?? "21:00",
-  };
 }
 
 /**
@@ -581,10 +490,11 @@ export async function habitsForDate(
   db: Client,
   date: string,
 ): Promise<HabitView[]> {
-  const { byId } = await pillarMaps(db);
   const bit = weekdayBit(date);
-  const r = await db.execute({
-    sql: `SELECT h.id,
+  const [{ byId }, r] = await Promise.all([
+    pillarMaps(db),
+    db.execute({
+      sql: `SELECT h.id,
                  COALESCE(o.name, h.name) AS name,
                  COALESCE(o.pillar_id, h.pillar_id) AS pillar_id,
                  h.days_mask,h.system_key,h.input,h.unit, he.value AS v, he.note AS note
@@ -593,8 +503,9 @@ export async function habitsForDate(
           LEFT JOIN habit_overrides o ON o.habit_id=h.id AND o.date=?
           WHERE h.active=1 AND (h.days_mask & ?) != 0
           ORDER BY h.sort_order, h.id`,
-    args: [date, date, bit],
-  });
+      args: [date, date, bit],
+    }),
+  ]);
   return r.rows.map((h) => ({
     id: num(h.id),
     name: String(h.name),
@@ -629,18 +540,16 @@ export async function habitsForDate(
  * is the real today, so a pending morning shows the run it is about to extend while a
  * past day's record stays exactly what it was.
  */
-async function habitStreaksFor(
+async function habitEntryHistory(
   db: Client,
-  habits: HabitView[],
   anchor: string,
-  grace: boolean,
-): Promise<Map<number, number>> {
-  if (!habits.length) return new Map();
-  const ids = habits.map((h) => h.id);
+): Promise<Map<number, Set<string>>> {
+  // Every ACTIVE habit's history in one read, so it needs no list of ids and can run
+  // alongside the read that produces that list rather than after it.
   const r = await db.execute({
     sql: `SELECT habit_id, date FROM habit_entries
-          WHERE date <= ? AND habit_id IN (${ids.map(() => "?").join(",")})`,
-    args: [anchor, ...ids],
+          WHERE date <= ? AND habit_id IN (SELECT id FROM habits WHERE active=1)`,
+    args: [anchor],
   });
   const earned = new Map<number, Set<string>>();
   for (const x of r.rows) {
@@ -648,6 +557,15 @@ async function habitStreaksFor(
     if (!earned.has(id)) earned.set(id, new Set());
     earned.get(id)!.add(String(x.date));
   }
+  return earned;
+}
+
+function habitStreaksFrom(
+  habits: HabitView[],
+  earned: Map<number, Set<string>>,
+  anchor: string,
+  grace: boolean,
+): Map<number, number> {
   return new Map(
     habits.map((h) => [
       h.id,
@@ -741,10 +659,12 @@ export async function upcomingOneOffHabits(
 
 /** Every habit, for the editor — including ones not scheduled today. */
 export async function allHabits(db: Client): Promise<HabitView[]> {
-  const { byId } = await pillarMaps(db);
-  const r = await db.execute(
-    "SELECT id,name,pillar_id,days_mask,system_key,input,unit FROM habits WHERE active=1 ORDER BY sort_order, id",
-  );
+  const [{ byId }, r] = await Promise.all([
+    pillarMaps(db),
+    db.execute(
+      "SELECT id,name,pillar_id,days_mask,system_key,input,unit FROM habits WHERE active=1 ORDER BY sort_order, id",
+    ),
+  ]);
   return r.rows.map((h) => ({
     id: num(h.id),
     name: String(h.name),
@@ -763,45 +683,84 @@ export async function allHabits(db: Client): Promise<HabitView[]> {
   }));
 }
 
+/** What the calendar hands the day: its events and whether it answered at all. */
+export type CalendarSlice = { events: CalEvent[]; connected: boolean };
+
+/**
+ * The whole day, in ONE round trip's worth of waiting.
+ *
+ * Every read here is independent of every other — the only join is in JavaScript, after —
+ * so they are all fired together. Against a remote database this is the difference between
+ * one network hop and fifteen in a row, which was most of the time the screen spent loading.
+ *
+ * The calendar is accepted as a PROMISE for the same reason: its two token reads and the
+ * Google call overlap the database reads instead of running before them.
+ */
 export async function getDayView(
   db: Client,
   date: string,
-  events: CalEvent[],
-  calendarConnected: boolean,
+  cal: CalendarSlice | PromiseLike<CalendarSlice>,
 ): Promise<DayView> {
-  const marks = await loadMarks(db, date);
-  const blocks = buildBlocks(date, events, marks);
-
-  const habitsOnly = await habitsForDate(db, date);
-  const pillars = await getPillars(db);
-
   const today = todayISO();
   // Grace only on the REAL today: a pending morning shows the run it is about to extend,
   // while a past day's record stays exactly what it was. (The screen only prints streaks
   // on a live day anyway — this keeps the data honest wherever else it is read.)
   const grace = date === today;
-  const streaks = await habitStreaksFor(db, habitsOnly, date, grace);
+
+  const [
+    { events, connected: calendarConnected },
+    marks,
+    habitsOnly,
+    pillars,
+    earned,
+    calorieStreak,
+    stepsStreak,
+    // The day's one-off non-negotiables — items of this day's checklist AND its tally.
+    oneOffs,
+    // Read for the adherence maths as well as the screen: the two floors are two more items
+    // of the habit share. One read, two consumers, no chance of disagreeing.
+    cal2,
+    // The phone's last push for this day, and WHEN it landed. null when it never pushed —
+    // the row prints "—", never a zero the phone didn't say. `updated_at` comes back on the
+    // same row rather than from a second read: the age of a figure is part of the figure.
+    health,
+    journalRes,
+    titles,
+    { count },
+    // `today` rather than `date`: where a task SITS depends on the real today, not on
+    // the day being looked at. Passing `date` here would make a carrying task appear on
+    // every future day anyone opened — the exact bug tasks.test.ts pins down.
+    tasks,
+  ] = await Promise.all([
+    Promise.resolve(cal),
+    loadMarks(db, date),
+    habitsForDate(db, date),
+    getPillars(db),
+    habitEntryHistory(db, date),
+    calorieStreakFor(db, date, grace),
+    stepsStreakFor(db, date, grace),
+    oneOffHabitsFor(db, date),
+    caloriesForDate(db, date),
+    db.execute({
+      sql: "SELECT steps, updated_at FROM health_logs WHERE date=?",
+      args: [date],
+    }),
+    db.execute({
+      sql: "SELECT id, kind, substr(COALESCE(body,''),1,140) AS preview FROM journal_entries WHERE date=? ORDER BY id",
+      args: [date],
+    }),
+    dayTitlesBetween(db, date, date),
+    getStreak(db, date),
+    dayTasksFor(db, date, today),
+  ]);
+
+  const blocks = buildBlocks(date, events, marks);
+  const streaks = habitStreaksFrom(habitsOnly, earned, date, grace);
   const habits = habitsOnly.map((h) => ({
     ...h,
     streak: streaks.get(h.id) ?? 0,
   }));
-  const calorieStreak = await calorieStreakFor(db, date, grace);
-  const stepsStreak = await stepsStreakFor(db, date, grace);
 
-  // The day's one-off non-negotiables — items of this day's checklist AND its tally.
-  const oneOffs = await oneOffHabitsFor(db, date);
-
-  // Read BEFORE the adherence maths, because both now feed it: the two floors are two
-  // more items of the habit share, earned fractionally. The same values are returned on
-  // the DayView below — one read, two consumers, no chance of disagreeing.
-  const cal = await caloriesForDate(db, date);
-  // The phone's last push for this day, and WHEN it landed. null when it never pushed —
-  // the row prints "—", never a zero the phone didn't say. `updated_at` comes back on the
-  // same row rather than from a second read: the age of a figure is part of the figure.
-  const health = await db.execute({
-    sql: "SELECT steps, updated_at FROM health_logs WHERE date=?",
-    args: [date],
-  });
   const steps =
     health.rows.length && health.rows[0]!.steps != null
       ? num(health.rows[0]!.steps)
@@ -810,7 +769,6 @@ export async function getDayView(
   // Non-negotiables join the rate, weighted equally with blocks — one item is one item,
   // and a one-off scheduled for this day is one more of them. /api/adherence computes the
   // same tally for the strip; the two must never disagree about a day.
-  const cfg = await getAdherenceConfig(db);
   const adherence = adherenceFor(
     blocks,
     habitTallyFor(
@@ -819,15 +777,8 @@ export async function getDayView(
       habits.filter((h) => h.done).length +
         oneOffs.filter((o) => o.done).length,
     ),
-    { steps, calories: cal.total },
+    { steps, calories: cal2.total },
   );
-
-  const journalRes = await db.execute({
-    sql: "SELECT id, kind, substr(COALESCE(body,''),1,140) AS preview FROM journal_entries WHERE date=? ORDER BY id",
-    args: [date],
-  });
-  const titles = await dayTitlesBetween(db, date, date);
-  const { count } = await getStreak(db, date);
 
   return {
     date,
@@ -854,13 +805,10 @@ export async function getDayView(
     // that point is a `steps_updated_at` column written only when a steps value is
     // present; it is a migration, so it waits for a reason to exist.
     stepsUpdatedAt: steps != null ? str(health.rows[0]!.updated_at) : null,
-    calories: cal.total,
-    calorieEntries: cal.entries,
+    calories: cal2.total,
+    calorieEntries: cal2.entries,
     title: titles.get(date) ?? null,
-    // `today` rather than `date`: where a task SITS depends on the real today, not on
-    // the day being looked at. Passing `date` here would make a carrying task appear on
-    // every future day anyone opened — the exact bug tasks.test.ts pins down.
-    tasks: await dayTasksFor(db, date, today),
+    tasks,
     oneOffs,
     calorieStreak,
     stepsStreak,
@@ -932,71 +880,6 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
 }
 
 /**
- * Every skill, ALWAYS including parked ones.
- *
- * Parked skills are never filtered out — the point of the board is seeing everything
- * you have put time into, including what you're not working on right now.
- */
-export async function listSkills(
-  db: Client,
-  anchor: string,
-): Promise<SkillView[]> {
-  const { byId } = await pillarMaps(db);
-  const from = addDays(anchor, -(WINDOW_DAYS - 1));
-  // COUNT(*), not COUNT(DISTINCT date): a row is a session now, and a skill may hold
-  // several on one day. The old DISTINCT capped each skill at one a day while the metric
-  // declared perDayCapped:false — the label-versus-counter drift the registry warns about.
-  const r = await db.execute({
-    sql: `SELECT s.id, s.name, s.pillar_id, s.state, s.last_touched,
-            COALESCE((SELECT COUNT(*) FROM skill_time t WHERE t.skill_id = s.id), 0) AS sessions,
-            COALESCE((SELECT COUNT(*) FROM skill_time t
-                       WHERE t.skill_id = s.id AND t.date BETWEEN ? AND ?), 0) AS sessions14
-     FROM skills s
-     ORDER BY CASE s.state WHEN 'active' THEN 0 WHEN 'always_on' THEN 1 ELSE 2 END, s.sort_order, s.id`,
-    args: [from, anchor],
-  });
-
-  // The window's sessions, in one query rather than one per skill. Ordered newest first so
-  // the UI never re-sorts; `note` may be NULL on a row imported under the hours model, and
-  // an empty document is the honest rendering of "an hour was logged, nothing was written".
-  const notes = await db.execute({
-    sql: `SELECT id, skill_id, date, COALESCE(note,'') AS note
-            FROM skill_time WHERE date BETWEEN ? AND ?
-           ORDER BY date DESC, id DESC`,
-    args: [from, anchor],
-  });
-  const bySkill = new Map<number, { id: number; date: string; note: string }[]>();
-  for (const x of notes.rows) {
-    const k = num(x.skill_id);
-    const list = bySkill.get(k) ?? [];
-    list.push({ id: num(x.id), date: String(x.date), note: String(x.note) });
-    bySkill.set(k, list);
-  }
-
-  const today = Date.now();
-  return r.rows.map((s) => {
-    const t =
-      s.last_touched == null ? null : Date.parse(String(s.last_touched));
-    const id = num(s.id);
-    return {
-      id,
-      name: String(s.name),
-      pillar: s.pillar_id == null ? null : (byId.get(num(s.pillar_id)) ?? null),
-      state: String(s.state) as SkillView["state"],
-      // num() is mandatory on every aggregate: libSQL returns them as BigInt, and
-      // `bigint / number` THROWS rather than producing a wrong answer.
-      sessions: num(s.sessions),
-      sessions14: num(s.sessions14),
-      recent: bySkill.get(id) ?? [],
-      staleDays:
-        t == null || Number.isNaN(t)
-          ? null
-          : Math.floor((today - t) / 86400000),
-    };
-  });
-}
-
-/**
  * The raw fortnight behind the Health figures — "N sessions" on /stats.
  *
  * Separate from getRingCounts on purpose. That answers "how full is the ring", a capped,
@@ -1044,33 +927,33 @@ export async function getRingCounts(
   from: string,
   to: string,
 ): Promise<Record<string, RawCount>> {
-  const out: Record<string, RawCount> = {};
-
-  for (const m of HEALTH_METRICS) {
+  // Every part is its own independent read, so they all go out at once — one network wait
+  // for the whole ring rather than one per metric.
+  const one = async (m: (typeof HEALTH_METRICS)[number]): Promise<RawCount> => {
     if (m.source === "habit") {
-      const h = await db.execute({
-        sql: "SELECT id FROM habits WHERE system_key=? AND active=1",
-        args: [m.systemKey!],
+      // Resolved by system_key inside the query — no separate id lookup to wait on.
+      // DISTINCT date: a habit is ticked once a day (habit_entries is UNIQUE per day
+      // anyway). value > 0: the column is a REAL defaulting to 1 and nothing constrains it
+      // to be truthy, so a 0 row would otherwise count as a tick.
+      const r = await db.execute({
+        sql: `SELECT (SELECT COUNT(*) FROM habits WHERE system_key=? AND active=1) AS present,
+                     COUNT(DISTINCT e.date) AS n
+                FROM habit_entries e
+                JOIN habits h ON h.id = e.habit_id
+               WHERE h.system_key=? AND h.active=1
+                 AND e.date BETWEEN ? AND ? AND e.value > 0`,
+        args: [m.systemKey!, m.systemKey!, from, to],
       });
-      if (!h.rows.length) {
+      if (!num(r.rows[0].present)) {
         // A part whose habit is missing or retired. Ghost it so the screen still works,
         // but say so loudly — silently ghosting hides a bug behind a state that looks
         // intentional.
         console.error(
           `[rings] metric "${m.key}": system_key "${m.systemKey}" resolved to no active habit`,
         );
-        out[m.key] = { count: 0, resolved: false };
-        continue;
+        return { count: 0, resolved: false };
       }
-      // DISTINCT date: a habit is ticked once a day (habit_entries is UNIQUE per day
-      // anyway). value > 0: the column is a REAL defaulting to 1 and nothing constrains it
-      // to be truthy, so a 0 row would otherwise count as a tick.
-      const r = await db.execute({
-        sql: "SELECT COUNT(DISTINCT date) AS n FROM habit_entries WHERE habit_id=? AND date BETWEEN ? AND ? AND value > 0",
-        args: [num(h.rows[0].id), from, to],
-      });
-      out[m.key] = { count: num(r.rows[0].n), resolved: true };
-      continue;
+      return { count: num(r.rows[0].n), resolved: true };
     }
 
     if (m.source === "gym") {
@@ -1082,8 +965,7 @@ export async function getRingCounts(
         sql: `SELECT ${agg} AS n FROM gym_sessions WHERE kind=? AND date BETWEEN ? AND ?`,
         args: [m.workoutKind!, from, to],
       });
-      out[m.key] = { count: num(r.rows[0].n), resolved: true };
-      continue;
+      return { count: num(r.rows[0].n), resolved: true };
     }
 
     if (m.source === "health_steps") {
@@ -1098,8 +980,7 @@ export async function getRingCounts(
         sql: "SELECT COALESCE(SUM(steps), 0) AS n FROM health_logs WHERE date BETWEEN ? AND ?",
         args: [from, to],
       });
-      out[m.key] = { count: num(r.rows[0].n), resolved: true };
-      continue;
+      return { count: num(r.rows[0].n), resolved: true };
     }
 
     if (m.source === "calories") {
@@ -1112,13 +993,17 @@ export async function getRingCounts(
         sql: "SELECT COALESCE(SUM(kcal), 0) AS n FROM calorie_entries WHERE date BETWEEN ? AND ?",
         args: [from, to],
       });
-      out[m.key] = { count: num(r.rows[0].n), resolved: true };
-      continue;
+      return { count: num(r.rows[0].n), resolved: true };
     }
 
-    out[m.key] = { count: 0, resolved: false };
-  }
+    return { count: 0, resolved: false };
+  };
 
+  const counts = await Promise.all(HEALTH_METRICS.map(one));
+  const out: Record<string, RawCount> = {};
+  HEALTH_METRICS.forEach((m, i) => {
+    out[m.key] = counts[i]!;
+  });
   return out;
 }
 
@@ -1280,32 +1165,6 @@ export async function logDays(
   }
 
   return groupByDay(out);
-}
-
-/** One skill session as the log lists it — the skill's name travels, because a session
- *  headed only by its first line cannot say which skill it belonged to. */
-export type SkillSessionRow = {
-  id: number;
-  skillId: number;
-  skillName: string;
-  date: string;
-  note: string;
-};
-
-/** EVERY skill session, newest first. Unpaginated — see /api/skills/history. */
-export async function allSkillSessions(db: Client): Promise<SkillSessionRow[]> {
-  const r = await db.execute(
-    `SELECT t.id, t.skill_id, t.date, COALESCE(t.note,'') AS note, s.name
-       FROM skill_time t JOIN skills s ON s.id = t.skill_id
-      ORDER BY t.date DESC, t.id DESC`,
-  );
-  return r.rows.map((x) => ({
-    id: num(x.id),
-    skillId: num(x.skill_id),
-    skillName: String(x.name),
-    date: String(x.date),
-    note: String(x.note),
-  }));
 }
 
 /** Every named month, as a map from 'YYYY-MM' to its chapter name. Small by construction —

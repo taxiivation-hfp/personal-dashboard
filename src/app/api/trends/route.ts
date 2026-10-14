@@ -45,37 +45,38 @@ export async function GET(req: Request) {
 
     const db = await getDb();
 
-    const weightRows = await db.execute({
-      sql: `SELECT e.date AS date, e.value AS value
-              FROM habit_entries e
-              JOIN habits h ON h.id = e.habit_id
-             WHERE h.system_key = ? AND e.date BETWEEN ? AND ?`,
-      args: [WEIGHT_KEY, from, to],
-    });
+    // Three independent reads, fired together: one network wait, not three in a row.
+    const [weightRows, calRows, stepRows] = await Promise.all([
+      db.execute({
+        sql: `SELECT e.date AS date, e.value AS value
+                FROM habit_entries e
+                JOIN habits h ON h.id = e.habit_id
+               WHERE h.system_key = ? AND e.date BETWEEN ? AND ?`,
+        args: [WEIGHT_KEY, from, to],
+      }),
+      // SUM is an aggregate, so libSQL hands it back as a BigInt — Number() at the boundary,
+      // as everywhere else in this codebase.
+      db.execute({
+        sql: `SELECT date, SUM(kcal) AS total
+                FROM calorie_entries
+               WHERE date BETWEEN ? AND ?
+               GROUP BY date`,
+        args: [from, to],
+      }),
+      // One row per date by construction (health_logs.date is the primary key), so no
+      // grouping and no aggregate — the phone's last push for a day IS that day's count.
+      // A row whose steps column is null is a push that carried something else, and it must
+      // stay a gap rather than becoming a zero.
+      db.execute({
+        sql: "SELECT date, steps FROM health_logs WHERE date BETWEEN ? AND ? AND steps IS NOT NULL",
+        args: [from, to],
+      }),
+    ]);
     const weightBy = new Map<string, number>();
     for (const r of weightRows.rows)
       if (r.value != null) weightBy.set(String(r.date), Number(r.value));
-
-    // SUM is an aggregate, so libSQL hands it back as a BigInt — Number() at the boundary,
-    // as everywhere else in this codebase.
-    const calRows = await db.execute({
-      sql: `SELECT date, SUM(kcal) AS total
-              FROM calorie_entries
-             WHERE date BETWEEN ? AND ?
-             GROUP BY date`,
-      args: [from, to],
-    });
     const calBy = new Map<string, number>();
     for (const r of calRows.rows) calBy.set(String(r.date), Number(r.total));
-
-    // One row per date by construction (health_logs.date is the primary key), so no
-    // grouping and no aggregate — the phone's last push for a day IS that day's count.
-    // A row whose steps column is null is a push that carried something else, and it must
-    // stay a gap rather than becoming a zero.
-    const stepRows = await db.execute({
-      sql: "SELECT date, steps FROM health_logs WHERE date BETWEEN ? AND ? AND steps IS NOT NULL",
-      args: [from, to],
-    });
     const stepsBy = new Map<string, number>();
     for (const r of stepRows.rows) stepsBy.set(String(r.date), Number(r.steps));
 

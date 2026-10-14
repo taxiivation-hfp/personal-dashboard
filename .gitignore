@@ -31,3 +31,8 @@ next-env.d.ts
 
 # Agent scratch files.
 scratch-*
+
+Direct Messages - LOGS [1038376949271244820].txt
+
+# Personal Discord DM export. Never commit.
+Direct Messages - LOGS *.txt

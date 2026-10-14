@@ -80,13 +80,6 @@ export const PILLAR_DEFAULT_VAR: Record<PillarKey, string> = {
 export const isPaletteHex = (hex: string): boolean =>
   PILLAR_PALETTE.some((p) => p.hex === hex);
 
-/** A skill's fallback hue when the owner has not chosen one: cycled from the palette by
- *  id, so it is STABLE — a skill keeps the same colour across sessions and screens until
- *  a choice is made, and two skills only collide once there are more than eight. Skills
- *  are hidden since the pivot; their data and colours are kept. */
-export const skillDefaultHex = (id: number): string =>
-  PILLAR_PALETTE[Math.abs(id) % PILLAR_PALETTE.length]!.hex;
-
 /** The rolling window: 14 days ending on the day being viewed, both ends inclusive. */
 export const WINDOW_DAYS = 14;
 

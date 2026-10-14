@@ -49,13 +49,46 @@ export async function GET(req: Request) {
     }
 
     const db = await getDb();
+    // Google and the five database reads are all independent of one another, so they are
+    // waited on TOGETHER: one network round trip for the lot instead of six in sequence.
     // `connected` is load-bearing for the hours below — do not discard it.
-    const { byDate, connected } = await getCalendarRange(start, end);
+    const [{ byDate, connected }, markRows, habitRows, tickRows, oneOffRows, calRows, stepRows] =
+      await Promise.all([
+        getCalendarRange(start, end),
+        db.execute({
+          sql: "SELECT date,event_id,state,reason,worked_fraction FROM block_marks WHERE date BETWEEN ? AND ?",
+          args: [start, end],
+        }),
+        // Non-negotiables count toward each day's rate, so the strip and the calendar
+        // column need the same tally the Today screen uses. Habit config is read as it is
+        // NOW — the schedule is not versioned, which the start stamp bounds the effect of.
+        db.execute("SELECT id, days_mask FROM habits WHERE active=1"),
+        db.execute({
+          sql: "SELECT habit_id, date FROM habit_entries WHERE date BETWEEN ? AND ? AND value > 0",
+          args: [start, end],
+        }),
+        // One-off non-negotiables join their day's tally — the same items getDayView counts,
+        // read here too so the strip and the hero can never disagree about a day.
+        db.execute({
+          sql: "SELECT date, done FROM one_off_habits WHERE date BETWEEN ? AND ?",
+          args: [start, end],
+        }),
+        // Calories per day, for the calorie floor's share of adherence. One ranged query
+        // rather than one per day. SUM is an aggregate, so libSQL hands it back as a BigInt —
+        // Number() at the boundary, as everywhere else.
+        db.execute({
+          sql: "SELECT date, SUM(kcal) AS total FROM calorie_entries WHERE date BETWEEN ? AND ? GROUP BY date",
+          args: [start, end],
+        }),
+        // Steps per day, for the same floor share. `steps IS NOT NULL` because a sleep-only
+        // push writes a row with no count, and a day the phone never measured must reach
+        // adherenceFor as null — nobody was asked — rather than as a zero nobody said.
+        db.execute({
+          sql: "SELECT date, steps FROM health_logs WHERE date BETWEEN ? AND ? AND steps IS NOT NULL",
+          args: [start, end],
+        }),
+      ]);
 
-    const markRows = await db.execute({
-      sql: "SELECT date,event_id,state,reason,worked_fraction FROM block_marks WHERE date BETWEEN ? AND ?",
-      args: [start, end],
-    });
     const marksByDate = new Map<
       string,
       Map<
@@ -74,20 +107,10 @@ export async function GET(req: Request) {
       });
     }
 
-    // Non-negotiables now count toward each day's rate, so the strip and the calendar
-    // column need the same tally the Today screen uses. Habit config is read as it is
-    // NOW — the schedule is not versioned, which the start stamp bounds the effect of.
-    const habitRows = await db.execute(
-      "SELECT id, days_mask FROM habits WHERE active=1",
-    );
     const activeHabits = habitRows.rows.map((r) => ({
       id: Number(r.id),
       mask: Number(r.days_mask),
     }));
-    const tickRows = await db.execute({
-      sql: "SELECT habit_id, date FROM habit_entries WHERE date BETWEEN ? AND ? AND value > 0",
-      args: [start, end],
-    });
     const ticksByDate = new Map<string, Set<number>>();
     for (const r of tickRows.rows) {
       const d = String(r.date);
@@ -95,12 +118,6 @@ export async function GET(req: Request) {
       ticksByDate.get(d)!.add(Number(r.habit_id));
     }
 
-    // One-off non-negotiables join their day's tally — the same items getDayView counts,
-    // read here too so the strip and the hero can never disagree about a day.
-    const oneOffRows = await db.execute({
-      sql: "SELECT date, done FROM one_off_habits WHERE date BETWEEN ? AND ?",
-      args: [start, end],
-    });
     const oneOffsByDate = new Map<string, { scheduled: number; done: number }>();
     for (const r of oneOffRows.rows) {
       const d = String(r.date);
@@ -116,23 +133,9 @@ export async function GET(req: Request) {
     // StatsLink). getDayView still reads the viewed day's own title, which is where the one
     // title this app still shows comes from.
 
-    // Calories per day, for the calorie floor's share of adherence. One ranged query rather
-    // than one per day. SUM is an aggregate, so libSQL hands it back as a BigInt — Number()
-    // at the boundary, as everywhere else.
-    const calRows = await db.execute({
-      sql: "SELECT date, SUM(kcal) AS total FROM calorie_entries WHERE date BETWEEN ? AND ? GROUP BY date",
-      args: [start, end],
-    });
     const calByDate = new Map<string, number>();
     for (const r of calRows.rows) calByDate.set(String(r.date), Number(r.total));
 
-    // Steps per day, for the same floor share. `steps IS NOT NULL` because a sleep-only
-    // push writes a row with no count, and a day the phone never measured must reach
-    // adherenceFor as null — nobody was asked — rather than as a zero nobody said.
-    const stepRows = await db.execute({
-      sql: "SELECT date, steps FROM health_logs WHERE date BETWEEN ? AND ? AND steps IS NOT NULL",
-      args: [start, end],
-    });
     const stepsByDate = new Map<string, number>();
     for (const r of stepRows.rows)
       stepsByDate.set(String(r.date), Number(r.steps));

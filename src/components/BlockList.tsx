@@ -132,11 +132,18 @@ export default function BlockList({
    *  the real clock, so on a past day every block is due and "needs marking" is already the
    *  only branch that can be reached. */
   isToday = true,
+  onMark,
 }: {
   date: string;
   blocks: Block[];
   onChanged: () => void;
   isToday?: boolean;
+  /**
+   * Called the moment a mark is CHOSEN, before the write goes out, with what the row is
+   * about to say. The owner of `blocks` uses it to draw the chip immediately; the refresh
+   * that `onChanged` triggers then replaces the guess with the server's answer.
+   */
+  onMark?: (eventId: string, next: Partial<Block>) => void;
 }) {
   const [openReason, setOpenReason] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -172,6 +179,13 @@ export default function BlockList({
     extra?: { reason?: string | null; worked?: number | null },
   ): Promise<BlockState | null | undefined> {
     setBusy(b.event_id);
+    // The chip moves NOW. The round trip still happens and still has the last word — see
+    // onMark — but a tap that waits a network hop before it shows reads as a tap that missed.
+    onMark?.(b.event_id, {
+      state,
+      reason: state === "drifted" ? (extra?.reason ?? b.reason) : null,
+      workedFraction: state === "drifted" ? (extra?.worked ?? b.workedFraction) : null,
+    });
     try {
       const res = await fetch("/api/blocks", {
         method: "POST",

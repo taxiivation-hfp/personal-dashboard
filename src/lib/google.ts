@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { covers, rangeKey, sliceByDate } from "./calRange";
 import { getDb, isLocalDatabase } from "./db/client";
-import { dayBoundsRFC3339, rfc3339, addDays, APP_TZ } from "./dates";
+import { dayBoundsRFC3339, APP_TZ } from "./dates";
 
 const SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -515,116 +515,6 @@ export async function getCalendarRange(
   } catch {
     return { connected: false, byDate: new Map() };
   }
-}
-
-type EventInput = {
-  summary: string;
-  date: string;
-  timeStart: string;
-  timeEnd?: string | null;
-  description?: string;
-};
-
-// End of a timed event as an instant, rolling to the next day when it crosses midnight,
-// so the end is never before the start (Google rejects end <= start with 400).
-function endInstant(
-  date: string,
-  startHHMM: string,
-  timeEnd?: string | null,
-): { date: string; time: string } {
-  if (timeEnd)
-    return {
-      date: timeEnd <= startHHMM ? addDays(date, 1) : date,
-      time: timeEnd,
-    };
-  const [h, m] = startHHMM.split(":").map(Number);
-  const total = h * 60 + m + 30; // default 30-min block
-  const t = total % 1440;
-  return {
-    date: total >= 1440 ? addDays(date, 1) : date,
-    time: `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`,
-  };
-}
-
-function eventBody(ev: EventInput) {
-  const end = endInstant(ev.date, ev.timeStart, ev.timeEnd);
-  return {
-    summary: ev.summary,
-    description: ev.description,
-    start: { dateTime: rfc3339(ev.date, ev.timeStart), timeZone: APP_TZ },
-    end: { dateTime: rfc3339(end.date, end.time), timeZone: APP_TZ },
-  };
-}
-
-export async function insertEvent(db: Client, ev: EventInput): Promise<string> {
-  // See clearCalendarCache: a write the user just made must never be hidden by the read
-  // cache, whatever its TTL.
-  clearCalendarCache();
-  const data = await api(db, "/calendars/primary/events", {
-    method: "POST",
-    body: JSON.stringify(eventBody(ev)),
-  });
-  return String(data.id);
-}
-
-export async function updateEvent(
-  db: Client,
-  eventId: string,
-  ev: EventInput,
-): Promise<void> {
-  clearCalendarCache();
-  try {
-    await api(db, `/calendars/primary/events/${encodeURIComponent(eventId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(eventBody(ev)),
-    });
-  } catch (e) {
-    const st = (e as { status?: number }).status;
-    if (st !== 404 && st !== 410) throw e; // already gone is fine
-  }
-}
-
-export async function deleteEvent(db: Client, eventId: string): Promise<void> {
-  clearCalendarCache();
-  try {
-    await api(db, `/calendars/primary/events/${encodeURIComponent(eventId)}`, {
-      method: "DELETE",
-    });
-  } catch (e) {
-    const st = (e as { status?: number }).status;
-    if (st !== 404 && st !== 410) throw e; // already gone is fine
-  }
-}
-
-/** After a task edit: patch its pushed Google event (or remove it if un-time-blocked). Best-effort, never throws. */
-export async function syncTaskEvent(db: Client, taskId: number): Promise<void> {
-  const t = await db.execute({
-    sql: "SELECT title, date, time_start, time_end, calendar_event_id FROM tasks WHERE id=?",
-    args: [taskId],
-  });
-  const row = t.rows[0] as Record<string, unknown> | undefined;
-  if (!row || row.calendar_event_id == null) return;
-  const eventId = String(row.calendar_event_id);
-  if (row.time_start == null) {
-    // task no longer has a time block → drop the orphaned event and unlink
-    try {
-      await deleteEvent(db, eventId);
-    } catch {}
-    await db.execute({
-      sql: "UPDATE tasks SET calendar_event_id=NULL WHERE id=?",
-      args: [taskId],
-    });
-    return;
-  }
-  try {
-    await updateEvent(db, eventId, {
-      summary: String(row.title),
-      date: String(row.date),
-      timeStart: String(row.time_start),
-      timeEnd: row.time_end == null ? null : String(row.time_end),
-      description: "Synced from your daily-guide coach",
-    });
-  } catch {}
 }
 
 /**

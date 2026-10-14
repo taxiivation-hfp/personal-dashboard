@@ -815,78 +815,6 @@ export async function deleteCalorieEntry(
   return r.rowsAffected > 0;
 }
 
-// ---------------------------------------------------------------- skills
-
-export const MAX_ACTIVE_SKILLS = 2;
-
-export class TooManyActiveSkills extends Error {
-  constructor(public active: string[]) {
-    super(
-      `Already levelling ${active.length}: ${active.join(" and ")}. Park one before promoting another.`,
-    );
-    this.name = "TooManyActiveSkills";
-  }
-}
-
-export async function setSkillState(
-  db: Client,
-  id: number,
-  state: "always_on" | "active" | "parked",
-): Promise<void> {
-  const tx = await db.transaction("write");
-  try {
-    const cur = await tx.execute({
-      sql: "SELECT state FROM skills WHERE id=?",
-      args: [id],
-    });
-    if (!cur.rows.length) {
-      await tx.rollback();
-      throw new Error("skill not found");
-    }
-    if (state === "active" && String(cur.rows[0].state) !== "active") {
-      const active = await tx.execute(
-        "SELECT name FROM skills WHERE state='active' ORDER BY sort_order, id",
-      );
-      if (active.rows.length >= MAX_ACTIVE_SKILLS) {
-        await tx.rollback();
-        throw new TooManyActiveSkills(active.rows.map((r) => String(r.name)));
-      }
-    }
-    await tx.execute({
-      sql: "UPDATE skills SET state=?, updated_at=? WHERE id=?",
-      args: [state, now(), id],
-    });
-    await tx.commit();
-  } catch (e) {
-    if (
-      !(e instanceof TooManyActiveSkills) &&
-      !(e instanceof Error && e.message === "skill not found")
-    ) {
-      await tx.rollback().catch(() => {});
-    }
-    throw e;
-  }
-}
-
-export async function touchSkill(
-  db: Client,
-  id: number,
-  progress?: number | null,
-): Promise<void> {
-  const ts = now();
-  if (progress != null) {
-    await db.execute({
-      sql: "UPDATE skills SET progress=?, last_touched=?, updated_at=? WHERE id=?",
-      args: [Math.max(0, Math.min(1, progress)), ts, ts, id],
-    });
-  } else {
-    await db.execute({
-      sql: "UPDATE skills SET last_touched=?, updated_at=? WHERE id=?",
-      args: [ts, ts, id],
-    });
-  }
-}
-
 // ---------------------------------------------------------------- goals
 
 // Goals are the ONE sanctioned accomplishment measure in this app, and they are
@@ -897,17 +825,6 @@ export async function touchSkill(
 // Progress is never STORED. It is derived from completed subgoal weights on read (see
 // lib/goals.ts), so the stale goals.progress column can never drift out of step with the
 // subgoals that define it. It already had: row 1 stored 0.0833 while deriving 0.
-
-export async function recomputeGoalTx(
-  tx: Exec,
-  goalId: number,
-  ts: string,
-): Promise<void> {
-  await tx.execute({
-    sql: "UPDATE goals SET updated_at=? WHERE id=?",
-    args: [ts, goalId],
-  });
-}
 
 /** The statuses a goal may hold — the schema's CHECK, stated once for the engine. */
 export const GOAL_STATUSES = ["active", "done", "paused", "dropped"] as const;
@@ -1168,128 +1085,6 @@ export async function deleteSubgoal(db: Client, id: number): Promise<void> {
   await db.execute({ sql: "DELETE FROM subgoals WHERE id=?", args: [id] });
 }
 
-export async function reorderSubgoals(
-  db: Client,
-  goalId: number,
-  ids: number[],
-): Promise<void> {
-  const tx = await db.transaction("write");
-  try {
-    for (let i = 0; i < ids.length; i++) {
-      await tx.execute({
-        sql: "UPDATE subgoals SET sort_order=? WHERE id=? AND goal_id=?",
-        args: [i + 1, ids[i], goalId],
-      });
-    }
-    await tx.commit();
-  } catch (e) {
-    await tx.rollback();
-    throw e;
-  }
-}
-
-// ---------------------------------------------------------------- skill time
-//
-// The total of these minutes is a MEASUREMENT of time invested, never a reward. No
-// levels, no thresholds, no milestones — the number only ever says how long you spent,
-// which is a fact rather than a score.
-//
-// Kept as a log rather than a running total so a mistaken entry can be removed, which is
-// exactly what undoSkillTime does.
-
-/**
- * Write one skill SESSION — a text document, the same shape a workout is.
- *
- * This replaced logSkillTime, which took minutes. Skills stopped being measured in hours by
- * the owner's ruling: Calisthenics was being logged twice, once as a Physical "Misc" workout
- * and once as Portfolio hours, and a thing you log in two places is a thing you log in
- * whichever one you remember. One document, one place, and turning up is the unit.
- *
- * SESSIONS, PLURAL, PER DAY — no unique index on (skill_id, date). Two sittings at the piano
- * on one Saturday are two sessions, exactly as two lifts on a Tuesday are. That also finally
- * matches what the metric has always DECLARED: `perDayCapped: false`, `unit: "sessions"`.
- *
- * `id` present means EDIT, absent means new — and the date travels in the SET rather than
- * the WHERE, so changing it MOVES the session. That is the bug saveWorkout had: an
- * `AND date=?` guard meant an edit whose date differed matched nothing, fell through to the
- * INSERT, and left a duplicate behind. Not repeating it here.
- *
- * `minutes` is never written. Rows that carry one are pre-ruling history and keep it.
- */
-export async function saveSkillSession(
-  db: Client,
-  skill: { id?: number | null; skillId: number; date: string; note: string },
-): Promise<void> {
-  const ts = now();
-  const tx = await db.transaction("write");
-  try {
-    let wrote = false;
-    if (skill.id != null) {
-      const r = await tx.execute({
-        sql: "UPDATE skill_time SET note=?, date=? WHERE id=? AND skill_id=?",
-        args: [skill.note, skill.date, skill.id, skill.skillId],
-      });
-      // skill_id stays in the WHERE: nothing may move a session between skills, so an id
-      // arriving under the wrong one is genuinely stale rather than merely re-dated.
-      wrote = r.rowsAffected > 0;
-    }
-    if (!wrote) {
-      await tx.execute({
-        sql: "INSERT INTO skill_time (skill_id,date,minutes,note) VALUES (?,?,NULL,?)",
-        args: [skill.skillId, skill.date, skill.note],
-      });
-    }
-    // Drives the "stalled ~2 weeks" rotation prompt. MAX over what is actually there, so
-    // moving a session backwards cannot leave the skill looking recently worked.
-    await tx.execute({
-      sql: `UPDATE skills
-               SET last_touched = (SELECT MAX(date) || 'T00:00:00.000Z'
-                                     FROM skill_time WHERE skill_id=?),
-                   updated_at = ?
-             WHERE id = ?`,
-      args: [skill.skillId, ts, skill.skillId],
-    });
-    await tx.commit();
-  } catch (e) {
-    await tx.rollback();
-    throw e;
-  }
-}
-
-/** Remove one session by id. Returns false when there was nothing to delete, so the caller
- *  can say so rather than pretending. last_touched is recomputed for the same reason it is
- *  in saveSkillSession — deleting the only session must not leave a skill looking worked. */
-export async function deleteSkillSession(
-  db: Client,
-  skillId: number,
-  id: number,
-): Promise<boolean> {
-  const tx = await db.transaction("write");
-  try {
-    const r = await tx.execute({
-      sql: "DELETE FROM skill_time WHERE id=? AND skill_id=?",
-      args: [id, skillId],
-    });
-    if (!r.rowsAffected) {
-      await tx.rollback();
-      return false;
-    }
-    await tx.execute({
-      sql: `UPDATE skills
-               SET last_touched = (SELECT MAX(date) || 'T00:00:00.000Z'
-                                     FROM skill_time WHERE skill_id=?),
-                   updated_at = ?
-             WHERE id = ?`,
-      args: [skillId, now(), skillId],
-    });
-    await tx.commit();
-    return true;
-  } catch (e) {
-    await tx.rollback();
-    throw e;
-  }
-}
-
 export type WorkoutKind = "strength" | "cardio" | "misc";
 
 export type Workout = {
@@ -1463,54 +1258,6 @@ export async function setPillarColor(
   });
 }
 
-/**
- * A new skill, born PARKED under Portfolio — every skill lives there by ruling, and
- * parked is the honest starting state: promoting it to active is its own decision,
- * gated by the pick-two cap, not a side effect of naming it.
- */
-export async function createSkill(db: Client, name: string): Promise<number> {
-  const n = name.trim();
-  if (!n) throw new Error("name required");
-  const ts = now();
-  const r = await db.execute({
-    sql: `INSERT INTO skills (name, pillar_id, state, sort_order, created_at, updated_at)
-          VALUES (?, (SELECT id FROM pillars WHERE key='portfolio'),'parked',
-                  (SELECT COALESCE(MAX(sort_order),0)+1 FROM skills), ?, ?)`,
-    args: [n, ts, ts],
-  });
-  return Number(r.lastInsertRowid);
-}
-
-/** Rename only. The id is what skill_time hangs off, so a rename never orphans a minute
- *  of logged practice — the same reason habits rename by id. */
-export async function renameSkill(
-  db: Client,
-  id: number,
-  name: string,
-): Promise<void> {
-  const n = name.trim();
-  if (!n) throw new Error("name required");
-  await db.execute({
-    sql: "UPDATE skills SET name=?, updated_at=? WHERE id=?",
-    args: [n, now(), id],
-  });
-}
-
-/** A skill's segment hue on the Portfolio ring. Same rule as the pillars: the curated
- *  palette or nothing — null falls back to the stable default cycled by id. */
-export async function setSkillColor(
-  db: Client,
-  id: number,
-  hex: string | null,
-): Promise<void> {
-  if (hex !== null && !isPaletteHex(hex))
-    throw new Error("colour must come from the palette");
-  await db.execute({
-    sql: "UPDATE skills SET color=?, updated_at=? WHERE id=?",
-    args: [hex, now(), id],
-  });
-}
-
 // ---------------------------------------------------------------- streak
 
 /**
@@ -1525,14 +1272,16 @@ export async function getStreak(
   db: Client,
   date: string,
 ): Promise<{ count: number }> {
-  const marks = await db.execute({
-    sql: "SELECT DISTINCT date FROM block_marks WHERE date<=? AND state != 'dismissed'",
-    args: [date],
-  });
-  const ticks = await db.execute({
-    sql: "SELECT DISTINCT date FROM habit_entries WHERE date<=?",
-    args: [date],
-  });
+  const [marks, ticks] = await Promise.all([
+    db.execute({
+      sql: "SELECT DISTINCT date FROM block_marks WHERE date<=? AND state != 'dismissed'",
+      args: [date],
+    }),
+    db.execute({
+      sql: "SELECT DISTINCT date FROM habit_entries WHERE date<=?",
+      args: [date],
+    }),
+  ]);
   const logged = new Set<string>([
     ...marks.rows.map((r) => String(r.date)),
     ...ticks.rows.map((r) => String(r.date)),
