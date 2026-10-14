@@ -738,7 +738,15 @@ export default function PillarSections({
    * donut cannot disagree about why a slice is empty.
    */
   const careerBody = () => {
-    const active = goals.filter((g) => g.status === "active");
+    // Soonest deadline first, undated last, then oldest — the same order the ring draws
+    // its goal arcs in, so the list and the donut read the same way round.
+    const active = goals
+      .filter((g) => g.status === "active")
+      .sort(
+        (a, b) =>
+          (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999") ||
+          a.id - b.id,
+      );
     const finished = goals.filter((g) => g.status === "done");
     const hoursArc = career.arcs.find((a) => a.key === "hours");
     const arcOf = (goalId: number) =>
