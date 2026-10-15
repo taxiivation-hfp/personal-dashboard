@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * ONE DOCUMENT, for a non-negotiable that carries one — outreach and reading, today.
+ * ONE DOCUMENT, for a non-negotiable that carries one — ASC.ND, today.
  *
  * The third writing surface in the app and deliberately the plainest. A workout dialog puts
  * last week's numbers beside the textarea because a lift is written against them; a skill
@@ -12,10 +12,9 @@ import { useEffect, useRef, useState } from "react";
  * the row you opened it from already names the day. So there is no date picker, no history
  * pane and no session list — there is nothing else it could be about.
  *
- * That per-day shape is not a limitation, it is the measurement. Outreach is
- * `perDayCapped: true`: a second message on a Tuesday is the same Tuesday however many were
- * sent, because what is being counted is consistency in reaching the floor and not volume
- * past it. A dialog that let you log three would be drawing a distinction the ring refuses.
+ * That per-day shape is not a limitation, it is the measurement: a second session on a
+ * Tuesday is the same Tuesday however many were done, because what is being counted is
+ * consistency in reaching the floor and not volume past it.
  *
  * THIS DIALOG IS THE ROW'S ONE CONTROL now — the owner's ruling, 2026-08-21: the side
  * "log" button is gone and tapping the row opens this, like every other logger. Three
@@ -30,33 +29,20 @@ import { useEffect, useRef, useState } from "react";
  *     with the tick — the entry is one row.
  *   - CLEARING THE NOTE STILL DOES NOT UNTICK. Deleting a sentence you no longer like must
  *     not quietly retract the day.
- *
- * A quantity may ride along — pages read, today. `pagesLabel` is what turns the field on;
- * the number lands in habit_entries.value beside the note, and clearing it leaves a bare
- * tick standing (see engine.setHabitNote).
  */
 
 /**
  * The non-negotiables whose row IS a logger — one control, the owner's ruling 2026-08-21.
- * Keyed by system_key so a rename changes nothing; `pagesLabel` turns on the quantity
- * field. Lives HERE, beside the dialog it configures, because two surfaces open it now —
- * Today's checklist and the written log's day reader — and two hand-copied rosters would
- * be two placeholders drifting apart.
+ * Keyed by system_key so a rename changes nothing. Lives HERE, beside the dialog it
+ * configures, because two surfaces open it — Today's checklist and the written log's day
+ * reader — and two hand-copied rosters would be two placeholders drifting apart.
  *
  * The Journal row deliberately is NOT here: a page IS its document, and its row opens the
  * page chooser instead.
  */
-export const DOC_HABITS: Record<
-  string,
-  { placeholder: string; pagesLabel?: string }
-> = {
-  outreach: { placeholder: "Who did you reach out to, and what about?" },
-  reading: {
-    placeholder: "What did you read — and what did it leave you with?",
-    pagesLabel: "Pages read",
-  },
-  // ASC.ND — the owner's ask, 2026-08-24: a session logger on the outreach/reading
-  // model. Its notes join the written log as their own kind (see dayLog.ts).
+export const DOC_HABITS: Record<string, { placeholder: string }> = {
+  // ASC.ND — the owner's ask, 2026-08-24: a session logger. Its notes join the written log
+  // as their own kind (see dayLog.ts).
   // "What did you do?", the owner's own wording (spec §5). The routine is stretching,
   // skincare and posture — things you DO rather than work on, and the old verb read as a
   // question about a project.
@@ -69,8 +55,6 @@ export default function NoteLog({
   note,
   hue,
   done,
-  pages,
-  pagesLabel,
   placeholder,
   onSave,
   onUntick,
@@ -85,26 +69,15 @@ export default function NoteLog({
   /** Whether the day is already ticked — decides the primary label and whether the
    *  untick control exists at all. */
   done: boolean;
-  /** The stored quantity, or null. Only read when pagesLabel is set. */
-  pages?: number | null;
-  /** Names the quantity field ("Pages read") — its presence is what enables it. */
-  pagesLabel?: string;
   placeholder: string;
-  /**
-   * note null clears the document and leaves the tick standing. `pages` travels only when
-   * the field exists: undefined = no field, leave the stored number alone; null = field
-   * cleared, back to a bare tick; a number = set it.
-   */
-  onSave: (note: string | null, pages?: number | null) => Promise<void>;
+  /** note null clears the document and leaves the tick standing. */
+  onSave: (note: string | null) => Promise<void>;
   /** Retract the day entirely — the box's old job, behind the two-step below. Absent
    *  when the day is not ticked: there is nothing to retract. */
   onUntick?: () => Promise<void>;
   onClose: () => void;
 }) {
   const [text, setText] = useState(note ?? "");
-  const [pagesText, setPagesText] = useState(
-    pagesLabel && pages != null && pages > 1 ? String(pages) : "",
-  );
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   /** A save that did not land. The one thing this dialog must never do is close over a
@@ -112,7 +85,6 @@ export default function NoteLog({
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
-  const pagesRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const d = dialogRef.current;
@@ -140,31 +112,7 @@ export default function NoteLog({
   const trimmed = text.trim();
   const had = Boolean(note && note.trim());
 
-  /**
-   * The field's reading, in the engine's own three shapes — and it must never emit a
-   * value the route refuses, so it clamps exactly as engine.setHabitNote does:
-   *
-   *   undefined   the field is unreadable (a stray 'e' leaves a number input in
-   *               badInput, reporting "" while still SHOWING the old digits) — no
-   *               opinion, leave the stored number alone. Collapsing this into "cleared"
-   *               would let a note edit eat a real page count.
-   *   null        deliberately empty, or a number that rounds below one — back to a
-   *               bare tick.
-   *   a number    rounded FIRST, then range-checked, capped at the engine's own 10,000.
-   */
-  const parsedPages = (): number | null | undefined => {
-    if (pagesRef.current?.validity.badInput) return undefined;
-    if (!pagesText.trim()) return null;
-    const n = Number(pagesText);
-    if (!Number.isFinite(n)) return undefined;
-    const r = Math.round(n);
-    return r >= 1 ? Math.min(10_000, r) : null;
-  };
-
-  const save = () =>
-    run(() =>
-      onSave(trimmed || null, pagesLabel ? parsedPages() : undefined),
-    );
+  const save = () => run(() => onSave(trimmed || null));
 
   return (
     <dialog
@@ -203,28 +151,6 @@ export default function NoteLog({
         })}
       </p>
 
-      {/* The quantity, where this habit carries one. A line to write a number on, the
-          checklist's own field shape — optional exactly as the words are: a tick with
-          neither is still a day you did it. */}
-      {pagesLabel && (
-        <label className="mt-3 flex items-baseline justify-between gap-3">
-          <span className="font-serif text-small">{pagesLabel}</span>
-          <input
-            ref={pagesRef}
-            type="number"
-            min="1"
-            max="10000"
-            step="1"
-            inputMode="numeric"
-            placeholder="—"
-            value={pagesText}
-            onChange={(e) => setPagesText(e.target.value)}
-            disabled={busy}
-            className="w-[4rem] border-b border-[var(--color-line-strong)] bg-transparent pb-0.5 text-right text-small tabular-nums outline-none transition-colors placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] disabled:opacity-60"
-          />
-        </label>
-      )}
-
       <textarea
         ref={areaRef}
         value={text}
@@ -244,13 +170,8 @@ export default function NoteLog({
         <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           {had && (
             <button
-              // Clears the WORDS only, as it says — but it still commits what the pages
-              // field visibly shows, exactly as Save would: this button closes the
-              // dialog, and a control that closes over an edited field silently reverts
-              // an edit that was on screen when it was pressed.
-              onClick={() =>
-                run(() => onSave(null, pagesLabel ? parsedPages() : undefined))
-              }
+              // Clears the WORDS only, as it says.
+              onClick={() => run(() => onSave(null))}
               disabled={busy}
               className="text-micro text-[var(--color-muted)] underline-offset-4 transition-colors hover:text-[var(--color-ink)] hover:underline disabled:opacity-40"
             >

@@ -186,7 +186,7 @@ export async function setHabit(
 }
 
 /**
- * The DOCUMENT behind a non-negotiable — outreach and reading, today.
+ * The DOCUMENT behind a non-negotiable — ASC.ND, today.
  *
  * SAVING IS LOGGING, exactly as it is for a workout or a skill session: writing the note
  * ticks the habit in the same statement, so there is no second "did it" toggle to forget.
@@ -198,58 +198,24 @@ export async function setHabit(
  * setHabit is for — reached from inside the same dialog now that the row's one control
  * opens it, and nowhere else.
  *
- * `value` is A QUANTITY LOGGED WITH THE DOCUMENT — pages read, today. Three shapes on
- * purpose, because two different callers must not disturb each other's writes:
- *
- *   undefined   not a quantity habit, or the caller has no opinion — the existing value
- *               is left standing (raised to 1 if it was somehow lower). A note edit must
- *               never eat a number.
- *   null        the quantity was cleared: back to a bare tick (value 1). The tick stands,
- *               same rule as the note.
- *   a number    set it. Guarded to a sane range like setHabitValue — a stray keystroke
- *               must not become a 70,000-page day in a record you later trust.
- *
- * KNOWN AND ACCEPTED: value 1 is ambiguous between "a bare tick" and "one page". The
- * floor being ten pages, a one-page day is a curiosity, not a record worth a schema.
- *
- * One row per (habit, date) by the table's own UNIQUE constraint, which is the same per-day
- * shape the outreach metric counts in — see HabitView.note.
+ * One row per (habit, date) by the table's own UNIQUE constraint — see HabitView.note.
  */
 export async function setHabitNote(
   db: Client,
   habitId: number,
   date: string,
   note: string | null,
-  value?: number | null,
 ): Promise<void> {
   const text = note == null || !note.trim() ? null : note.trim();
-  if (value === undefined) {
-    await db.execute({
-      sql: `INSERT INTO habit_entries (habit_id,date,value,note) VALUES (?,?,1,?)
-            ON CONFLICT(habit_id,date) DO UPDATE SET
-              note = excluded.note,
-              -- The tick is only ever RAISED here, never lowered: a row that already exists
-              -- was already a yes, and rewriting its note is not a statement about whether the
-              -- day happened.
-              value = MAX(habit_entries.value, 1)`,
-      args: [habitId, date, text],
-    });
-    return;
-  }
-  // Rounded FIRST, then floored at 1 — guard-then-round let 0.4 through as a stored 0,
-  // and a row that EXISTS with value 0 splits the readers: `done` counts entry-exists
-  // while the strip's tick read filters value > 0, so the hero and the strip would
-  // disagree about the same day. Nothing this function writes may be less than a tick.
-  const v =
-    value != null && Number.isFinite(value)
-      ? Math.min(10_000, Math.max(1, Math.round(value)))
-      : 1;
   await db.execute({
-    sql: `INSERT INTO habit_entries (habit_id,date,value,note) VALUES (?,?,?,?)
+    sql: `INSERT INTO habit_entries (habit_id,date,value,note) VALUES (?,?,1,?)
           ON CONFLICT(habit_id,date) DO UPDATE SET
             note = excluded.note,
-            value = excluded.value`,
-    args: [habitId, date, v, text],
+            -- The tick is only ever RAISED here, never lowered: a row that already exists
+            -- was already a yes, and rewriting its note is not a statement about whether the
+            -- day happened.
+            value = MAX(habit_entries.value, 1)`,
+    args: [habitId, date, text],
   });
 }
 

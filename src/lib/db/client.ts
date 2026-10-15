@@ -57,7 +57,7 @@ function makeClient(): Client {
  * again, once. A database that has never been stamped (brand new, or older than this
  * latch) still walks the whole ladder, exactly as before.
  */
-const ENSURE_VERSION = "2026-10-15.1";
+const ENSURE_VERSION = "2026-10-15.2";
 
 async function isEnsured(c: Client): Promise<boolean> {
   try {
@@ -122,7 +122,7 @@ async function ensure(c: Client): Promise<Client> {
   if (!(await has("habits", "unit"))) {
     await c.execute("ALTER TABLE habits ADD COLUMN unit TEXT");
   }
-  // The document behind a non-negotiable — outreach, today. A nullable ADD COLUMN cannot
+  // The document behind a non-negotiable — ASC.ND, today. A nullable ADD COLUMN cannot
   // lose a row, so like worked_fraction below it needs no migrate.mjs block and no backup:
   // every tick already made stays a tick with nothing written.
   if (!(await has("habit_entries", "note"))) {
@@ -317,18 +317,18 @@ async function ensure(c: Client): Promise<Client> {
         // instance) is seeded from HERE, not from the migration script.
         //
         // system_key is load-bearing, not decoration: the Journal row opens the drawing
-        // dialog ONLY as system_key='journal', outreach opens its document, weight is
-        // the number field. This seed used to omit the column, and the first deployed
-        // Turso instance was born from it — every system row silently disarmed, the
-        // Journal row a plain tickbox. Steps is seeded already-retired (active=0), the
-        // state migrate.mjs leaves it in: steps live in health_logs, not the checklist.
+        // dialog ONLY as system_key='journal', weight is the number field. This seed used
+        // to omit the column, and the first deployed Turso instance was born from it —
+        // every system row silently disarmed, the Journal row a plain tickbox. Steps is
+        // seeded already-retired (active=0), the state migrate.mjs leaves it in: steps
+        // live in health_logs, not the checklist.
+        //
+        // Tidy room, Read 10 pages and One outreach message were seeded here until
+        // 2026-10-15, when the owner removed all three; see remove_habits_oct15_v1 below.
         `INSERT INTO habits (pillar_id,name,target_value,source,sort_order,active,system_key,input,unit) VALUES
            ((SELECT id FROM pillars WHERE key='portfolio'),'Journal',1,'manual',1,1,'journal','check',NULL),
-           ((SELECT id FROM pillars WHERE key='physical'),'Tidy room',1,'manual',2,1,NULL,'check',NULL),
-           ((SELECT id FROM pillars WHERE key='portfolio'),'Read 10 pages',1,'manual',3,1,'reading','check',NULL),
            ((SELECT id FROM pillars WHERE key='physical'),'Sleep by set time',1,'manual',4,1,NULL,'check',NULL),
            ((SELECT id FROM pillars WHERE key='portfolio'),'Mandarin 15 min',1,'manual',5,1,NULL,'check',NULL),
-           ((SELECT id FROM pillars WHERE key='social_capital'),'One outreach message',1,'manual',6,1,'outreach','check',NULL),
            ((SELECT id FROM pillars WHERE key='physical'),'Steps',8000,'health',7,0,'steps','check',NULL),
            ((SELECT id FROM pillars WHERE key='physical'),'Weight',1,'manual',8,1,'weight','number','kg')`,
         // Seeded with the PRE-PIVOT pillars and filing on purpose: pivot_health_career_v1
@@ -343,8 +343,7 @@ async function ensure(c: Client): Promise<Client> {
 
   // System keys, HEALED. A database seeded before the seed above carried system_key —
   // the live Turso instance is one — has a Journal row that cannot open the drawing
-  // dialog, an outreach row its document logger cannot find, and no Weight row at all,
-  // while everything else works. Stamps NULLs by canonical name only and latches, so a
+  // dialog and no Weight row at all, while everything else works. Stamps NULLs by canonical name only and latches, so a
   // deliberate rename or reassignment is never overruled on a later boot. Mirrors the
   // adherence_v1 / rings_v1 / round3_v1 blocks in scripts/migrate.mjs, which never run
   // in production. On a database migrate.mjs HAS shaped, every statement is a no-op.
@@ -357,9 +356,6 @@ async function ensure(c: Client): Promise<Client> {
     );
     await c.execute(
       "UPDATE habits SET system_key='steps' WHERE name='Steps' AND system_key IS NULL",
-    );
-    await c.execute(
-      "UPDATE habits SET system_key='outreach' WHERE name='One outreach message' AND system_key IS NULL",
     );
     // Step tracking was cut as a HABIT (the checklist's Steps row reads health_logs);
     // deactivated, never deleted, exactly as migrate.mjs treats it — history survives.
@@ -378,42 +374,12 @@ async function ensure(c: Client): Promise<Client> {
     );
   }
 
-  // READING BECAME A LOGGER — the owner's ruling, 2026-08-21: the reading row opens a
-  // document (pages read + what it left you with), the same surface outreach writes on.
-  // That needs a stable identity, and name-matching is exactly what system_key exists to
-  // replace — so the key is stamped once, by canonical name, and LATCHED: a later rename
-  // or a deliberate un-keying is never overruled on the next boot. Mirrors the
-  // system_keys_v1 block above; on a database where the row was renamed first, the stamp
-  // simply misses and the row stays a plain tick, which is the honest fallback.
-  const readingKeyed = await c.execute(
-    "SELECT 1 FROM app_meta WHERE key='system_keys_v2'",
-  );
-  if (!readingKeyed.rows.length) {
-    // AT MOST ONE ROW, the ACTIVE one — and this is load-bearing, not tidy. Unlike the
-    // v1 stamps, this runs on databases where idx_habits_system_key (UNIQUE) already
-    // exists, and deleteHabit is soft: a retired 'Read 10 pages' plus a re-created one
-    // are both name-matched with NULL keys, and a bare UPDATE stamping both would abort
-    // on the index — ensure() throws, the latch is never written, and EVERY boot fails
-    // the same way. Restricting to the single active row also keeps the fallback honest:
-    // a renamed or retired row simply stays a plain tick.
-    await c.execute(
-      `UPDATE habits SET system_key='reading'
-        WHERE id = (SELECT id FROM habits
-                     WHERE name='Read 10 pages' AND system_key IS NULL AND active=1
-                     ORDER BY id LIMIT 1)`,
-    );
-    await c.execute(
-      "INSERT INTO app_meta (key,value) VALUES ('system_keys_v2','1')",
-    );
-  }
-
   // THREE NEW NON-NEGOTIABLES — the owner's ask, 2026-08-24/25. "Calendar" and "Vitamins"
-  // are plain ticks; "ASC.ND" is a DOCUMENT habit (system_key 'ascnd'), the same logger
-  // surface outreach and reading open — DOC_HABITS in Today.tsx and the written-log
-  // queries both key on 'ascnd'. Latched like system_keys_v2 above: seeded once, so a
-  // later rename, re-pillar or removal is never overruled on the next boot. Guards inside
-  // the INSERTs make even the first run safe against rows the owner already created by
-  // hand.
+  // are plain ticks; "ASC.ND" is a DOCUMENT habit (system_key 'ascnd') — DOC_HABITS in
+  // NoteLog.tsx and the written-log queries both key on 'ascnd'. Latched like
+  // system_keys_v1 above: seeded once, so a later rename, re-pillar or removal is never
+  // overruled on the next boot. Guards inside the INSERTs make even the first run safe
+  // against rows the owner already created by hand.
   const aug24 = await c.execute(
     "SELECT 1 FROM app_meta WHERE key='habits_aug24_v1'",
   );
@@ -469,9 +435,9 @@ async function ensure(c: Client): Promise<Client> {
    *             accent); portfolio -> "Career", Plum #7d5a72. The social_capital row is NOT
    *             touched and NOT deleted: goals, habits and tasks still point at it, and the
    *             app filters it out of every pillar listing.
-   *   habits    ASC.ND -> Health. Outreach -> Career, renamed "Outreach". Calendar (no
-   *             pillar) -> Career. Reading -> renamed "Read", no pillar. Journal -> no
-   *             pillar. Tidy room -> no pillar.
+   *   habits    ASC.ND -> Health. Calendar (no pillar) -> Career. Journal -> no pillar.
+   *             (Outreach, Reading and Tidy room were re-filed here too, until all three
+   *             were removed on 2026-10-15 — see remove_habits_oct15_v1 below.)
    *
    * CAREER'S COLOUR IS SET WITH COALESCE, not written over. §9 names a colour only for
    * `physical` — the live Rust had to go — but §1 fixes Career = Plum. The `pillars.color`
@@ -480,11 +446,8 @@ async function ensure(c: Client): Promise<Client> {
    *
    * MATCHED BY system_key WHERE ONE EXISTS, so a habit the owner renamed is still found;
    * otherwise by EXACT NAME — and, for `Calendar`, the pillar §9 names it with (NULL), since
-   * the spec puts that condition there and nowhere else. `Tidy room` is stated flatly ("name
-   * `Tidy room` -> pillar NULL") and is applied flatly: the block is LATCHED, so a pillar
-   * predicate would be a one-shot match that leaves the row coloured forever on any database
-   * where it had already been re-filed. A habit's pillar only sets its tick colour — no
-   * figure reads it — so nothing here changes adherence or any history.
+   * the spec puts that condition there and nowhere else. A habit's pillar only sets its tick
+   * colour — no figure reads it — so nothing here changes adherence or any history.
    *
    * No deletes. One batch, so a failure part-way leaves nothing applied and nothing latched,
    * and the next boot tries again. LATCHED, like habits_aug24_v1: applied once, so a later
@@ -507,17 +470,43 @@ async function ensure(c: Client): Promise<Client> {
           WHERE key='portfolio'`,
         `UPDATE habits SET pillar_id=${pillar("physical")}, updated_at=${stamp}
           WHERE system_key='ascnd'`,
-        `UPDATE habits SET pillar_id=${pillar("portfolio")}, name='Outreach', updated_at=${stamp}
-          WHERE system_key='outreach'`,
         `UPDATE habits SET pillar_id=${pillar("portfolio")}, updated_at=${stamp}
           WHERE name='Calendar' AND pillar_id IS NULL`,
-        `UPDATE habits SET name='Read', pillar_id=NULL, updated_at=${stamp}
-          WHERE system_key='reading'`,
         `UPDATE habits SET pillar_id=NULL, updated_at=${stamp}
           WHERE system_key='journal'`,
-        `UPDATE habits SET pillar_id=NULL, updated_at=${stamp}
-          WHERE name='Tidy room'`,
         "INSERT INTO app_meta (key,value) VALUES ('pivot_health_career_v1','1')",
+      ],
+      "write",
+    );
+  }
+
+  /**
+   * OUTREACH, READING AND TIDY ROOM LEAVE THE CHECKLIST — the owner's ruling, 2026-10-15:
+   * the three non-negotiables and the whole system behind them, logs included.
+   *
+   * A HARD DELETE, by the owner's explicit ask, and the one place in this ladder that
+   * deletes rows. deleteHabit is soft (active=0) so a retired habit's history survives;
+   * here the history IS what is being removed — the outreach documents and the reading
+   * log were asked for by name. Children first, then the habit rows, so the foreign keys
+   * (habit_overrides, habit_entries -> habits) are satisfied at every step; one batch, so
+   * a failure part-way leaves nothing applied and nothing latched.
+   *
+   * Matched by system_key for the two that have one, so a renamed row is still found; Tidy
+   * room never carried a key, so it goes by its canonical name. LATCHED: applied once, so
+   * a habit the owner later writes under one of these names is never swept on a later boot.
+   */
+  const removed = await c.execute(
+    "SELECT 1 FROM app_meta WHERE key='remove_habits_oct15_v1'",
+  );
+  if (!removed.rows.length) {
+    const gone = `(SELECT id FROM habits
+                    WHERE system_key IN ('outreach','reading') OR name='Tidy room')`;
+    await c.batch(
+      [
+        `DELETE FROM habit_overrides WHERE habit_id IN ${gone}`,
+        `DELETE FROM habit_entries WHERE habit_id IN ${gone}`,
+        "DELETE FROM habits WHERE system_key IN ('outreach','reading') OR name='Tidy room'",
+        "INSERT INTO app_meta (key,value) VALUES ('remove_habits_oct15_v1','1')",
       ],
       "write",
     );

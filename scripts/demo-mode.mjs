@@ -61,7 +61,7 @@ const TARGET = {
 const P = { adhered: 0.76, drifted: 0.15, optionalHabit: 0.78, ascnd: 0.72, driftReason: 0.6 };
 // The every-day rows start their runs on different days, so the flames are not all one colour.
 // Before its run a row is ticked on some days, and never on the day right before the run.
-const RUN_DAYS = { calendar: 30, vitamins: 26, tidy: 21 };
+const RUN_DAYS = { calendar: 30, vitamins: 26 };
 const KEEP_GOALS = [/^sql$/i, /^algorithms?$/i, /^aws\b/i];
 const SUBGOALS_IF_EMPTY = {
   sql: ["SELECT, joins, GROUP BY", "Subqueries and CTEs", "Window functions", "Indexes and EXPLAIN", "Transactions and isolation levels"],
@@ -390,17 +390,14 @@ function planDays(s, events, seed, gymDates) {
     weight: habitBy((h) => h.key === "weight"),
     ascnd: habitBy((h) => h.key === "ascnd"),
     journal: habitBy((h) => h.key === "journal"),
-    reading: habitBy((h) => h.key === "reading"),
-    outreach: habitBy((h) => h.key === "outreach"),
     calendar: habitBy((h) => /^calendar$/i.test(h.name)),
     vitamins: habitBy((h) => /^vitamins$/i.test(h.name)),
-    tidy: habitBy((h) => /^tidy room$/i.test(h.name)),
   };
-  const runs = [[H.calendar, RUN_DAYS.calendar], [H.vitamins, RUN_DAYS.vitamins], [H.tidy, RUN_DAYS.tidy]].filter(([h]) => h);
+  const runs = [[H.calendar, RUN_DAYS.calendar], [H.vitamins, RUN_DAYS.vitamins]].filter(([h]) => h);
   const special = new Set(Object.values(H).filter(Boolean).map((h) => h.id));
   // Journal is NEVER ticked: in the app a page is what ticks it, and a tick with no page behind
   // it is a state the app cannot produce.
-  const optional = [H.reading, H.outreach, ...s.habits.filter((h) => !special.has(h.id))].filter(Boolean);
+  const optional = s.habits.filter((h) => !special.has(h.id));
   const has = new Set(s.entries.map((e) => `${e.habit_id}|${e.date}`));
   const tick = (habit, d, value = 1) => {
     if (!habit || has.has(`${habit.id}|${d}`) || (habit.mask & weekdayBit(d)) === 0) return;
@@ -428,12 +425,12 @@ function planDays(s, events, seed, gymDates) {
     else ascndDone = rnd() < P.ascnd;
     if (ascndDone) tick(H.ascnd, d);
 
-    // Calendar / Vitamins / Tidy room: an unbroken run of RUN_DAYS, patchy before it.
+    // Calendar / Vitamins: an unbroken run of RUN_DAYS, patchy before it.
     for (const [h, run] of runs) {
       if (back <= run) tick(h, d);
       else if (back > run + 1 && rnd() < 0.7) tick(h, d);
     }
-    for (const h of optional) if (rnd() < P.optionalHabit) tick(h, d, h === H.reading ? 10 + Math.floor(rnd() * 23) : 1);
+    for (const h of optional) if (rnd() < P.optionalHabit) tick(h, d);
 
     // Weight: a believable line THROUGH the real readings.
     if (H.weight && !has.has(`${H.weight.id}|${d}`)) {

@@ -56,11 +56,11 @@ export type HabitView = {
   /** The logged number for a numeric habit; null when nothing is entered. */
   value: number | null;
   /**
-   * The document behind this non-negotiable — outreach, reading and ASC.ND.
+   * The document behind this non-negotiable — ASC.ND.
    *
    * ONE PER DAY, which is the shape of the thing rather than a limitation: habit_entries is
-   * UNIQUE (habit_id, date), so a second message on a Tuesday is the same Tuesday however
-   * many were sent. Consistency in reaching the floor is what is counted; volume past it
+   * UNIQUE (habit_id, date), so a second session on a Tuesday is the same Tuesday however
+   * many were done. Consistency in reaching the floor is what is counted; volume past it
    * deliberately is not.
    *
    * null means nothing written — which is NOT the same as unticked. A tick with no note is a
@@ -858,10 +858,10 @@ export async function listGoals(db: Client): Promise<GoalView[]> {
  * weighted sufficiency question; this answers "what actually happened", a raw count that
  * must never cap.
  *
- * Since the Health & Career pivot this is Health's only fact: the Social outreach count and
- * the Portfolio skill-session count left with their pillars (the Social half is parked in
- * archive/social/; skills are hidden and their data kept). Grape calendar events are
- * deliberately NOT counted — the owner logs sessions by hand and does not want them twice.
+ * Since the Health & Career pivot this is Health's only fact: the Portfolio skill-session
+ * count left with its pillar (skills are hidden and their data kept). Grape calendar events
+ * are deliberately NOT counted — the owner logs sessions by hand and does not want them
+ * twice.
  */
 export type PillarFacts = {
   /** Health: gym_sessions ROWS in the window, every kind. Sessions, not days. */
@@ -1014,7 +1014,7 @@ export async function logDays(
             SELECT date FROM journal_entries WHERE date <= ?
             UNION SELECT date FROM gym_sessions WHERE date <= ?
             UNION SELECT e.date FROM habit_entries e JOIN habits h ON h.id = e.habit_id
-                   WHERE h.system_key IN ('outreach','reading','ascnd') AND e.note IS NOT NULL AND e.date <= ?
+                   WHERE h.system_key = 'ascnd' AND e.note IS NOT NULL AND e.date <= ?
             UNION SELECT date FROM block_marks
                    WHERE state = 'drifted' AND reason IS NOT NULL AND reason <> '' AND date <= ?
           ) ORDER BY date DESC LIMIT ?`,
@@ -1046,15 +1046,12 @@ export async function logDays(
       ...inSpan,
     }),
     db.execute({
-      // Every DOCUMENT habit in one read — outreach, reading and ASC.ND write the same
-      // shape (habit_entries.note), and the system_key travels so the loop below can file
-      // each under its own kind rather than guessing from the words. The habit's id, name
-      // and stored value ride along for the log's NoteLog dialog — see LogEntry.ref.
-      sql: `SELECT e.id, e.date, e.note, e.value, h.id AS habit_id, h.name AS habit_name,
-                   h.system_key AS skey
+      // The DOCUMENT habit — ASC.ND writes habit_entries.note. The habit's id and name
+      // ride along for the log's NoteLog dialog — see LogEntry.ref.
+      sql: `SELECT e.id, e.date, e.note, h.id AS habit_id, h.name AS habit_name
               FROM habit_entries e
               JOIN habits h ON h.id = e.habit_id
-             WHERE h.system_key IN ('outreach','reading','ascnd') AND e.note IS NOT NULL
+             WHERE h.system_key = 'ascnd' AND e.note IS NOT NULL
                AND e.date BETWEEN ? AND ?`,
       ...inSpan,
     }),
@@ -1105,20 +1102,16 @@ export async function logDays(
   for (const r of docs.rows) {
     if (!keep.has(String(r.date))) continue;
     const note = r.note == null ? null : String(r.note);
-    const skey = String(r.skey);
-    const kind =
-      skey === "reading" ? "reading" : skey === "ascnd" ? "ascnd" : "outreach";
     out.push({
-      kind,
+      kind: "ascnd",
       id: num(r.id),
       date: String(r.date),
       title: firstLine(note),
       body: note,
       // The qualifier is printed verbatim beside the title, so ASC.ND keeps its own
       // casing rather than the kind key's.
-      meta: kind === "ascnd" ? "ASC.ND" : kind,
+      meta: "ASC.ND",
       ref: num(r.habit_id),
-      value: r.value == null ? null : num(r.value),
       label: String(r.habit_name),
     });
   }

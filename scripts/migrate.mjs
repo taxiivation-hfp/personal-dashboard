@@ -102,13 +102,13 @@ async function main() {
   // than replaced, so every existing habit_entries row keeps pointing somewhere real.
   const v2 = await client.execute("SELECT value FROM app_meta WHERE key='habits_v2'");
   if (!v2.rows.length) {
+    // Tidy room, Read 10 pages and One outreach message were in this list until the owner
+    // removed all three (2026-10-15); client.ts's remove_habits_oct15_v1 block deletes
+    // them wherever they still exist.
     const HABITS_V2 = [
       ["Journal", "portfolio", 1, "manual", 1],
-      ["Tidy room", "physical", 1, "manual", 2],
-      ["Read 10 pages", "portfolio", 1, "manual", 3],
       ["Sleep by set time", "physical", 1, "manual", 4],
       ["Mandarin 15 min", "portfolio", 1, "manual", 5],
-      ["One outreach message", "social_capital", 1, "manual", 6],
       // source='health' => auto-checked once the Phase 3 feed exists; until then it
       // renders as pending rather than inviting a tap that would fabricate a count.
       ["Steps", "physical", 8000, "health", 7],
@@ -288,16 +288,8 @@ async function main() {
   // Wires the three pillar sufficiency rings to real sources.
   const rv = await client.execute("SELECT value FROM app_meta WHERE key='rings_v1'");
   if (!rv.rows.length) {
-    // 1. The Social ring reads the outreach habit by SYSTEM_KEY, never by name — the
-    //    owner can rename their non-negotiables, and a name lookup would break silently
-    //    the moment they did. Habit 9 currently has system_key NULL.
-    //    Matched by id AND name so a reordered database cannot mislabel the wrong row.
-    await client.execute({
-      sql: "UPDATE habits SET system_key='outreach', updated_at=? WHERE id=9 AND name='One outreach message' AND system_key IS NULL",
-      args: [new Date().toISOString()],
-    });
-    // Partial index: two habits can never claim the same key, while the many NULLs stay
-    // unconstrained. Same approach as the escalate flag (schema.sql).
+    // 1. Partial index: two habits can never claim the same key, while the many NULLs
+    //    stay unconstrained. Same approach as the escalate flag (schema.sql).
     await client.execute(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_habits_system_key ON habits(system_key) WHERE system_key IS NOT NULL"
     );
@@ -326,7 +318,7 @@ async function main() {
 
     await client.execute("INSERT INTO app_meta (key,value) VALUES ('rings_v1','1')");
     const g = await client.execute("SELECT COUNT(*) AS n FROM gym_sessions");
-    console.log(`rings v1: outreach keyed, gym unhooked, ${Number(g.rows[0].n)} gym sessions rescued`);
+    console.log(`rings v1: gym unhooked, ${Number(g.rows[0].n)} gym sessions rescued`);
   }
 
   // ---------------------------------------------------------------- round two

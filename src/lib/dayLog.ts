@@ -22,13 +22,7 @@
  * NO `skill` KIND since the Health & Career pivot (2026-09-18): skills are hidden, so the log
  * does not return skill sessions. The sessions themselves are kept in skill_time, untouched.
  */
-export type LogKind =
-  | "journal"
-  | "gym"
-  | "outreach"
-  | "reading"
-  | "ascnd"
-  | "drift";
+export type LogKind = "journal" | "gym" | "ascnd" | "drift";
 
 export type LogEntry = {
   kind: LogKind;
@@ -68,9 +62,6 @@ export type LogEntry = {
    * pages are addressed by their own id, and a drift stays a reader's footnote.
    */
   ref?: number | null;
-  /** The stored quantity on a document entry — reading's pages. NoteLog's three-shape
-   *  `value` contract needs the real number, not a guess from the words. */
-  value?: number | null;
   /** What the owning thing is CALLED — the habit's name, for the dialog's heading. `meta`
    *  stays the short qualifier the tabs print; a heading is a different job. */
   label?: string | null;
@@ -83,10 +74,9 @@ export type LogDay = { date: string; entries: LogEntry[] };
  *
  * The journal leads because it is the only entry that is about the day AS A WHOLE — the
  * others are about a thing that happened during it. Sessions follow in the order the body
- * did them; the document habits after them, in the checklist's own order (outreach,
- * reading, then ASC.ND — the 2026-08-24 addition, seeded after the others). Drift reasons
- * come last because they are the smallest and the most incidental: a line explaining why
- * an afternoon went elsewhere is a footnote to a day, not its opening.
+ * did them; the document habit (ASC.ND) after them. Drift reasons come last because they
+ * are the smallest and the most incidental: a line explaining why an afternoon went
+ * elsewhere is a footnote to a day, not its opening.
  *
  * This is the ONLY place that order is decided. A screen sorting these itself would be a
  * second opinion about the same day.
@@ -94,10 +84,8 @@ export type LogDay = { date: string; entries: LogEntry[] };
 const ORDER: Record<LogKind, number> = {
   journal: 0,
   gym: 1,
-  outreach: 2,
-  reading: 3,
-  ascnd: 4,
-  drift: 5,
+  ascnd: 2,
+  drift: 3,
 };
 
 /**

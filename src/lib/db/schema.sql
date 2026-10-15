@@ -118,12 +118,12 @@ CREATE TABLE IF NOT EXISTS habit_entries (
   habit_id   INTEGER NOT NULL REFERENCES habits(id),
   date       TEXT NOT NULL CHECK (date GLOB '????-??-??'),
   value      REAL NOT NULL DEFAULT 1,
-  -- What was written, for the non-negotiables that carry a document — outreach, today.
+  -- What was written, for the non-negotiables that carry a document — ASC.ND, today.
   --
   -- ONE PER DAY, which is not a limitation but the shape of the thing: this table is
-  -- UNIQUE (habit_id, date) and the outreach metric is `perDayCapped: true`, so a second
-  -- message on a Tuesday is the same Tuesday however many you sent. Consistency in reaching
-  -- the floor is what is being counted; volume past it is deliberately not.
+  -- UNIQUE (habit_id, date), so a second session on a Tuesday is the same Tuesday however
+  -- many you did. Consistency in reaching the floor is what is being counted; volume past
+  -- it is deliberately not.
   --
   -- Nullable with no default, so every tick ever made stays a tick with nothing written
   -- rather than being back-filled with an empty document nobody typed.

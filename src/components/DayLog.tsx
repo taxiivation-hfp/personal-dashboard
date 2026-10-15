@@ -63,16 +63,13 @@ import type { LogDay, LogEntry, LogKind } from "@/lib/dayLog";
  * and a tick row can never disagree about what "no pillar" looks like. White on
  * --color-neutral measures 4.62:1, so it passes the chip test as well.
  *
- * Journal and reading are neutral by the pivot (spec §5/§7); gym and ASC.ND are HEALTH;
- * outreach is CAREER. Drift is still absent: it belongs to a calendar block rather than
- * to a pillar, and its tab is drawn unfilled — this app does not colour a plan not
- * happening.
+ * Journal is neutral by the pivot (spec §5/§7); gym and ASC.ND are HEALTH. Drift is still
+ * absent: it belongs to a calendar block rather than to a pillar, and its tab is drawn
+ * unfilled — this app does not colour a plan not happening.
  */
 const KIND_PILLAR: Record<Exclude<LogKind, "drift">, PillarKey | null> = {
   journal: null,
   gym: "physical",
-  outreach: "portfolio",
-  reading: null,
   ascnd: "physical",
 };
 
@@ -85,8 +82,6 @@ const kindHue = (pillar: PillarKey | null): string =>
 const KIND_LABEL: Record<LogKind, string> = {
   journal: "journal",
   gym: "session",
-  outreach: "outreach",
-  reading: "reading",
   ascnd: "ASC.ND",
   drift: "drifted",
 };
@@ -507,9 +502,9 @@ function DayReader({
                         e={e}
                         className="rounded px-2 py-0.5"
                       />
-                      {/* `meta` alone, never joined with the kind label — for outreach
-                          and drift the two are the same word, and "drifted · drifted"
-                          is the app stammering. */}
+                      {/* `meta` alone, never joined with the kind label — for drift the
+                          two are the same word, and "drifted · drifted" is the app
+                          stammering. */}
                       <span className="shrink-0 text-micro text-[var(--color-muted)]">
                         {e.meta ?? KIND_LABEL[e.kind]}
                       </span>
@@ -871,9 +866,7 @@ export default function DayLog({
           and the SkillLog branch that stood here is gone with it. Every skill session is
           still in `skill_time`; SkillLog.tsx is still on disk, unedited. */}
 
-      {(entry?.kind === "outreach" ||
-        entry?.kind === "reading" ||
-        entry?.kind === "ascnd") &&
+      {entry?.kind === "ascnd" &&
         entry.ref != null &&
         (() => {
           const cfg = DOC_HABITS[entry.kind] ?? { placeholder: "What happened?" };
@@ -886,10 +879,8 @@ export default function DayLog({
               hue={kindHue(KIND_PILLAR[entry.kind])}
               // The entry exists, so the day is ticked — that is what put it in the log.
               done
-              pages={cfg.pagesLabel ? entry.value : null}
-              pagesLabel={cfg.pagesLabel}
               placeholder={cfg.placeholder}
-              onSave={async (note, pages) => {
+              onSave={async (note) => {
                 const r = await fetch("/api/habits/log", {
                   method: "POST",
                   headers: { "content-type": "application/json" },
@@ -897,7 +888,6 @@ export default function DayLog({
                     habit_id: entry.ref,
                     date: entry.date,
                     note,
-                    ...(pages !== undefined ? { pages } : {}),
                   }),
                 });
                 // Thrown so NoteLog stays open over a refused write — closing over a 4xx
