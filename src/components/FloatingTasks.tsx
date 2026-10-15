@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 import HabitBox from "./HabitBox";
+import { dueBold, dueTone, type DueStep } from "@/lib/due";
 
 /**
  * TASKS, FLOATING IN THE SPACE AROUND THE HERO RING — the owner's ruling (spec §4).
@@ -69,14 +70,27 @@ export type FloatCard = {
   done: boolean;
   /** "carried 3d", "due in 3d", "late 2d" — a fact, never a penalty. null when nothing. */
   line: string | null;
-  /** The card's urgency hue (due.ts): red today, yellow at three days, null for the default
-   *  ink from four days out. Painted on the title and the line while the card is open. */
-  tone: string | null;
+  /** How soon it is due (due.ts): 0 today or late, up to 3; null from four days out. Decides
+   *  the hue, and the weight, of the title and the line while the card is open. */
+  step: DueStep | null;
   /** The day it is FOR — the slot order's first key. */
   due: string;
   /** The slot order's second key: the row id, which never changes. */
   order: number;
 };
+
+/**
+ * The title's and the line's inline style for an open card — the step's hue, and bold for
+ * the two nearest steps (due.ts). undefined for a done card or one four or more days out,
+ * so the classes alone decide and nothing is painted over the muted strike-through.
+ */
+const urgency = (t: FloatCard) =>
+  t.done || t.step == null
+    ? undefined
+    : {
+        color: dueTone(t.step),
+        ...(dueBold(t.step) ? { fontWeight: 600 } : {}),
+      };
 
 export default function FloatingTasks({
   cards,
@@ -189,12 +203,13 @@ export default function FloatingTasks({
               clamp's own display is already block-level, so dropping `block` changes the
               box and nothing else. */}
           {/* THE HUE SAYS HOW SOON (due.ts): red today, yellow at three days, the default
-              ink from four days out — the owner's ruling, 2026-10-15. On the title and the
-              line, never the box: a filled box means done. A finished card is muted and
-              struck through whatever its date was, so the tone is dropped with `done`. */}
+              ink from four days out, and bold for today and tomorrow — the owner's ruling,
+              2026-10-15. On the title and the line, never the box: a filled box means
+              done. A finished card is muted and struck through whatever its date was, so
+              `urgency` paints nothing once `done`. */}
           <span
             className={`line-clamp-2 font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
-            style={!t.done && t.tone ? { color: t.tone } : undefined}
+            style={urgency(t)}
           >
             {t.title}
           </span>
@@ -209,7 +224,7 @@ export default function FloatingTasks({
           {!t.done && t.line && (
             <span
               className="mt-0.5 block text-micro text-[var(--color-muted)]"
-              style={t.tone ? { color: t.tone } : undefined}
+              style={urgency(t)}
             >
               {t.line}
             </span>
@@ -391,7 +406,7 @@ function MorePopover({
               <span className="min-w-0 flex-1">
                 <span
                   className={`block font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
-                  style={!t.done && t.tone ? { color: t.tone } : undefined}
+                  style={urgency(t)}
                 >
                   {t.title}
                 </span>
@@ -403,7 +418,7 @@ function MorePopover({
                 {!t.done && t.line && (
                   <span
                     className="mt-0.5 block text-micro text-[var(--color-muted)]"
-                    style={t.tone ? { color: t.tone } : undefined}
+                    style={urgency(t)}
                   >
                     {t.line}
                   </span>

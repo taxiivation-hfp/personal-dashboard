@@ -93,13 +93,16 @@
 
   /* HOW SOON A CARD ON THE HERO RAILS IS DUE — the owner's ruling, 2026-10-15 (due.ts).
    * Four steps from red (today, or late) to yellow (three days out); four days and beyond
-   * take the default ink. The red is the floor-line red, so the app still has ONE red; the
-   * steps between are straight mixes toward the yellow. All four are TEXT on the record
-   * card's ground (--color-panel), so every one clears 4.5:1 there: 5.21, 5.08, 4.87, 4.53. */
-  --color-due-0: #b0483a; /* today / late · 5.21 on panel */
-  --color-due-1: #a5552b; /* tomorrow     · 5.08 on panel */
-  --color-due-2: #9a611d; /* in 2 days    · 4.87 on panel */
-  --color-due-3: #8f6e0e; /* in 3 days    · 4.53 on panel */
+   * take the default ink. SATURATED TO 90% and lifted a touch, at the owner's direction
+   * (the muted first cut did not separate the steps): the hues are the floor-line red and
+   * its mixes toward yellow, re-expressed at S 90 / L +3. That trades contrast for
+   * visibility — on the record card's ground they measure 4.08, 4.03, 3.81, 3.65, under
+   * the 4.5:1 body floor — which is why today and tomorrow are also set BOLD, so the two
+   * most urgent steps never rest on hue alone. */
+  --color-due-0: #ed270c; /* today / late · 4.08 on panel · bold */
+  --color-due-1: #d4500b; /* tomorrow     · 4.03 on panel · bold */
+  --color-due-2: #bc6b0a; /* in 2 days    · 3.81 on panel */
+  --color-due-3: #a47c09; /* in 3 days    · 3.65 on panel */
 
   /* THE ONE RED, at the owner's explicit direction, for exactly one mark: the dotted
    * calorie-floor line on the calories charts. It is a brick red desaturated to sit on

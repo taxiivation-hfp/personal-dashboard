@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
 import FloatingTasks, { type FloatCard } from "./FloatingTasks";
-import { dueTone } from "@/lib/due";
+import { dueStep } from "@/lib/due";
 import HabitBox from "./HabitBox";
 import WeightLog from "./WeightLog";
 import StepsLog from "./StepsLog";
@@ -801,7 +801,7 @@ export default function Today({
       sub: null,
       done: t.done,
       line: !t.done && t.carried > 0 ? `carried ${t.carried}d` : null,
-      tone: t.done ? null : dueTone(t.due, data.date),
+      step: t.done ? null : dueStep(t.due, data.date),
       due: t.due,
       order: t.id,
     }));
@@ -816,7 +816,7 @@ export default function Today({
           sub: g.title,
           done,
           line: subtaskLine(s, data.date),
-          tone: done ? null : dueTone(s.due!, data.date),
+          step: done ? null : dueStep(s.due!, data.date),
           due: s.due!,
           order: s.id,
         });
