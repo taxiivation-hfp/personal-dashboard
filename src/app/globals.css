@@ -79,7 +79,7 @@
    * with white on top, so it clears both the stroke floor and the filled-chip test. */
   --color-portfolio: #7d5a72; /* CAREER · 5.09 on bg · 5.93 with white */
 
-  /* A non-negotiable with NO pillar — Journal, Read, Tidy room (spec §5). Warm grey, and
+  /* A non-negotiable with NO pillar — Journal (spec §5). Warm grey, and
    * deliberately the same value as --color-drifted rather than a ninth invented neutral: that
    * grey is already certified both ways, which is what a habit tick needs (it is a filled box
    * with a WHITE tick inside it, so it must pass the 4.5:1 chip test as well as the 3:1 mark
@@ -90,6 +90,16 @@
   /* Placeholder text is TEXT: it needs the same 4.5:1 as body, not a hairline colour.
    * --color-line-strong measures 1.47:1 and is for strokes only. */
   --color-placeholder: #6e675d;
+
+  /* HOW SOON A CARD ON THE HERO RAILS IS DUE — the owner's ruling, 2026-10-15 (due.ts).
+   * Four steps from red (today, or late) to yellow (three days out); four days and beyond
+   * take the default ink. The red is the floor-line red, so the app still has ONE red; the
+   * steps between are straight mixes toward the yellow. All four are TEXT on the record
+   * card's ground (--color-panel), so every one clears 4.5:1 there: 5.21, 5.08, 4.87, 4.53. */
+  --color-due-0: #b0483a; /* today / late · 5.21 on panel */
+  --color-due-1: #a5552b; /* tomorrow     · 5.08 on panel */
+  --color-due-2: #9a611d; /* in 2 days    · 4.87 on panel */
+  --color-due-3: #8f6e0e; /* in 3 days    · 4.53 on panel */
 
   /* THE ONE RED, at the owner's explicit direction, for exactly one mark: the dotted
    * calorie-floor line on the calories charts. It is a brick red desaturated to sit on

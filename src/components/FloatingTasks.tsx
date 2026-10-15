@@ -69,6 +69,9 @@ export type FloatCard = {
   done: boolean;
   /** "carried 3d", "due in 3d", "late 2d" — a fact, never a penalty. null when nothing. */
   line: string | null;
+  /** The card's urgency hue (due.ts): red today, yellow at three days, null for the default
+   *  ink from four days out. Painted on the title and the line while the card is open. */
+  tone: string | null;
   /** The day it is FOR — the slot order's first key. */
   due: string;
   /** The slot order's second key: the row id, which never changes. */
@@ -185,8 +188,13 @@ export default function FloatingTasks({
               `-webkit-box` and a three-line title drew three lines with no warning. The
               clamp's own display is already block-level, so dropping `block` changes the
               box and nothing else. */}
+          {/* THE HUE SAYS HOW SOON (due.ts): red today, yellow at three days, the default
+              ink from four days out — the owner's ruling, 2026-10-15. On the title and the
+              line, never the box: a filled box means done. A finished card is muted and
+              struck through whatever its date was, so the tone is dropped with `done`. */}
           <span
             className={`line-clamp-2 font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
+            style={!t.done && t.tone ? { color: t.tone } : undefined}
           >
             {t.title}
           </span>
@@ -196,11 +204,13 @@ export default function FloatingTasks({
               {t.sub}
             </span>
           )}
-          {/* How long it has waited, or how long it has: stated plainly. No red, no
-              "overdue", no escalating weight — the honest-logging rule covers this list
-              too, and a list that starts scolding is one you stop writing to. */}
+          {/* How long it has waited, or how long it has: stated plainly, in the same hue
+              as the title. No "overdue", no escalating weight — the words stay a fact. */}
           {!t.done && t.line && (
-            <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
+            <span
+              className="mt-0.5 block text-micro text-[var(--color-muted)]"
+              style={t.tone ? { color: t.tone } : undefined}
+            >
               {t.line}
             </span>
           )}
@@ -381,6 +391,7 @@ function MorePopover({
               <span className="min-w-0 flex-1">
                 <span
                   className={`block font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
+                  style={!t.done && t.tone ? { color: t.tone } : undefined}
                 >
                   {t.title}
                 </span>
@@ -390,7 +401,10 @@ function MorePopover({
                   </span>
                 )}
                 {!t.done && t.line && (
-                  <span className="mt-0.5 block text-micro text-[var(--color-muted)]">
+                  <span
+                    className="mt-0.5 block text-micro text-[var(--color-muted)]"
+                    style={t.tone ? { color: t.tone } : undefined}
+                  >
                     {t.line}
                   </span>
                 )}

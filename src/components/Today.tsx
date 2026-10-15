@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import BlockList from "./BlockList";
 import CalorieInput from "./CalorieInput";
 import FloatingTasks, { type FloatCard } from "./FloatingTasks";
+import { dueTone } from "@/lib/due";
 import HabitBox from "./HabitBox";
 import WeightLog from "./WeightLog";
 import StepsLog from "./StepsLog";
@@ -218,7 +219,7 @@ export default function Today({
   // Raised by the Journal row in the checklist — the journal is written, not ticked.
   const [journalPrompt, setJournalPrompt] = useState(false);
   /**
-   * Which non-negotiable's document is open — outreach, today.
+   * Which non-negotiable's document is open — ASC.ND, today.
    *
    * The habit id rather than a boolean, so the row that opened it is the row that gets
    * written: the checklist is a list and a flag would have to be told which item it meant.
@@ -636,22 +637,12 @@ export default function Today({
   }
 
   /** The document behind a non-negotiable. Writing it ticks the day server-side, so the
-   *  refresh below picks up both the note and the tick in one read. `pages` travels only
-   *  when the dialog owns a pages field — see /api/habits/log. */
-  async function saveHabitNote(
-    id: number,
-    note: string | null,
-    pages?: number | null,
-  ) {
+   *  refresh below picks up both the note and the tick in one read. */
+  async function saveHabitNote(id: number, note: string | null) {
     const r = await fetch("/api/habits/log", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        habit_id: id,
-        date: data.date,
-        note,
-        ...(pages !== undefined ? { pages } : {}),
-      }),
+      body: JSON.stringify({ habit_id: id, date: data.date, note }),
     });
     // THROWS on a save that did not land, and that is load-bearing: the dialog closes
     // itself when this resolves, and closing over a 4xx would discard the only copy of
@@ -799,6 +790,9 @@ export default function Today({
    *
    * Placement is against the REAL today, as tasks.ts already does it — a subtask carrying
    * past its date sits on one day, and that day is today.
+   *
+   * The HUE is against the day on screen (due.ts): a one-off task's day is its `due`, so a
+   * task on its own day — or carried past it — is red; a subtask reddens as its date nears.
    */
   const cards = useMemo<FloatCard[]>(() => {
     const list: FloatCard[] = data.tasks.map((t) => ({
@@ -807,6 +801,7 @@ export default function Today({
       sub: null,
       done: t.done,
       line: !t.done && t.carried > 0 ? `carried ${t.carried}d` : null,
+      tone: t.done ? null : dueTone(t.due, data.date),
       due: t.due,
       order: t.id,
     }));
@@ -814,12 +809,14 @@ export default function Today({
       if (g.status !== "active") continue;
       for (const s of g.subgoals) {
         if (!subtaskShowsOn(s, data.date, today)) continue;
+        const done = doneOn(s, data.date);
         list.push({
           key: `s${s.id}`,
           title: s.title,
           sub: g.title,
-          done: doneOn(s, data.date),
+          done,
           line: subtaskLine(s, data.date),
+          tone: done ? null : dueTone(s.due!, data.date),
           due: s.due!,
           order: s.id,
         });
@@ -842,9 +839,9 @@ export default function Today({
   /**
    * The tick / fill for a non-negotiable, in its pillar's hue.
    *
-   * A habit with NO pillar is the warm neutral now, not the amber accent (spec §5): Journal,
-   * Read and Tidy room are things with no pillar, and dressing them in the one accent made
-   * three unfiled rows the loudest marks on the checklist. The accent stays where it means
+   * A habit with NO pillar is the warm neutral now, not the amber accent (spec §5): Journal
+   * is a thing with no pillar, and dressing it in the one accent made an unfiled row the
+   * loudest mark on the checklist. The accent stays where it means
    * something — the hero ring, and the ONE-OFF non-negotiables below, which belong to the day
    * rather than to any pillar. That branch is separate and deliberately unchanged.
    */
@@ -1213,9 +1210,9 @@ export default function Today({
                   onClick={() =>
                     // Two rows are not ticked, they are WRITTEN. The journal's opens the
                     // page picker — a page existing is what ticks it. A document habit
-                    // (outreach, reading) opens its logger: ONE control, the owner's
-                    // ruling, replacing the tick-plus-side-button pair — saving is what
-                    // ticks, and unticking lives inside the dialog it opens.
+                    // (ASC.ND) opens its logger: ONE control, the owner's ruling,
+                    // replacing the tick-plus-side-button pair — saving is what ticks,
+                    // and unticking lives inside the dialog it opens.
                     h.system_key === "journal"
                       ? setJournalPrompt(true)
                       : h.system_key != null && DOC_HABITS[h.system_key]
@@ -1433,13 +1430,9 @@ export default function Today({
               note={h.note}
               hue={habitTone(h.pillar)}
               done={h.done}
-              // value 1 is a bare tick, not "one page" — see setHabitNote. Above 1 it is
-              // a number someone typed, so it seeds the field.
-              pages={cfg.pagesLabel ? h.value : null}
-              pagesLabel={cfg.pagesLabel}
               placeholder={cfg.placeholder}
-              onSave={async (note, pages) => {
-                await saveHabitNote(h.id, note, pages);
+              onSave={async (note) => {
+                await saveHabitNote(h.id, note);
               }}
               onUntick={
                 h.done

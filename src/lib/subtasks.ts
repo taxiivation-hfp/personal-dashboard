@@ -77,8 +77,9 @@ export function subtaskShowsOn(
 
 /**
  * The card's second line on `date`: "due in 3d", "due tomorrow", "due today", "late 2d" —
- * or null for a ticked card. A fact, never a penalty: no red, no "overdue", the same
- * register "carried 3d" takes on a one-off task.
+ * or null for a ticked card. The WORDS are a fact, never a penalty: no "overdue", the same
+ * register "carried 3d" takes on a one-off task. How soon it is shows as the card's hue
+ * instead (due.ts).
  */
 export function subtaskLine(s: DatedSubtask, date: string): string | null {
   if (!isISODate(s.due) || doneOn(s, date)) return null;
