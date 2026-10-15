@@ -8,9 +8,9 @@
 // steps are also BOLD, so the most urgent cards never rest on hue alone.
 //
 // PURE and import-free apart from ./dates.ts, so it runs under `node --test` on the same
-// terms as tasks.ts and subtasks.ts. The hues themselves live in globals.css as tokens —
-// this module names which step applies and nothing more, so a change of shade is one CSS
-// edit and never a code change.
+// terms as tasks.ts and subtasks.ts. The hues themselves live in globals.css as tokens and
+// the classes that wear them in FloatingTasks.tsx — this module names which step applies
+// and nothing more, so a change of shade is one CSS edit and never a code change.
 
 import { daysBetween } from "./dates.ts";
 
@@ -35,9 +35,3 @@ export function dueStep(due: string, date: string): DueStep | null {
   if (ahead > DUE_TONE_HORIZON) return null;
   return Math.max(0, ahead) as DueStep;
 }
-
-/** The CSS colour of a step — the token globals.css defines for it. */
-export const dueTone = (step: DueStep): string => `var(--color-due-${step})`;
-
-/** Today and tomorrow are set bold as well as coloured. */
-export const dueBold = (step: DueStep): boolean => step <= 1;

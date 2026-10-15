@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from "react";
 import HabitBox from "./HabitBox";
-import { dueBold, dueTone, type DueStep } from "@/lib/due";
+import type { DueStep } from "@/lib/due";
 
 /**
  * TASKS, FLOATING IN THE SPACE AROUND THE HERO RING — the owner's ruling (spec §4).
@@ -80,17 +80,25 @@ export type FloatCard = {
 };
 
 /**
- * The title's and the line's inline style for an open card — the step's hue, and bold for
- * the two nearest steps (due.ts). undefined for a done card or one four or more days out,
- * so the classes alone decide and nothing is painted over the muted strike-through.
+ * What a step WEARS: its hue, and bold for the two nearest steps (today or late, and
+ * tomorrow). CLASSES, not an inline `color`, and that is load-bearing: the `--color-due-*`
+ * tokens sit in globals.css's `@theme`, and Tailwind v4 emits a theme variable only when a
+ * scanned utility uses it — `var(--color-due-2)` in a style attribute is invisible to the
+ * scan, so the variable was never written to the stylesheet and three of the four steps
+ * painted nothing. Spelled out as four literals rather than built from the step so the
+ * scan can see every one.
  */
-const urgency = (t: FloatCard) =>
-  t.done || t.step == null
-    ? undefined
-    : {
-        color: dueTone(t.step),
-        ...(dueBold(t.step) ? { fontWeight: 600 } : {}),
-      };
+const STEP_CLASS: Record<DueStep, string> = {
+  0: "text-[var(--color-due-0)] font-semibold",
+  1: "text-[var(--color-due-1)] font-semibold",
+  2: "text-[var(--color-due-2)]",
+  3: "text-[var(--color-due-3)]",
+};
+
+/** The title's and the line's urgency classes for an open card, or "" for a done card or
+ *  one four or more days out, when the default ink stands. */
+const urgency = (t: FloatCard): string =>
+  t.done || t.step == null ? "" : STEP_CLASS[t.step];
 
 export default function FloatingTasks({
   cards,
@@ -208,8 +216,7 @@ export default function FloatingTasks({
               done. A finished card is muted and struck through whatever its date was, so
               `urgency` paints nothing once `done`. */}
           <span
-            className={`line-clamp-2 font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
-            style={urgency(t)}
+            className={`line-clamp-2 font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : urgency(t)}`}
           >
             {t.title}
           </span>
@@ -223,8 +230,7 @@ export default function FloatingTasks({
               as the title. No "overdue", no escalating weight — the words stay a fact. */}
           {!t.done && t.line && (
             <span
-              className="mt-0.5 block text-micro text-[var(--color-muted)]"
-              style={urgency(t)}
+              className={`mt-0.5 block text-micro ${urgency(t) || "text-[var(--color-muted)]"}`}
             >
               {t.line}
             </span>
@@ -405,8 +411,7 @@ function MorePopover({
               </span>
               <span className="min-w-0 flex-1">
                 <span
-                  className={`block font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : ""}`}
-                  style={urgency(t)}
+                  className={`block font-serif text-small leading-snug ${t.done ? "text-[var(--color-muted)] line-through decoration-[var(--color-line-strong)]" : urgency(t)}`}
                 >
                   {t.title}
                 </span>
@@ -417,8 +422,7 @@ function MorePopover({
                 )}
                 {!t.done && t.line && (
                   <span
-                    className="mt-0.5 block text-micro text-[var(--color-muted)]"
-                    style={urgency(t)}
+                    className={`mt-0.5 block text-micro ${urgency(t) || "text-[var(--color-muted)]"}`}
                   >
                     {t.line}
                   </span>

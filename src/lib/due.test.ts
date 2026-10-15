@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dueStep, dueTone, dueBold } from "./due.ts";
+import { dueStep } from "./due.ts";
 
 const D = "2026-10-15";
 
@@ -29,15 +29,4 @@ test("four days and beyond keep the default ink", () => {
 test("the step follows the day being viewed, not the real today", () => {
   // Stepping back to the 12th, a card due on the 15th is three days out again.
   assert.equal(dueStep(D, "2026-10-12"), 3);
-});
-
-test("each step names its own token, and only today and tomorrow are bold", () => {
-  assert.equal(dueTone(0), "var(--color-due-0)");
-  assert.equal(dueTone(3), "var(--color-due-3)");
-  assert.deepEqual([0, 1, 2, 3].map((s) => dueBold(s as 0 | 1 | 2 | 3)), [
-    true,
-    true,
-    false,
-    false,
-  ]);
 });
