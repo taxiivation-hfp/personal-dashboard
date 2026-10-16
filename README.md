@@ -26,9 +26,8 @@ Each day starts from the plan. Google Calendar events sync in and shows the time
 ## Screenshots
 
 <table>
-  <tr><td><img src="screenshots/busy-day.png" width="460" alt="busy-day"></td><td><img src="screenshots/health-opened.png" width="460" alt="health-opened"></td></tr>
+  <tr><td><img src="screenshots/busy-day.png" width="460" alt="busy-day"></td><td><img src="screenshots/record-graphs.png" width="460" alt="record-graphs"></td></tr>
   <tr><td><img src="screenshots/timeline.png" width="460" alt="timeline"></td><td><img src="screenshots/record.png" width="460" alt="record"></td></tr>
-  <tr><td><img src="screenshots/record-graphs.png" width="460" alt="record-graphs"></td><td></td></tr>
 </table>
 
 ## Architecture
