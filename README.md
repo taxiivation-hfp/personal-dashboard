@@ -45,5 +45,5 @@ Stack: Next.js, TypeScript, libSQL/Turso, Vercel.
 | --- | --- |
 | Proxy | Runs on Edge. Verifies the session from the cookie alone. |
 | API routes | Private by default. Public and machine routes are an explicit allowlist. |
-| Engine | Rules run in transactions, not on the client. |
+| Service layer | Rules run server-side in transactions, not on the client. |
 | DB client | Turso in production, `local.db` in development. |

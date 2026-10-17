@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 456" width="1200" height="456" font-family="ui-sans-serif, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
   <title>Personal Analytics Dashboard architecture</title>
-  <desc>The browser sends a request with its session cookie to the edge proxy, which verifies the cookie and either passes the request to the API routes or redirects to /login. Route handlers write through the engine, where adherence rules run in transactions, and read through the DB client. The DB client talks to Turso. Routes also sync events from Google Calendar.</desc>
+  <desc>The browser sends a request with its session cookie to the edge proxy, which verifies the cookie and either passes the request to the API routes or redirects to /login. Route handlers write through the service layer, where adherence rules run in transactions, and read through the DB client. The DB client talks to Turso. Routes also sync events from Google Calendar.</desc>
 
   <defs>
     <filter id="lift" x="-10%" y="-10%" width="120%" height="125%">
@@ -64,12 +64,12 @@
   <text x="529" y="318" fill="#8a7b69" font-size="11.5">public and machine</text>
   <text x="529" y="334" fill="#8a7b69" font-size="11.5">routes are an allowlist</text>
 
-  <!-- Engine -->
+  <!-- Service layer -->
   <g filter="url(#lift)">
     <rect x="755" y="110" width="170" height="120" rx="14" fill="#fdfbf7" stroke="#a0692a" stroke-opacity="0.55"/>
   </g>
   <text x="769" y="134" fill="#8a7b69" font-size="9.5" font-weight="700" letter-spacing="1.6">LIB</text>
-  <text x="769" y="156" fill="#2b2118" font-size="17" font-family="Georgia, 'Source Serif 4', serif">Engine</text>
+  <text x="769" y="156" fill="#2b2118" font-size="17" font-family="Georgia, 'Source Serif 4', serif">Service layer</text>
   <line x1="769" y1="168" x2="911" y2="168" stroke="#e2d8c8"/>
   <text x="769" y="190" fill="#4a3d30" font-size="12">transactions</text>
   <text x="769" y="208" fill="#a0692a" font-size="12" font-weight="700">adherence rules</text>
