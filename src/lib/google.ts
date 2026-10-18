@@ -1,7 +1,7 @@
 // Google Calendar (Phase 2) — OAuth 2.0 + Calendar v3 over raw REST (no SDK).
 // Single-user: tokens live in google_oauth_tokens (one row, id=1). Access tokens are
-// auto-refreshed from the stored refresh_token. Keep the Google Cloud app in "Testing"
-// mode with yourself as a test user (skips verification).
+// auto-refreshed from the stored refresh_token. The Google Cloud app is published to
+// production but left unverified (personal use): in "Testing" refresh tokens expire after 7 days.
 
 import type { Client } from "./db/client";
 import { readFileSync } from "node:fs";
