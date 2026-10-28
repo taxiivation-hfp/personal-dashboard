@@ -1343,7 +1343,7 @@ export async function addTimelineWindow(
   db: Client,
   w:
     | { kind: "goal"; goalId: number; x: number; y: number }
-    | { kind: "text"; x: number; y: number },
+    | { kind: "text"; x: number; y: number; month?: string | null },
 ): Promise<number> {
   const at = clampXY(w.x, w.y);
   if (w.kind === "goal") {
@@ -1361,11 +1361,23 @@ export async function addTimelineWindow(
     });
     return Number(r.lastInsertRowid);
   }
+  // A text note belongs to a month's board (2026-10-29); x/y stay as the legacy strip spot.
+  const month = w.month ?? null;
+  if (month !== null && !isMonthKey(month)) throw new Error("month must be YYYY-MM");
   const r = await db.execute({
-    sql: `INSERT INTO timeline_windows (kind,x,y,created_at,updated_at) VALUES ('text',?,?,?,?)`,
-    args: [at.x, at.y, now(), now()],
+    sql: `INSERT INTO timeline_windows (kind,x,y,month,created_at,updated_at)
+          VALUES ('text',?,?,?,?,?)`,
+    args: [at.x, at.y, month, now(), now()],
   });
-  return Number(r.lastInsertRowid);
+  const id = Number(r.lastInsertRowid);
+  // The month it was made on is the first of the months it shows on.
+  if (month !== null) {
+    await db.execute({
+      sql: "INSERT INTO note_months (window_id, month) VALUES (?,?)",
+      args: [id, month],
+    });
+  }
+  return id;
 }
 
 /**
@@ -1379,16 +1391,27 @@ export async function addTimelineWindow(
 export async function updateTimelineWindow(
   db: Client,
   id: number,
-  patch: { x?: number; y?: number; text?: string; color?: string | null },
+  patch: {
+    x?: number;
+    y?: number;
+    text?: string;
+    color?: string | null;
+    month?: string | null;
+    /** Replaces the note's whole set of months. */
+    months?: string[];
+    allMonths?: boolean;
+  },
 ): Promise<void> {
-  const cur = await db.execute({
-    sql: "SELECT x, y FROM timeline_windows WHERE id=?",
-    args: [id],
-  });
-  if (!cur.rows.length) throw new Error("no such window");
   const sets: string[] = [];
   const args: (string | number | null)[] = [];
   if (patch.x !== undefined || patch.y !== undefined) {
+    // Only a move needs the current spot (to fill the axis not sent); every other edit
+    // skips this read, one fewer round trip to Turso per click.
+    const cur = await db.execute({
+      sql: "SELECT x, y FROM timeline_windows WHERE id=?",
+      args: [id],
+    });
+    if (!cur.rows.length) throw new Error("no such window");
     const at = clampXY(
       patch.x === undefined ? Number(cur.rows[0]!.x) : patch.x,
       patch.y === undefined ? Number(cur.rows[0]!.y) : patch.y,
@@ -1407,18 +1430,77 @@ export async function updateTimelineWindow(
     sets.push("color=?");
     args.push(patch.color);
   }
-  if (!sets.length) return;
+  if (patch.month !== undefined) {
+    if (patch.month !== null && !isMonthKey(patch.month)) throw new Error("month must be YYYY-MM");
+    sets.push("month=?");
+    args.push(patch.month);
+  }
+  if (patch.allMonths !== undefined) {
+    sets.push("all_months=?");
+    args.push(patch.allMonths ? 1 : 0);
+  }
+  let months: string[] | null = null;
+  if (patch.months !== undefined) {
+    if (!patch.months.every(isMonthKey)) throw new Error("months must be YYYY-MM");
+    months = [...new Set(patch.months)];
+  }
+  if (!sets.length && months === null) return;
   sets.push("updated_at=?");
   args.push(now(), id);
-  await db.execute({
-    sql: `UPDATE timeline_windows SET ${sets.join(", ")} WHERE id=?`,
-    args,
-  });
+  const stmts: { sql: string; args: (string | number | null)[] }[] = [
+    { sql: `UPDATE timeline_windows SET ${sets.join(", ")} WHERE id=?`, args },
+  ];
+  if (months !== null) {
+    stmts.push({ sql: "DELETE FROM note_months WHERE window_id=?", args: [id] });
+    for (const m of months) {
+      stmts.push({ sql: "INSERT INTO note_months (window_id, month) VALUES (?,?)", args: [id, m] });
+    }
+  }
+  const [upd] = await db.batch(stmts, "write");
+  if (!upd!.rowsAffected) throw new Error("no such window");
 }
 
 /** Take a window off the timeline. For a goal window this forgets only the placement —
  *  the goal itself is untouched; for a text window the words go with it, which is why the
  *  screen asks first. */
 export async function removeTimelineWindow(db: Client, id: number): Promise<void> {
-  await db.execute({ sql: "DELETE FROM timeline_windows WHERE id=?", args: [id] });
+  // A text note's board spots (every month) and its months go with it (2026-10-29); no-ops
+  // for a goal window.
+  await db.batch(
+    [
+      { sql: "DELETE FROM month_board WHERE item=?", args: [`note:${id}`] },
+      { sql: "DELETE FROM note_months WHERE window_id=?", args: [id] },
+      { sql: "DELETE FROM timeline_windows WHERE id=?", args: [id] },
+    ],
+    "write",
+  );
+}
+
+const isMonthKey = (m: string): boolean => /^\d{4}-(0[1-9]|1[0-2])$/.test(m);
+const isBoardItem = (s: string): boolean => /^(goal|note):[1-9]\d*$/.test(s);
+
+/**
+ * Save one card's spot on a month's board (2026-10-29). `item` is 'goal:<id>' or
+ * 'note:<id>'; clamped like a window, upserted so the first drag creates the row.
+ */
+export async function setBoardPos(
+  db: Client,
+  month: string,
+  item: string,
+  x: number,
+  y: number,
+): Promise<void> {
+  if (!isMonthKey(month)) throw new Error("month must be YYYY-MM");
+  if (!isBoardItem(item)) throw new Error("item must be goal:<id> or note:<id>");
+  const at = clampXY(x, y);
+  await db.execute({
+    sql: `INSERT INTO month_board (month,item,x,y,updated_at) VALUES (?,?,?,?,?)
+          ON CONFLICT(month,item) DO UPDATE SET x=excluded.x, y=excluded.y, updated_at=excluded.updated_at`,
+    args: [month, item, at.x, at.y, now()],
+  });
+}
+
+/** Forget a card's saved spot — it falls back to auto-layout. */
+export async function clearBoardPos(db: Client, month: string, item: string): Promise<void> {
+  await db.execute({ sql: "DELETE FROM month_board WHERE month=? AND item=?", args: [month, item] });
 }
