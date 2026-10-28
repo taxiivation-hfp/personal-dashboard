@@ -121,6 +121,7 @@ export default function Dashboard({
   onClose,
   initialView,
   logAnchor,
+  logAfter,
 }: {
   date: string;
   /** The real today. Every window here is anchored to `date`, which is the day the record
@@ -134,6 +135,8 @@ export default function Dashboard({
   /** Where the LOG's scroll starts — a timeline month lands here at that month's end. The
    *  stats windows keep `date`; a month is a place in the log, not a new stats anchor. */
   logAnchor?: string;
+  /** Lower bound of the LOG (YYYY-MM-DD, inclusive) — a month's record stops at its first day. */
+  logAfter?: string;
 }) {
   /**
    * WHICH HALF OF THE RECORD IS SHOWING.
@@ -427,7 +430,11 @@ export default function Dashboard({
               questions, one at a time, which is what the masthead's tabs promise. The
               masthead itself stays, so switching back is always one tap away. */}
           {view === "log" && (
-            <DayLog date={logAnchor ?? date} today={today ?? date} />
+            <DayLog
+              date={logAnchor ?? date}
+              today={today ?? date}
+              after={logAfter}
+            />
           )}
 
           {view === "stats" && (
