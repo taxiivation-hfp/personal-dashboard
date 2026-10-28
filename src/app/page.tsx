@@ -23,7 +23,12 @@ export default async function Page({
 }: {
   // `string[]` is not paranoia — `?date=a&date=b` is a shape Next really hands over, and
   // isISODate rejects it on the type as well as the value.
-  searchParams: Promise<{ date?: string | string[]; view?: string | string[] }>;
+  searchParams: Promise<{
+    date?: string | string[];
+    view?: string | string[];
+    month?: string | string[];
+    screen?: string | string[];
+  }>;
 }) {
   const db = await getDb();
   const today = todayISO();
@@ -33,6 +38,12 @@ export default async function Page({
   // `?view=timeline` reopens the screen already standing on the timeline — the state is
   // written back by replaceState as the gesture runs, same contract as `?date=`.
   const view = sp.view === "timeline" ? ("timeline" as const) : undefined;
+  // `&month=YYYY-MM[&screen=records]` deep-links a month on the timeline.
+  const month =
+    view && typeof sp.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month)
+      ? sp.month
+      : undefined;
+  const screen = month && sp.screen === "records" ? ("records" as const) : undefined;
 
   // The calendar call is handed over as a promise so Google and the database are waited on
   // together rather than one after the other.
@@ -42,6 +53,13 @@ export default async function Page({
   ]);
   // Goals live in the right column — there is no separate route.
   return (
-    <Today initial={data} today={today} goals={goals} initialView={view} />
+    <Today
+      initial={data}
+      today={today}
+      goals={goals}
+      initialView={view}
+      initialMonth={month}
+      initialScreen={screen}
+    />
   );
 }

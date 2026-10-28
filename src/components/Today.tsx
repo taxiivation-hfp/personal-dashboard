@@ -137,11 +137,16 @@ export default function Today({
   today: serverToday,
   goals: initialGoals,
   initialView,
+  initialMonth,
+  initialScreen,
 }: {
   initial: DayView;
   /** `?view=timeline` on the front door — a reload while standing on the timeline must
    *  land back on it, settled, with no animation to replay. */
   initialView?: "timeline";
+  /** `&month=YYYY-MM` (and `&screen=records`) on the timeline URL: a deep link to a month. */
+  initialMonth?: string;
+  initialScreen?: "records";
   /**
    * The REAL today, resolved on the server.
    *
@@ -383,8 +388,15 @@ export default function Today({
    * address bar — so the next reload landed on the timeline the owner had just left. The
    * mirror press left the timeline open with the URL reading `/`. `tl` is read rather than
    * updated functionally because the guard has to decide the WRITE as well as the state. */
+  // The deep link is for the FIRST open only; leaving (or opening afresh) drops it so the
+  // next open lands on the canvas, not on the month the URL once named.
+  const deepLink = useRef<{ month?: string; screen?: "records" } | null>({
+    month: initialMonth,
+    screen: initialScreen,
+  });
   const openTimeline = useCallback(() => {
     if (tl !== "closed") return;
+    deepLink.current = null;
     setTl("falling");
     const qs = new URLSearchParams();
     if (viewing.current !== today) qs.set("date", viewing.current);
@@ -393,6 +405,7 @@ export default function Today({
   }, [tl, today]);
   const closeTimeline = useCallback(() => {
     if (tl !== "open") return;
+    deepLink.current = null;
     setTl("prep");
     window.history.replaceState(
       null,
@@ -401,15 +414,22 @@ export default function Today({
     );
   }, [tl, today]);
 
-  /** Escape returns to the dashboard — the timeline is a place you opened. */
+  /** Which screen the timeline layer is on. On the month and records screens Escape and the
+   *  return bar belong to the Timeline (one step back), not to us. */
+  const [tlScreen, setTlScreen] = useState<"timeline" | "month" | "records">(
+    "timeline",
+  );
+
+  /** Escape returns to the dashboard — the timeline is a place you opened. Only from the
+   *  canvas: Timeline's own listener steps back from a month or its records. */
   useEffect(() => {
-    if (tl !== "open") return;
+    if (tl !== "open" || tlScreen !== "timeline") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeTimeline();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tl, closeTimeline]);
+  }, [tl, tlScreen, closeTimeline]);
 
   /**
    * THE DAY THE SCREEN IS CURRENTLY ASKING ABOUT, readable from inside a promise.
@@ -683,21 +703,6 @@ export default function Today({
       .catch(() => ({ error: true }));
     if (!r.error && r.goals) setGoals(r.goals);
   }
-
-  /**
-   * TICK A GOAL DONE, from two places: the Career drill-down's `mark done` and a goal's
-   * sticky note on the timeline. Status `done` stamps `completed_at` server-side and status
-   * `active` clears it — the engine owns that pair, and this is only the button.
-   *
-   * A goal marked done leaves the Career ring, because only ACTIVE goals take an arc
-   * (career.ts). That is intended: the ring is what is in flight, not what has been
-   * achieved. The timeline's note stays where it was put, with its tick and its date.
-   */
-  const onGoalDone = (id: number, done: boolean) =>
-    mutateGoals(`/api/goals/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: done ? "done" : "active" }),
-    });
 
   /** Tick or untick a one-off task. The tick belongs to the day on screen. */
   async function toggleTask(id: number, done: boolean) {
@@ -1591,15 +1596,21 @@ export default function Today({
               <Timeline
                 today={today}
                 goals={goals}
-                onGoalDone={onGoalDone}
+                onGoals={mutateGoals}
+                shown={tl === "falling" || tl === "open"}
+                initialMonth={deepLink.current?.month}
+                initialScreen={deepLink.current?.screen}
+                onScreen={setTlScreen}
               />
-              <button
-                type="button"
-                onClick={closeTimeline}
-                className="fixed bottom-5 left-1/2 z-[var(--z-sticky)] -translate-x-1/2 whitespace-nowrap rounded-full border border-[var(--color-line-strong)] bg-[var(--color-panel)] px-5 py-2 text-micro font-semibold tracking-[0.14em] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
-              >
-                RETURN TO DASHBOARD
-              </button>
+              {tlScreen === "timeline" && (
+                <button
+                  type="button"
+                  onClick={closeTimeline}
+                  className="pill fixed bottom-5 left-1/2 z-[var(--z-sticky)] -translate-x-1/2 whitespace-nowrap"
+                >
+                  Return to dashboard
+                </button>
+              )}
             </div>
           )}
           {/* Source order is today → blocks → pillars, which IS the stacked mobile order,
