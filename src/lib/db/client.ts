@@ -1,6 +1,8 @@
 import { createClient, type Client } from "@libsql/client";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { todayISO } from "../dates";
+import { monthOfLegacyWindow } from "../timeline";
 
 // Server-only DB access. One client per process (reused across hot reloads in dev).
 // FK enforcement is OFF by default in SQLite/libSQL — we enable + assert it once,
@@ -57,7 +59,7 @@ function makeClient(): Client {
  * again, once. A database that has never been stamped (brand new, or older than this
  * latch) still walks the whole ladder, exactly as before.
  */
-const ENSURE_VERSION = "2026-10-15.2";
+const ENSURE_VERSION = "2026-10-29.2";
 
 async function isEnsured(c: Client): Promise<boolean> {
   try {
@@ -289,6 +291,59 @@ async function ensure(c: Client): Promise<Client> {
   await c.execute(`INSERT INTO timeline_windows (kind, goal_id, x, y, updated_at)
     SELECT 'goal', p.goal_id, p.x, p.y, p.updated_at FROM timeline_positions p
      WHERE NOT EXISTS (SELECT 1 FROM timeline_windows w WHERE w.goal_id = p.goal_id)`);
+
+  // The month board (2026-10-29): a text note now belongs to a MONTH, not an x on the old
+  // strip. Nullable with no default, so it cannot lose a row; the CHECK matches the other
+  // month columns (a NULL passes it). Legacy text windows are then given the month their
+  // old x sat over, once — only rows still NULL are touched, so a note re-homed later is
+  // never pulled back. monthOfLegacyWindow reads today only for the range's far end, which no legacy x
+  // can reach, so running it with the current date is stable.
+  if (!(await has("timeline_windows", "month"))) {
+    await c.execute(
+      `ALTER TABLE timeline_windows ADD COLUMN month TEXT
+         CHECK (month IS NULL OR month GLOB '????-??')`,
+    );
+  }
+  await c.execute(`CREATE TABLE IF NOT EXISTS month_board (
+    month      TEXT NOT NULL CHECK (month GLOB '????-??'),
+    item       TEXT NOT NULL,
+    x          REAL NOT NULL,
+    y          REAL NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    PRIMARY KEY (month, item)
+  )`);
+  const legacy = await c.execute(
+    "SELECT id, x FROM timeline_windows WHERE kind='text' AND month IS NULL",
+  );
+  if (legacy.rows.length) {
+    const today = todayISO();
+    await c.batch(
+      legacy.rows.map((r) => ({
+        sql: "UPDATE timeline_windows SET month=? WHERE id=?",
+        args: [monthOfLegacyWindow(Number(r.x), today), Number(r.id)],
+      })),
+      "write",
+    );
+  }
+
+  // A note's months (2026-10-29): a sticky note shows on a chosen SET of months, or on all of
+  // them. `month` above is kept as the legacy single home (never dropped); each text note
+  // with a month and no rows yet is given that one, so the back-fill is safe to re-run and a
+  // note whose set the owner later edited is never touched.
+  if (!(await has("timeline_windows", "all_months"))) {
+    await c.execute(
+      "ALTER TABLE timeline_windows ADD COLUMN all_months INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+  await c.execute(`CREATE TABLE IF NOT EXISTS note_months (
+    window_id INTEGER NOT NULL REFERENCES timeline_windows(id),
+    month     TEXT NOT NULL CHECK (month GLOB '????-??'),
+    PRIMARY KEY (window_id, month)
+  )`);
+  await c.execute(`INSERT INTO note_months (window_id, month)
+    SELECT w.id, w.month FROM timeline_windows w
+     WHERE w.kind='text' AND w.month IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM note_months n WHERE n.window_id = w.id)`);
 
   // Only after the back-fills — see the note in schema.sql.
   //

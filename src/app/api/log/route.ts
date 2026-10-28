@@ -34,8 +34,12 @@ export async function GET(req: Request) {
     const limit =
       Number.isInteger(asked) && asked > 0 ? Math.min(asked, MAX_PAGE) : PAGE;
 
+    // Optional inclusive floor (the month page's Records): paging ends once it is reached.
+    const rawAfter = url.searchParams.get("after");
+    const after = isISODate(rawAfter) ? rawAfter : undefined;
+
     const db = await getDb();
-    const days = await logDays(db, before, limit);
+    const days = await logDays(db, before, limit, after);
 
     /**
      * Where the NEXT page starts, computed here rather than by the client.
@@ -46,8 +50,10 @@ export async function GET(req: Request) {
      * it. Only a page with no days at all ends the scroll.
      */
     const nextBefore = days.length ? isoBefore(days[days.length - 1]!.date) : null;
+    // With a floor, the log is also exhausted once the next page would start below it.
+    const done = days.length === 0 || (after !== undefined && nextBefore! < after);
 
-    return Response.json({ days, nextBefore, done: days.length === 0 });
+    return Response.json({ days, nextBefore, done });
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : String(e) },

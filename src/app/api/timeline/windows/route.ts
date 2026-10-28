@@ -27,7 +27,7 @@ const idOf = (v: unknown): number | null => {
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
-/** Add: `{ kind: 'goal', goalId, x, y }` or `{ kind: 'text', x, y }`. */
+/** Add: `{ kind: 'goal', goalId, x, y }` or `{ kind: 'text', x, y, month? }`. */
 export async function POST(req: Request) {
   try {
     const b = await req.json();
@@ -41,7 +41,8 @@ export async function POST(req: Request) {
         return Response.json({ error: "goalId must be a positive id" }, { status: 400 });
       id = await addTimelineWindow(db, { kind: "goal", goalId, x, y });
     } else if (b.kind === "text") {
-      id = await addTimelineWindow(db, { kind: "text", x, y });
+      const month = b.month == null ? null : String(b.month);
+      id = await addTimelineWindow(db, { kind: "text", x, y, month });
     } else {
       return Response.json({ error: "kind must be goal or text" }, { status: 400 });
     }
@@ -51,14 +52,19 @@ export async function POST(req: Request) {
   }
 }
 
-/** Move, rewrite or recolour: `{ id, x?, y?, text?, color? }` — absent fields are left. */
+/** Move, rewrite or recolour: `{ id, x?, y?, text?, color?, month?, months?, allMonths? }` — absent fields are left. */
 export async function PATCH(req: Request) {
   try {
     const b = await req.json();
     const id = idOf(b.id);
     if (id == null) return Response.json({ error: "id must be a positive id" }, { status: 400 });
+    if (b.months !== undefined && !Array.isArray(b.months))
+      return Response.json({ error: "months must be a list of YYYY-MM" }, { status: 400 });
     const db = await getDb();
     await updateTimelineWindow(db, id, {
+      months: b.months === undefined ? undefined : (b.months as unknown[]).map(String),
+      allMonths: b.allMonths === undefined ? undefined : Boolean(b.allMonths),
+      month: b.month === undefined ? undefined : b.month === null ? null : String(b.month),
       x: b.x === undefined ? undefined : Number(b.x),
       y: b.y === undefined ? undefined : Number(b.y),
       text: b.text === undefined ? undefined : String(b.text),

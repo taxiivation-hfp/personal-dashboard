@@ -223,6 +223,30 @@ CREATE TABLE IF NOT EXISTS timeline_windows (
 -- through anyway, and saying so is clearer than relying on it.
 CREATE UNIQUE INDEX IF NOT EXISTS timeline_windows_goal
   ON timeline_windows(goal_id) WHERE goal_id IS NOT NULL;
+-- (2026-10-29) timeline_windows.month — which month's board a text note is pinned to — is
+-- added by client.ts (ALTER, with a one-off back-fill from the note's old x), since SQLite
+-- cannot ADD COLUMN IF NOT EXISTS.
+
+-- (2026-10-29) A sticky note shows on a chosen SET of months, or on all of them.
+-- timeline_windows.all_months is added by client.ts (ALTER) beside the back-fill that gives
+-- every month-pinned note its one note_months row; timeline_windows.month stays as the
+-- legacy single home, never dropped.
+CREATE TABLE IF NOT EXISTS note_months (
+  window_id INTEGER NOT NULL REFERENCES timeline_windows(id),
+  month     TEXT NOT NULL CHECK (month GLOB '????-??'),
+  PRIMARY KEY (window_id, month)
+);
+
+-- Where each card sits on a month's board (2026-10-29). item is 'goal:<id>' or 'note:<id>';
+-- no row means "auto-layout". Positions are board px; nothing here feeds anything.
+CREATE TABLE IF NOT EXISTS month_board (
+  month      TEXT NOT NULL CHECK (month GLOB '????-??'),
+  item       TEXT NOT NULL,
+  x          REAL NOT NULL,
+  y          REAL NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  PRIMARY KEY (month, item)
+);
 
 -- SUPERSEDED by timeline_windows, the same day it was written: it held only a goal's
 -- position, and every goal was placed whether or not the owner wanted it there. Kept

@@ -1008,17 +1008,20 @@ export async function logDays(
   db: Client,
   before: string,
   limit: number,
+  /** Inclusive lower bound (2026-10-29, the month page's Records): paging stops here. */
+  after?: string,
 ): Promise<LogDay[]> {
+  const lo0 = after ?? "0000-01-01";
   const dates = await db.execute({
     sql: `SELECT date FROM (
-            SELECT date FROM journal_entries WHERE date <= ?
-            UNION SELECT date FROM gym_sessions WHERE date <= ?
+            SELECT date FROM journal_entries WHERE date BETWEEN ? AND ?
+            UNION SELECT date FROM gym_sessions WHERE date BETWEEN ? AND ?
             UNION SELECT e.date FROM habit_entries e JOIN habits h ON h.id = e.habit_id
-                   WHERE h.system_key = 'ascnd' AND e.note IS NOT NULL AND e.date <= ?
+                   WHERE h.system_key = 'ascnd' AND e.note IS NOT NULL AND e.date BETWEEN ? AND ?
             UNION SELECT date FROM block_marks
-                   WHERE state = 'drifted' AND reason IS NOT NULL AND reason <> '' AND date <= ?
+                   WHERE state = 'drifted' AND reason IS NOT NULL AND reason <> '' AND date BETWEEN ? AND ?
           ) ORDER BY date DESC LIMIT ?`,
-    args: [before, before, before, before, limit],
+    args: [lo0, before, lo0, before, lo0, before, lo0, before, limit],
   });
   if (!dates.rows.length) return [];
 
@@ -1150,7 +1153,14 @@ export type TimelineData = {
   groups: Record<string, string>;
   /** The floating windows, oldest first — a goal placed on the line, or a tinted note. */
   windows: TimelineWindow[];
+  /** 'YYYY-MM' -> chapter name, so the bubble canvas needs one fetch (see allChapters). */
+  chapters: Record<string, string>;
+  /** Saved card positions on each month's board; an item with no row is auto-laid-out. */
+  board: BoardPos[];
 };
+
+/** One card's saved spot on a month board. `item` is 'goal:<id>' or 'note:<id>'. */
+export type BoardPos = { month: string; item: string; x: number; y: number };
 
 /** One floating window. `goalId` is set only on a goal window; `text`/`color` are read
  *  only on a text window, though every row carries them. */
@@ -1163,16 +1173,32 @@ export type TimelineWindow = {
   color: string | null;
   x: number;
   y: number;
+  /** The month a text note is pinned to ('YYYY-MM'); null for goal windows. */
+  month: string | null;
+  /** The months a text note shows on, sorted ('YYYY-MM'); empty for goal windows. */
+  months: string[];
+  /** A text note shown on every month's board, whatever `months` holds. */
+  allMonths: boolean;
 };
 
 export async function getTimeline(db: Client): Promise<TimelineData> {
-  const [n, g, w] = await Promise.all([
+  const [n, g, w, b, chapters, nm] = await Promise.all([
     db.execute("SELECT month, text FROM timeline_notes"),
     db.execute("SELECT start, name FROM timeline_groups"),
     db.execute(
-      "SELECT id, kind, goal_id, text, color, x, y FROM timeline_windows ORDER BY id",
+      "SELECT id, kind, goal_id, text, color, x, y, month, all_months FROM timeline_windows ORDER BY id",
     ),
+    db.execute("SELECT month, item, x, y FROM month_board"),
+    allChapters(db),
+    db.execute("SELECT window_id, month FROM note_months ORDER BY month"),
   ]);
+  const monthsOf = new Map<number, string[]>();
+  for (const r of nm.rows) {
+    const id = num(r.window_id);
+    const list = monthsOf.get(id) ?? [];
+    list.push(String(r.month));
+    monthsOf.set(id, list);
+  }
   const notes: Record<string, string> = {};
   for (const x of n.rows) notes[String(x.month)] = String(x.text);
   const groups: Record<string, string> = {};
@@ -1185,6 +1211,15 @@ export async function getTimeline(db: Client): Promise<TimelineData> {
     color: r.color == null ? null : String(r.color),
     x: Number(r.x),
     y: Number(r.y),
+    month: r.month == null ? null : String(r.month),
+    months: monthsOf.get(num(r.id)) ?? [],
+    allMonths: Number(r.all_months) === 1,
   }));
-  return { notes, groups, windows };
+  const board: BoardPos[] = b.rows.map((r) => ({
+    month: String(r.month),
+    item: String(r.item),
+    x: Number(r.x),
+    y: Number(r.y),
+  }));
+  return { notes, groups, windows, chapters, board };
 }

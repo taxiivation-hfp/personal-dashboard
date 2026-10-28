@@ -231,3 +231,98 @@ test("tint keys are unique, looked up, and refused when unknown", () => {
   assert.equal(tintHex(null), null);
   assert.equal(tintHex("neon"), null);
 });
+
+import {
+  monthAtX,
+  monthOfLegacyWindow,
+  CARD_W,
+  timelineYears,
+  bubbleLayout,
+  bubbleRadius,
+  pushTargets,
+  goalMonths,
+  noteInMonth,
+} from "./timeline.ts";
+
+test("monthAtX inverts monthX, rounds to nearest, and clamps to the range", () => {
+  const today = "2026-10-29";
+  assert.equal(monthAtX(monthX(0), today), "2025-07");
+  assert.equal(monthAtX(monthX(5), today), "2025-12");
+  assert.equal(monthAtX(monthX(5) + 80, today), "2025-12");
+  assert.equal(monthAtX(monthX(5) + 90, today), "2026-01");
+  assert.equal(monthAtX(-500, today), "2025-07");
+  assert.equal(monthAtX(1e9, today), addMonths("2026-10", MONTHS_AHEAD));
+  // stable across days: a mid-range x does not depend on today
+  assert.equal(monthAtX(monthX(9), "2026-09-01"), monthAtX(monthX(9), "2027-03-01"));
+});
+
+test("a legacy window's month is read from the card's centre, not its left edge", () => {
+  const today = "2026-10-29";
+  // a card whose centre sits exactly over Dec 2025 has its left edge CARD_W/2 before it
+  assert.equal(monthOfLegacyWindow(monthX(5) - CARD_W / 2, today), "2025-12");
+  // the raw left edge would have pulled it a month early (112 > MONTH_W / 2)
+  assert.equal(monthAtX(monthX(5) - CARD_W / 2, today), "2025-11");
+});
+
+test("timelineYears spans the earliest data year to next year", () => {
+  assert.deepEqual(timelineYears("2026-10-29", []), [2026, 2027]);
+  assert.deepEqual(timelineYears("2026-10-29", ["2025-07", "2026-02"]), [2025, 2026, 2027]);
+  assert.deepEqual(timelineYears("2026-10-29", ["2029-01"]), [2026, 2027]);
+});
+
+test("bubbleLayout follows the mockup geometry", () => {
+  const l = bubbleLayout([2026, 2027]);
+  assert.equal(l.slots.length, 24);
+  assert.deepEqual(l.slots[0], { month: "2026-01", gx: 210, gy: 132 });
+  assert.deepEqual(l.slots[5], { month: "2026-06", gx: 550, gy: 412 });
+  assert.deepEqual(l.slots[12], { month: "2027-01", gx: 210, gy: 132 + 980 });
+  assert.deepEqual(l.yearLabels, [{ year: 2026, top: 30 }, { year: 2027, top: 1010 }]);
+  assert.equal(l.width, 1440);
+  assert.equal(l.height, 1960);
+});
+
+test("bubbleRadius: mockup sizes, gentle growth, capped", () => {
+  assert.equal(bubbleRadius(0, false, false), 88);
+  assert.equal(bubbleRadius(1, false, false), 96);
+  assert.equal(bubbleRadius(2, false, false), 104);
+  assert.equal(bubbleRadius(99, false, false), 118);
+  assert.equal(bubbleRadius(3, true, false), 128);
+  assert.equal(bubbleRadius(3, true, true), 215);
+  assert.equal(bubbleRadius(0, false, true), 140);
+  assert.equal(bubbleRadius(4, false, true), 175);
+});
+
+test("pushTargets leaves nodes alone without hover and pushes neighbours away with it", () => {
+  const nodes = [
+    { x: 0, y: 0, R: 160 },
+    { x: 200, y: 0, R: 86 },
+  ];
+  assert.deepEqual(pushTargets(nodes, null), nodes);
+  const t = pushTargets(nodes, 0);
+  assert.deepEqual(t[0], nodes[0]);
+  assert.ok(t[1]!.x >= 160 + 86 + 36);
+  assert.equal(t[1]!.y, 0);
+  assert.equal(nodes[1]!.x, 200); // input untouched
+});
+
+test("goalMonths: deadline plus every subgoal due; else completion, else now; dropped none", () => {
+  const today = "2026-10-29";
+  const g = (deadline: string | null, status: string, completedAt: string | null, dues: (string | null)[] = []) => ({
+    deadline,
+    status,
+    completedAt,
+    subgoals: dues.map((due) => ({ due })),
+  });
+  assert.deepEqual(goalMonths(g("2027-03-15", "active", null), today), ["2027-03"]);
+  assert.deepEqual(goalMonths(g("2026-11-20", "active", null, ["2026-10-05", "2026-11-02", null]), today), ["2026-10", "2026-11"]);
+  assert.deepEqual(goalMonths(g(null, "active", null, ["2026-12-01", "2026-09-01"]), today), ["2026-09", "2026-12"]);
+  assert.deepEqual(goalMonths(g(null, "done", "2026-08-02"), today), ["2026-08"]);
+  assert.deepEqual(goalMonths(g(null, "active", null, [null]), today), ["2026-10"]);
+  assert.deepEqual(goalMonths(g("2027-03-15", "dropped", null, ["2026-10-05"]), today), []);
+});
+
+test("noteInMonth: all months, or only the ticked ones", () => {
+  assert.equal(noteInMonth({ months: ["2026-10"], allMonths: false }, "2026-10"), true);
+  assert.equal(noteInMonth({ months: ["2026-10"], allMonths: false }, "2026-11"), false);
+  assert.equal(noteInMonth({ months: [], allMonths: true }, "2031-01"), true);
+});

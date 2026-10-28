@@ -226,3 +226,134 @@ export const tintHex = (key: string | null): string | null =>
 
 /** How long a text window may run. A sticky note, not a page — pages live in the journal. */
 export const WINDOW_TEXT_MAX = 500;
+
+// ------------------------------------------------------------ THE MONTH BUBBLES (2026-10-29)
+//
+// The strip above gave way to a grid of month bubbles — one block per year, four columns by
+// three rows, a bubble swelling under the cursor and pushing its neighbours aside. The
+// numbers are the design mockup's (nero-timeline.html); the maths is pure so the layout and
+// the push are pinned by tests rather than eyeballed. The old strip helpers stay: the
+// windows' legacy x is still read by monthAtX below.
+
+/** Which month an OLD strip x falls on — the nearest circle, clamped to the range. Used once,
+ *  to give a legacy text window the month it was floating over. The range depends on `today`
+ *  only at its far end, so for any x inside the old strip the answer is the same every day. */
+export function monthAtX(x: number, today: string): string {
+  const months = timelineMonths(today);
+  const i = Math.round((x - PAD) / MONTH_W);
+  return months[Math.min(months.length - 1, Math.max(0, Number.isFinite(i) ? i : 0))]!;
+}
+
+/** The month a legacy window sat over. Its stored x is the card's LEFT edge (the card is
+ *  CARD_W wide), so it is the card's CENTRE that is matched to the nearest circle. */
+export function monthOfLegacyWindow(x: number, today: string): string {
+  return monthAtX(x + CARD_W / 2, today);
+}
+
+/** The years on the canvas: the earliest year holding any data (or this one) through next. */
+export function timelineYears(today: string, monthsWithData: string[]): number[] {
+  const cur = Number(today.slice(0, 4));
+  let first = cur;
+  for (const m of monthsWithData) {
+    const y = Number(m.slice(0, 4));
+    if (Number.isInteger(y) && y > 1900 && y < first) first = y;
+  }
+  const out: number[] = [];
+  for (let y = first; y <= cur + 1; y++) out.push(y);
+  return out;
+}
+
+export const BUBBLE_WORLD_W = 1440;
+const BUBBLE_ROW_H = 280;
+/** A year block: three rows plus the gap before the next year. */
+export const YEAR_BLOCK_H = 3 * BUBBLE_ROW_H + 140;
+
+export type BubbleSlot = { month: string; gx: number; gy: number };
+
+export function bubbleLayout(years: number[]): {
+  slots: BubbleSlot[];
+  yearLabels: { year: number; top: number }[];
+  width: number;
+  height: number;
+} {
+  const slots: BubbleSlot[] = [];
+  const yearLabels: { year: number; top: number }[] = [];
+  years.forEach((year, yi) => {
+    const top = yi * YEAR_BLOCK_H;
+    yearLabels.push({ year, top: top + 30 });
+    for (let i = 0; i < 12; i++) {
+      slots.push({
+        month: ym(year, i + 1),
+        gx: 210 + (i % 4) * 340,
+        gy: top + 132 + Math.floor(i / 4) * BUBBLE_ROW_H,
+      });
+    }
+  });
+  return { slots, yearLabels, width: BUBBLE_WORLD_W, height: years.length * YEAR_BLOCK_H };
+}
+
+/** A bubble's radius: the current month is the largest, an empty month the smallest, and
+ *  a busy month swells gently from 104 (capped at 118, so even beside the current month's
+ *  128 the grid's 280 row spacing leaves no overlap at rest). */
+export function bubbleRadius(count: number, isNow: boolean, hovered: boolean): number {
+  if (hovered) return isNow ? 215 : count === 0 ? 140 : 175;
+  if (isNow) return 128;
+  if (count === 0) return 88;
+  if (count === 1) return 96;
+  return Math.min(118, 104 + Math.min(count - 2, 6) * 3);
+}
+
+/** Where every bubble is heading: its grid slot, except that the hovered one pushes the rest
+ *  away — enough to clear its swollen radius plus a gap, with a long soft shove on top. */
+export function pushTargets(
+  nodes: { x: number; y: number; R: number }[],
+  hover: number | null,
+): { x: number; y: number; R: number }[] {
+  const T = nodes.map((n) => ({ x: n.x, y: n.y, R: n.R }));
+  if (hover === null || !T[hover]) return T;
+  const H = T[hover]!;
+  T.forEach((o, i) => {
+    if (i === hover) return;
+    const dx = o.x - H.x;
+    const dy = o.y - H.y;
+    const dist = Math.max(1, Math.hypot(dx, dy));
+    const push = Math.max(H.R + o.R + 36 - dist, 0) + 70 * Math.exp(-dist / 380);
+    o.x += (dx / dist) * push;
+    o.y += (dy / dist) * push;
+  });
+  return T;
+}
+
+/** Every month a goal lives in on the canvas: its deadline's month AND the month of each
+ *  subgoal's due date, so a goal due in November with a step due in October shows on both
+ *  boards. With neither: the month it was finished, else the current one. A dropped goal
+ *  belongs to no month. Deduped and sorted. */
+export function goalMonths(
+  goal: {
+    deadline: string | null;
+    status: string;
+    completedAt: string | null;
+    subgoals: { due: string | null }[];
+  },
+  today: string,
+): string[] {
+  if (goal.status === "dropped") return [];
+  const set = new Set<string>();
+  if (goal.deadline) set.add(goal.deadline.slice(0, 7));
+  for (const s of goal.subgoals) if (s.due) set.add(s.due.slice(0, 7));
+  if (!set.size) {
+    set.add(
+      goal.status === "done" && goal.completedAt
+        ? goal.completedAt.slice(0, 7)
+        : today.slice(0, 7),
+    );
+  }
+  return [...set].sort();
+}
+
+/** Is a sticky note on this month's board? Either it is on every month, or the month is one
+ *  of the ones the owner ticked. */
+export const noteInMonth = (
+  w: { months: string[]; allMonths: boolean },
+  month: string,
+): boolean => w.allMonths || w.months.includes(month);

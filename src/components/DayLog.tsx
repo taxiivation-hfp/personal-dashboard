@@ -546,8 +546,11 @@ function DayReader({
 export default function DayLog({
   date,
   today,
+  after,
 }: {
   date: string;
+  /** Lower bound (YYYY-MM-DD, inclusive): the log stops paging here — a month's record. */
+  after?: string;
   /** The real today — the far cap of the session dialogs' date pickers, which is not
    *  always the log's anchor now that a timeline month can open the log in the past. */
   today: string;
@@ -612,7 +615,7 @@ export default function DayLog({
     try {
       // null is a FAILED read — a different fact from an empty page, and the two must
       // not share a shape or the empty state ends up describing the wrong one.
-      const d = await fetch(`/api/log?before=${next}`)
+      const d = await fetch(`/api/log?before=${next}${after ? `&after=${after}` : ""}`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null);
       if (epoch.current !== mine) return;
@@ -651,7 +654,7 @@ export default function DayLog({
         setLoaded(true);
       }
     }
-  }, [done, next]);
+  }, [done, next, after]);
 
   // First page on mount, and again if the anchor date changes under it.
   useEffect(() => {
@@ -668,7 +671,7 @@ export default function DayLog({
     setOpenDate(null);
     setPage(null);
     setEntry(null);
-  }, [date]);
+  }, [date, after]);
 
   /**
    * RE-READ THE LOADED SPAN after one of the dialogs writes — the row is the record, and a
@@ -687,14 +690,14 @@ export default function DayLog({
   const reloadSpan = useCallback(async () => {
     const mine = epoch.current;
     const want = Math.min(Math.max(days.length, 1), 60);
-    const d = await fetch(`/api/log?before=${date}&limit=${want}`)
+    const d = await fetch(`/api/log?before=${date}&limit=${want}${after ? `&after=${after}` : ""}`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
     if (d == null || epoch.current !== mine) return;
     setDays((d.days ?? []) as LogDay[]);
     setNext(d.nextBefore ?? null);
     setDone(Boolean(d.done) || d.nextBefore == null);
-  }, [date, days.length]);
+  }, [date, days.length, after]);
 
   useEffect(() => {
     if (!loaded && !busy && next === date) void more();
